@@ -4,11 +4,14 @@
 /*
 
 # ====================================================================
-# 2. Specifically ALLOW (un-ignore) ONLY these folders to be uploaded
+# 2. specifically ALLOW (un-ignore) ONLY these folders to be uploaded
 # ====================================================================
 !/EXTREME_APP_MOBILE/
+!/EXTREME_APP_MOBILE/**
 !/EXTREME_BACKEND/
+!/EXTREME_BACKEND/**
 !/EXTREME_WEB_UNIFIED/
+!/EXTREME_WEB_UNIFIED/**
 
 # Also allow Git configuration files so they are saved
 !/.gitignore
