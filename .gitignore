@@ -1,0 +1,62 @@
+# ====================================================================
+# 1. Ignore EVERYTHING at the root directory by default
+# ====================================================================
+/*
+
+# ====================================================================
+# 2. Specifically ALLOW (un-ignore) ONLY these folders to be uploaded
+# ====================================================================
+!/EXTREME_APP_MOBILE/
+!/EXTREME_BACKEND/
+!/EXTREME_WEB_UNIFIED/
+
+# Also allow Git configuration files so they are saved
+!/.gitignore
+!/.gitattributes
+
+# ====================================================================
+# 3. Standard Ignores (These rules apply INSIDE the allowed folders)
+# ====================================================================
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Environment variables (Never upload secrets)
+.env
+.env.*
+!.env.example
+
+# Build Outputs
+dist/
+build/
+out/
+coverage/
+.next/
+*.tsbuildinfo
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# IDEs and Editors
+.idea/
+.vscode/
+*.swp
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Other caches
+.npm
+.eslintcache
+.cache
