@@ -1,0 +1,170 @@
+﻿📅 Meeting Minutes (MoM)
+Meeting Date: 2 February 2026
+Time: 15:40 (GMT +05:30)
+Duration: ~59 minutes
+Participants:
+* Chauntel R B Morris (Client)
+* Sudarshan Kumar (Project Lead)
+* Kabir (UI/UX – ProManage)
+* Love Kush (Admin / Tech Support)
+________________
+
+
+🧭 Key Discussion Points & Decisions
+1️⃣ Travel to Venue & Navigation Flow (Very Important)
+Discussion:
+Client wants a smooth, single-flow system similar to Uber / Instacart for:
+* Travel to venue
+* Start shift
+* End shift
+* Travel back home
+Decisions:
+* Staff will have buttons like:
+   * “Start Travel to Venue”
+   * “Start Shift”
+   * “End Shift”
+   * “Start Travel to Home”
+* Navigation should open preferred map app:
+   * Google Maps
+   * Apple Maps
+   * Waze (priority in US)
+Important Clarification:
+* Maps will be used only for navigation
+* Tracking, clock-in/out, payroll logic will remain inside the app
+* Travel duration can be calculated, but shift time ≠ travel time
+✅ Approved by Client
+________________
+
+
+2️⃣ Location Accuracy & Visual Clarity
+Problem Raised:
+Staff often:
+* Forget to clock out
+* Clock out late (after reaching home)
+* Turn off location
+* Cause billing & payroll confusion
+Decisions:
+* Event location must be selected via map (Google/Apple) while creating event
+* Staff should see:
+   * Map preview
+   * Cross-street / intersection view
+   * Optional venue images (client will upload)
+* Admin must be able to:
+   * See breadcrumb / last known location
+   * Adjust time if staff forgot to sign out
+✅ Concept Approved
+________________
+
+
+3️⃣ Overtime Handling (Legal Sensitive – US Labor Laws)
+Client Requirement (Very Strict):
+* Word “Overtime” must NOT be used
+* Staff are sub-contractors, not W2 employees
+Final Decision:
+* Replace “Overtime” → “Additional Work”
+* System logic:
+   * Minimum guaranteed hours (e.g. 5 hrs)
+   * If event ends early → still paid minimum
+   * If event runs longer → extra hours counted as Additional Work
+* Overtime module will be removed/hidden
+✅ Confirmed & Approved
+________________
+
+
+4️⃣ Payroll / Staff Invoice Requirement
+Client Workflow Explained:
+Client manually creates weekly payroll sheets including:
+* Event details
+* In / Out time
+* Breaks
+* Hour calculation
+* Rate × hours
+* Workers comp deduction
+* Tips
+* Drive time / parking reimbursement
+* Final payable amount
+Decision:
+* System should generate a staff-side invoice / payslip-style summary
+* Same data should be visible to admin
+* Helps in:
+   * Payroll calculation
+   * Transparency
+   * Dispute handling
+⚠️ To be designed & confirmed in next phase
+________________
+
+
+5️⃣ Login & Role Confusion (UX Simplification)
+Problem:
+Too many dropdowns (staff / manager / client / admin) cause confusion.
+Final Decision (Important):
+* Single Login Screen
+* No dropdown selection
+* System will auto-detect role based on email/password
+* Auto-redirect to:
+   * Staff dashboard
+   * Client dashboard
+   * Manager dashboard
+   * Admin dashboard
+✅ Client explicitly said: “Perfect. I love that.”
+________________
+
+
+6️⃣ Website, QR Code & App Access
+Decisions:
+* Website already live & approved
+* QR Codes will be generated for:
+   * Website
+   * App download
+* QR codes will be used on:
+   * Business cards
+   * Recruitment material
+* Clean UX inspired by Uber-style simplicity
+________________
+
+
+✅ Final Client Confirmation
+Client confirmed:
+* Overall system direction is correct
+* Team has “gone over and above”
+* No further concerns at this stage
+________________
+
+
+🛠️ Action Items / What Needs To Be Done
+🔧 Development Tasks (Team)
+1. Integrate Map Navigation
+   * Google Maps
+   * Apple Maps
+   * Check feasibility of Waze deep-link integration
+2. Implement Travel → Shift → Travel Flow
+   * Start Travel to Venue
+   * Start Shift
+   * End Shift
+   * Start Travel to Home
+3. Remove Overtime
+   * Replace with “Additional Work”
+   * Hide overtime references completely
+4. Role-Based Authentication
+   * Single login screen
+   * Auto-redirect by role
+   * Remove dropdown role selection
+5. Event Location via Map
+   * Mandatory map-based location selection
+   * Store coordinates for accuracy
+6. Admin Tracking Enhancements
+   * Breadcrumb / last known location
+   * Manual time adjustment option
+7. Staff Invoice / Payroll Summary (Phase-wise)
+   * Design staff payslip view
+   * Reflect hours, rate, deductions, tips
+8. QR Code Generation
+   * Website
+   * App access
+________________
+
+
+⏭️ Next Steps
+* Team to implement discussed changes
+* Share updated build / demo with client
+* Post-review → move to next development phase

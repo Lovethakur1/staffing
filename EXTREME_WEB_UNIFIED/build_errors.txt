@@ -1,0 +1,110 @@
+
+> extreme-web-unified@0.0.0 build
+> tsc -b && vite build
+
+src/components/admin/ComprehensiveEventManagement.tsx(1260,26): error TS2322: Type '{ defaultValue: string; className: string; }' is not assignable to type 'IntrinsicAttributes & TimeInputProps'.
+  Property 'defaultValue' does not exist on type 'IntrinsicAttributes & TimeInputProps'.
+src/components/admin/ComprehensiveEventManagement.tsx(1264,26): error TS2322: Type '{ defaultValue: string; className: string; }' is not assignable to type 'IntrinsicAttributes & TimeInputProps'.
+  Property 'defaultValue' does not exist on type 'IntrinsicAttributes & TimeInputProps'.
+src/components/client/ComprehensiveClientDashboard.tsx(377,13): error TS2322: Type '{ accessorKey: string; header: string; cell: ({ row }: any) => Element; }[]' is not assignable to type 'DataTableColumn<Event>[]'.
+  Type '{ accessorKey: string; header: string; cell: ({ row }: any) => Element; }' is missing the following properties from type 'DataTableColumn<Event>': key, title
+src/components/client/ComprehensiveClientDashboard.tsx(393,32): error TS2322: Type '{ clientId: string; }' is not assignable to type 'IntrinsicAttributes & CommunicationCenterProps'.
+  Property 'clientId' does not exist on type 'IntrinsicAttributes & CommunicationCenterProps'.
+src/components/client/EnterpriseStaffDirectory.tsx(109,43): error TS2339: Property 'specialty' does not exist on type 'Staff'.
+src/components/client/EnterpriseStaffDirectory.tsx(202,26): error TS2339: Property 'specialty' does not exist on type 'Staff'.
+src/components/client/EnterpriseStaffDirectory.tsx(524,75): error TS2339: Property 'specialty' does not exist on type 'Staff'.
+src/components/client/EnterpriseStaffDirectory.tsx(592,54): error TS2339: Property 'specialty' does not exist on type 'Staff'.
+src/components/client/FinancialManagement.tsx(345,9): error TS2322: Type '{ accessorKey: string; header: string; cell: ({ row }: any) => Element; }[]' is not assignable to type 'DataTableColumn<Invoice>[]'.
+  Type '{ accessorKey: string; header: string; cell: ({ row }: any) => Element; }' is missing the following properties from type 'DataTableColumn<Invoice>': key, title
+src/components/client/StaffDirectoryRatings.tsx(324,9): error TS2322: Type '{ accessorKey: string; header: string; cell: ({ row }: any) => Element; }[]' is not assignable to type 'DataTableColumn<Staff>[]'.
+  Type '{ accessorKey: string; header: string; cell: ({ row }: any) => Element; }' is missing the following properties from type 'DataTableColumn<Staff>': key, title
+src/components/dashboards/ShiftActionCard.tsx(234,72): error TS2339: Property 'eventTitle' does not exist on type 'Shift'.
+src/components/dashboards/ShiftActionCard.tsx(345,21): error TS2322: Type '{ startLocation: { lat: number; lng: number; label: string; }; endLocation: { lat: number; lng: number; label: string; }; className: string; provider: "leaflet"; onClose: () => void; showControls: boolean; simulateNavigation: boolean; onReachDestination: () => void; }' is not assignable to type 'IntrinsicAttributes & RouteMapProps'.
+  Property 'showControls' does not exist on type 'IntrinsicAttributes & RouteMapProps'.
+src/components/dashboards/StaffDashboard.tsx(85,39): error TS2554: Expected 1 arguments, but got 2.
+src/components/dashboards/StaffDashboard.tsx(287,24): error TS2551: Property 'client' does not exist on type 'Event'. Did you mean 'clientId'?
+src/components/dashboards/StaffDashboard.tsx(329,23): error TS2551: Property 'client' does not exist on type 'Event'. Did you mean 'clientId'?
+src/components/dashboards/StaffDashboard.tsx(430,23): error TS2551: Property 'client' does not exist on type 'Event'. Did you mean 'clientId'?
+src/components/dialogs/ShiftDetailsDialog.tsx(64,13): error TS18047: 'shift' is possibly 'null'.
+src/components/dialogs/ShiftDetailsDialog.tsx(76,42): error TS18047: 'shift' is possibly 'null'.
+src/components/layout/AppSidebar.tsx(559,29): error TS2339: Property 'badge' does not exist on type '{ title: string; icon: ForwardRefExoticComponent<Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>>; id: string; }'.
+src/components/layout/AppSidebar.tsx(564,33): error TS2339: Property 'badge' does not exist on type '{ title: string; icon: ForwardRefExoticComponent<Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>>; id: string; }'.
+src/components/layout/TopNavigation.tsx(112,26): error TS2345: Argument of type '{ id: string; role: string; location: string; startTime: string; endTime: string; hourlyRate: number; status: string; checkInTime: null; }' is not assignable to parameter of type 'Shift'.
+  Type '{ id: string; role: string; location: string; startTime: string; endTime: string; hourlyRate: number; status: string; checkInTime: null; }' is missing the following properties from type 'Shift': eventId, staffId, date
+src/components/manager/ManagerDashboard.tsx(559,32): error TS2322: Type '{ managerId: string; events: any[]; }' is not assignable to type 'IntrinsicAttributes & CommunicationCenterProps'.
+  Property 'managerId' does not exist on type 'IntrinsicAttributes & CommunicationCenterProps'.
+src/components/manager/PerformanceMonitoring.tsx(315,49): error TS2339: Property 'role' does not exist on type 'Staff'.
+src/components/manager/StaffRoster.tsx(69,9): error TS2322: Type '{ currentStatus: any; currentLocation: { lat: number; lng: number; address: string; lastUpdate: string; } | undefined; certifications: string[]; emergencyContact: { name: string; phone: string; relationship: string; }; ... 13 more ...; joinDate: string; }[]' is not assignable to type 'StaffMember[]'.
+  Property 'role' is missing in type '{ currentStatus: any; currentLocation: { lat: number; lng: number; address: string; lastUpdate: string; } | undefined; certifications: string[]; emergencyContact: { name: string; phone: string; relationship: string; }; ... 13 more ...; joinDate: string; }' but required in type 'StaffMember'.
+src/components/PageRouter.tsx(128,29): error TS2322: Type '{ userRole: string; userId: string; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'userRole' does not exist on type 'IntrinsicAttributes'.
+src/components/PageRouter.tsx(136,71): error TS2322: Type '{ userRole: string; userId: string; eventId: any; }' is not assignable to type 'IntrinsicAttributes & EventStaffDetailsProps'.
+  Property 'eventId' does not exist on type 'IntrinsicAttributes & EventStaffDetailsProps'.
+src/components/PageRouter.tsx(206,30): error TS2322: Type '{ userRole: string; userId: string; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'userRole' does not exist on type 'IntrinsicAttributes'.
+src/components/PageRouter.tsx(210,28): error TS2322: Type '{ userRole: string; userId: string; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'userRole' does not exist on type 'IntrinsicAttributes'.
+src/components/PageRouter.tsx(212,28): error TS2322: Type '{ userRole: string; userId: string; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'userRole' does not exist on type 'IntrinsicAttributes'.
+src/components/schedule/ShiftCalendarView.tsx(286,30): error TS2304: Cannot find name 'DialogDescription'.
+src/components/schedule/ShiftCalendarView.tsx(288,31): error TS2304: Cannot find name 'DialogDescription'.
+src/components/schedule/ShiftsList.tsx(270,13): error TS2322: Type '{ data: Shift[]; columns: ({ key: string; title: string; sortable: boolean; render: (value: string, row: Shift) => Element; } | { key: string; title: string; sortable: boolean; render: (value: number) => string; } | { ...; })[]; ... 6 more ...; emptyMessage: string; }' is not assignable to type 'IntrinsicAttributes & DataTableProps<Shift>'.
+  Property 'searchPlaceholder' does not exist on type 'IntrinsicAttributes & DataTableProps<Shift>'.
+src/components/schedule/ShiftsList.tsx(299,13): error TS2322: Type '{ data: Shift[]; columns: ({ key: string; title: string; sortable: boolean; render: (value: string, row: Shift) => Element; } | { key: string; title: string; sortable: boolean; render: (value: number) => string; } | { ...; })[]; ... 6 more ...; emptyMessage: string; }' is not assignable to type 'IntrinsicAttributes & DataTableProps<Shift>'.
+  Property 'searchPlaceholder' does not exist on type 'IntrinsicAttributes & DataTableProps<Shift>'.
+src/components/schedule/ShiftsList.tsx(313,13): error TS2322: Type '{ data: Shift[]; columns: ({ key: string; title: string; sortable: boolean; render: (value: string, row: Shift) => Element; } | { key: string; title: string; sortable: boolean; render: (value: number) => string; } | { ...; })[]; ... 6 more ...; emptyMessage: string; }' is not assignable to type 'IntrinsicAttributes & DataTableProps<Shift>'.
+  Property 'searchPlaceholder' does not exist on type 'IntrinsicAttributes & DataTableProps<Shift>'.
+src/components/schedule/ShiftsList.tsx(327,13): error TS2322: Type '{ data: Shift[]; columns: ({ key: string; title: string; sortable: boolean; render: (value: string, row: Shift) => Element; } | { key: string; title: string; sortable: boolean; render: (value: number) => string; } | { ...; })[]; ... 6 more ...; emptyMessage: string; }' is not assignable to type 'IntrinsicAttributes & DataTableProps<Shift>'.
+  Property 'searchPlaceholder' does not exist on type 'IntrinsicAttributes & DataTableProps<Shift>'.
+src/components/staff/StaffDashboard.tsx(91,91): error TS2339: Property 'rating' does not exist on type 'Rating'.
+src/components/ui/chart.tsx(109,3): error TS2339: Property 'payload' does not exist on type 'Omit<Props<ValueType, NameType>, PropertiesReadFromContext> & { active?: boolean | undefined; allowEscapeViewBox?: AllowInDimension | undefined; ... 24 more ...; wrapperStyle?: CSSProperties | undefined; } & ClassAttributes<...> & HTMLAttributes<...> & { ...; }'.
+src/components/ui/chart.tsx(114,3): error TS2339: Property 'label' does not exist on type 'Omit<Props<ValueType, NameType>, PropertiesReadFromContext> & { active?: boolean | undefined; allowEscapeViewBox?: AllowInDimension | undefined; ... 24 more ...; wrapperStyle?: CSSProperties | undefined; } & ClassAttributes<...> & HTMLAttributes<...> & { ...; }'.
+src/components/ui/chart.tsx(182,23): error TS7006: Parameter 'item' implicitly has an 'any' type.
+src/components/ui/chart.tsx(182,29): error TS7006: Parameter 'index' implicitly has an 'any' type.
+src/components/ui/chart.tsx(260,39): error TS2344: Type '"verticalAlign" | "payload"' does not satisfy the constraint '"string" | "slot" | "style" | "clipPath" | "filter" | "mask" | "path" | "className" | "key" | "name" | "type" | "suppressHydrationWarning" | "id" | "lang" | "nonce" | "tabIndex" | ... 433 more ... | "portal"'.
+  Type '"payload"' is not assignable to type '"string" | "slot" | "style" | "clipPath" | "filter" | "mask" | "path" | "className" | "key" | "name" | "type" | "suppressHydrationWarning" | "id" | "lang" | "nonce" | "tabIndex" | ... 433 more ... | "portal"'.
+src/components/ui/chart.tsx(266,17): error TS2339: Property 'length' does not exist on type '{}'.
+src/components/ui/chart.tsx(278,16): error TS2339: Property 'map' does not exist on type '{}'.
+src/components/ui/chart.tsx(278,21): error TS7006: Parameter 'item' implicitly has an 'any' type.
+src/components/ui/resizable.tsx(12,51): error TS2339: Property 'PanelGroup' does not exist on type 'typeof import("C:/Users/user/Desktop/project/staffing/EXTREME_WEB_UNIFIED/node_modules/react-resizable-panels/dist/react-resizable-panels")'.
+src/components/ui/resizable.tsx(14,25): error TS2339: Property 'PanelGroup' does not exist on type 'typeof import("C:/Users/user/Desktop/project/staffing/EXTREME_WEB_UNIFIED/node_modules/react-resizable-panels/dist/react-resizable-panels")'.
+src/components/ui/resizable.tsx(35,51): error TS2339: Property 'PanelResizeHandle' does not exist on type 'typeof import("C:/Users/user/Desktop/project/staffing/EXTREME_WEB_UNIFIED/node_modules/react-resizable-panels/dist/react-resizable-panels")'.
+src/components/ui/resizable.tsx(39,25): error TS2339: Property 'PanelResizeHandle' does not exist on type 'typeof import("C:/Users/user/Desktop/project/staffing/EXTREME_WEB_UNIFIED/node_modules/react-resizable-panels/dist/react-resizable-panels")'.
+src/components/ui/resizable.tsx(52,26): error TS2339: Property 'PanelResizeHandle' does not exist on type 'typeof import("C:/Users/user/Desktop/project/staffing/EXTREME_WEB_UNIFIED/node_modules/react-resizable-panels/dist/react-resizable-panels")'.
+src/components/ui/responsive-card-grid.tsx(5,20): error TS2307: Cannot find module '../../lib/utils' or its corresponding type declarations.
+src/components/ui/responsive-dialog.tsx(4,20): error TS2307: Cannot find module '../../lib/utils' or its corresponding type declarations.
+src/components/ui/tooltip-wrapper.tsx(54,13): error TS2769: No overload matches this call.
+  The last overload gave the following error.
+    Object literal may only specify known properties, and '"aria-label"' does not exist in type 'Partial<unknown> & Attributes'.
+src/pages/AccountingSystem.tsx(347,24): error TS2304: Cannot find name 'DialogDescription'.
+src/pages/AccountingSystem.tsx(349,25): error TS2304: Cannot find name 'DialogDescription'.
+src/pages/AdminEventDetail.tsx(261,45): error TS7006: Parameter 'staff' implicitly has an 'any' type.
+src/pages/AdminEventDetail.tsx(483,30): error TS7006: Parameter 's' implicitly has an 'any' type.
+src/pages/AdminEventDetail.tsx(491,42): error TS7006: Parameter 's' implicitly has an 'any' type.
+src/pages/AdminEventDetail.tsx(663,54): error TS7006: Parameter 'n' implicitly has an 'any' type.
+src/pages/AdminEventDetail.tsx(763,39): error TS7006: Parameter 'staff' implicitly has an 'any' type.
+src/pages/AdminEventDetail.tsx(807,56): error TS7006: Parameter 'cert' implicitly has an 'any' type.
+src/pages/AdminEventDetail.tsx(807,62): error TS7006: Parameter 'idx' implicitly has an 'any' type.
+src/pages/AdminEventDetail.tsx(1091,64): error TS7006: Parameter 'cert' implicitly has an 'any' type.
+src/pages/AdminEventDetail.tsx(1091,70): error TS7006: Parameter 'idx' implicitly has an 'any' type.
+src/pages/Careers.tsx(273,16): error TS2304: Cannot find name 'DialogDescription'.
+src/pages/Careers.tsx(275,17): error TS2304: Cannot find name 'DialogDescription'.
+src/pages/EventStaffDetails.tsx(177,27): error TS7006: Parameter 'skill' implicitly has an 'any' type.
+src/pages/EventStaffDetails.tsx(377,56): error TS7006: Parameter 'n' implicitly has an 'any' type.
+src/pages/EventStaffDetails.tsx(699,53): error TS7006: Parameter 'n' implicitly has an 'any' type.
+src/pages/EventStaffDetails.tsx(762,52): error TS7006: Parameter 'skill' implicitly has an 'any' type.
+src/pages/Favorites.tsx(95,25): error TS7006: Parameter 'skill' implicitly has an 'any' type.
+src/pages/Favorites.tsx(314,52): error TS7006: Parameter 'skill' implicitly has an 'any' type.
+src/pages/FinancialReports.tsx(196,16): error TS2741: Property 'children' is missing in type '{ content: string; }' but required in type '{ content: string; children: ReactElement<unknown, string | JSXElementConstructor<any>>; }'.
+src/pages/FinancialReports.tsx(213,16): error TS2741: Property 'children' is missing in type '{ content: string; }' but required in type '{ content: string; children: ReactElement<unknown, string | JSXElementConstructor<any>>; }'.
+src/pages/FinancialReports.tsx(230,16): error TS2741: Property 'children' is missing in type '{ content: string; }' but required in type '{ content: string; children: ReactElement<unknown, string | JSXElementConstructor<any>>; }'.
+src/pages/FinancialReports.tsx(246,16): error TS2741: Property 'children' is missing in type '{ content: string; }' but required in type '{ content: string; children: ReactElement<unknown, string | JSXElementConstructor<any>>; }'.
+src/pages/Onboarding.tsx(158,33): error TS2304: Cannot find name 'Shirt'.
+src/pages/Onboarding.tsx(159,30): error TS2304: Cannot find name 'Key'.
+src/pages/Onboarding.tsx(160,32): error TS2304: Cannot find name 'GraduationCap'.
+src/pages/QualityAssurance.tsx(119,7): error TS2561: Object literal may only specify known properties, but 'clientDate' does not exist in type 'EventFeedback'. Did you mean to write 'clientId'?
+src/pages/Reports.tsx(701,65): error TS18048: 'percent' is possibly 'undefined'.
+src/pages/StaffPayroll.tsx(281,16): error TS2741: Property 'children' is missing in type '{ content: string; }' but required in type '{ content: string; children: ReactElement<unknown, string | JSXElementConstructor<any>>; }'.
+src/pages/StaffPayroll.tsx(297,16): error TS2741: Property 'children' is missing in type '{ content: string; }' but required in type '{ content: string; children: ReactElement<unknown, string | JSXElementConstructor<any>>; }'.
+src/pages/StaffPayroll.tsx(313,16): error TS2741: Property 'children' is missing in type '{ content: string; }' but required in type '{ content: string; children: ReactElement<unknown, string | JSXElementConstructor<any>>; }'.
+src/pages/StaffPayroll.tsx(329,16): error TS2741: Property 'children' is missing in type '{ content: string; }' but required in type '{ content: string; children: ReactElement<unknown, string | JSXElementConstructor<any>>; }'.

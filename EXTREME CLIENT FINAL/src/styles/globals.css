@@ -1,0 +1,1239 @@
+:root {
+  --font-size: 16px;
+  --background: #ffffff;
+  --foreground: #1a1a1a;
+  --card: #ffffff;
+  --card-foreground: #1a1a1a;
+  --popover: #ffffff;
+  --popover-foreground: #1a1a1a;
+  
+  /* Primary colors - using more muted reds */
+  --primary: #5E1916; /* Sangria - more sophisticated */
+  --primary-foreground: #ffffff;
+  --primary-hover: #4E0707; /* Wine - darker on hover */
+  
+  /* Secondary colors - much more neutral */
+  --secondary: #f8fafc;
+  --secondary-foreground: #475569;
+  
+  /* Muted colors - more neutral grays */
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  
+  /* Accent colors - subtle red tints */
+  --accent: #f8fafc;
+  --accent-foreground: #541E1B; /* Merlot - subtle accent */
+  
+  --destructive: #7A1712; /* Berry - less aggressive */
+  --destructive-foreground: #ffffff;
+  
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --input-background: #ffffff;
+  --switch-background: #cbd5e1;
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
+  --ring: #5E1916;
+  
+  /* Chart colors - muted red palette */
+  --chart-1: #5E1916; /* Sangria */
+  --chart-2: #7A1712; /* Berry */
+  --chart-3: #541E1B; /* Merlot */
+  --chart-4: #7E2811; /* Brick */
+  --chart-5: #BC544B; /* Blush */
+  
+  --radius: 0.5rem;
+  
+  /* Sidebar colors - neutral with subtle red accents */
+  --sidebar: #ffffff;
+  --sidebar-foreground: #64748b;
+  --sidebar-primary: #5E1916;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f8fafc;
+  --sidebar-accent-foreground: #541E1B;
+  --sidebar-border: #e2e8f0;
+  --sidebar-ring: #5E1916;
+  
+  /* Status colors */
+  --success: #059669;
+  --success-foreground: #ffffff;
+  --warning: #d97706;
+  --warning-foreground: #ffffff;
+  --info: #0369a1;
+  --info-foreground: #ffffff;
+  
+  /* Additional sophisticated red variants */
+  --red-wine: #4E0707;
+  --red-merlot: #541E1B;
+  --red-garnet: #610C04;
+  --red-sangria: #5E1916;
+  --red-berry: #7A1712;
+  --red-brick: #7E2811;
+  --red-blush: #BC544B;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-input-background: var(--input-background);
+  --color-switch-background: var(--switch-background);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  
+  /* Custom red variants for sophisticated use */
+  --color-red-wine: var(--red-wine);
+  --color-red-merlot: var(--red-merlot);
+  --color-red-garnet: var(--red-garnet);
+  --color-red-sangria: var(--red-sangria);
+  --color-red-berry: var(--red-berry);
+  --color-red-brick: var(--red-brick);
+  --color-red-blush: var(--red-blush);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  /* Responsive scrollbar styles */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: var(--muted);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--muted-foreground);
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--primary);
+  }
+
+  /* Mobile-first responsive containers */
+  .mobile-container {
+    @apply px-3 sm:px-4 md:px-6 lg:px-8;
+  }
+
+  .mobile-spacing {
+    @apply py-3 sm:py-4 md:py-6 lg:py-8;
+  }
+
+  /* Responsive grid utilities - optimized for better space utilization */
+  .responsive-grid {
+    @apply grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 sm:gap-4 md:gap-6;
+  }
+
+  .responsive-grid-2 {
+    @apply grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3 sm:gap-4 md:gap-6;
+  }
+
+  .responsive-grid-3 {
+    @apply grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 sm:gap-4 md:gap-6;
+  }
+
+  .responsive-grid-4 {
+    @apply grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8 gap-3 sm:gap-4 md:gap-6;
+  }
+
+  .responsive-grid-stats {
+    @apply grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 sm:gap-4 md:gap-6;
+  }
+
+  .responsive-grid-actions {
+    @apply grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 sm:gap-4 md:gap-6;
+  }
+
+  /* Properly sized responsive layouts - optimized for space utilization */
+  .desktop-first-header {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    align-items: start;
+  }
+
+  @media (min-width: 1024px) {
+    .desktop-first-header {
+      grid-template-columns: 1fr auto;
+      gap: 2rem;
+      align-items: center;
+    }
+  }
+
+  .desktop-first-2-col {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  @media (min-width: 1024px) {
+    .desktop-first-2-col {
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+  }
+
+  @media (min-width: 1536px) {
+    .desktop-first-2-col {
+      grid-template-columns: 2fr 1fr;
+      gap: 2rem;
+    }
+  }
+
+  .desktop-first-3-col {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  @media (min-width: 768px) {
+    .desktop-first-3-col {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .desktop-first-3-col {
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 1.5rem;
+    }
+  }
+
+  @media (min-width: 1536px) {
+    .desktop-first-3-col {
+      grid-template-columns: 2fr 1fr 1fr;
+      gap: 2rem;
+    }
+  }
+
+  /* Properly sized stats grid - better space utilization */
+  .desktop-stats-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  @media (min-width: 640px) {
+    .desktop-stats-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  @media (min-width: 768px) {
+    .desktop-stats-grid {
+      grid-template-columns: 1fr 1fr 1fr;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .desktop-stats-grid {
+      grid-template-columns: 1fr 1fr 1fr 1fr;
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .desktop-stats-grid {
+      grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+    }
+  }
+
+  @media (min-width: 1536px) {
+    .desktop-stats-grid {
+      grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1fr;
+    }
+  }
+
+  /* Properly sized actions grid - better space utilization */
+  .desktop-actions-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  @media (min-width: 640px) {
+    .desktop-actions-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .desktop-actions-grid {
+      grid-template-columns: 1fr 1fr 1fr;
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .desktop-actions-grid {
+      grid-template-columns: 1fr 1fr 1fr 1fr;
+    }
+  }
+
+  @media (min-width: 1536px) {
+    .desktop-actions-grid {
+      grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+    }
+  }
+
+  /* Standardized page container - ensures consistent width handling */
+  .page-container {
+    @apply w-full min-w-0 space-y-4;
+  }
+
+  @media (min-width: 640px) {
+    .page-container {
+      @apply space-y-6;
+    }
+  }
+
+  /* Standard page wrapper for all pages */
+  .standard-page-wrapper {
+    @apply w-full min-w-0;
+  }
+
+  /* Mobile-optimized page layouts */
+  .mobile-page-layout {
+    @apply w-full min-w-0 space-y-4 sm:space-y-6 md:space-y-8;
+  }
+
+  .mobile-section-spacing {
+    @apply space-y-6 sm:space-y-8 md:space-y-10;
+  }
+
+  /* Consistent container that prevents width jumping */
+  .consistent-container {
+    @apply w-full min-w-0 max-w-none;
+  }
+
+  /* Properly sized container (legacy) */
+  .desktop-container {
+    padding: 1rem;
+    max-width: 1920px;
+    margin: 0 auto;
+  }
+
+  @media (min-width: 640px) {
+    .desktop-container {
+      padding: 1.5rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .desktop-container {
+      padding: 2rem;
+    }
+  }
+
+  /* Properly sized spacing */
+  .desktop-space-y > * + * {
+    margin-top: 1rem;
+  }
+
+  @media (min-width: 640px) {
+    .desktop-space-y > * + * {
+      margin-top: 1.5rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .desktop-space-y > * + * {
+      margin-top: 2rem;
+    }
+  }
+
+  /* Enhanced responsive card padding */
+  .desktop-card-padding {
+    padding: 1.25rem 1rem;
+  }
+
+  @media (min-width: 640px) {
+    .desktop-card-padding {
+      padding: 1.5rem 1.25rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .desktop-card-padding {
+      padding: 1.5rem;
+    }
+  }
+
+  /* Mobile-optimized card layouts */
+  .mobile-card {
+    @apply p-4 sm:p-5 md:p-6 space-y-4 sm:space-y-5;
+  }
+
+  .mobile-card-header {
+    @apply space-y-3 sm:space-y-2;
+  }
+
+  .mobile-card-content {
+    @apply space-y-4 sm:space-y-3;
+  }
+
+  .desktop-card-header-padding {
+    padding: 0.75rem 1rem;
+  }
+
+  @media (min-width: 640px) {
+    .desktop-card-header-padding {
+      padding: 1rem 1.5rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .desktop-card-header-padding {
+      padding: 1rem 2rem;
+    }
+  }
+
+  /* Properly sized text - much more reasonable */
+  .desktop-text-xs {
+    font-size: 0.75rem;
+    line-height: 1rem;
+  }
+
+  .desktop-text-sm {
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+  }
+
+  .desktop-text-base {
+    font-size: 1rem;
+    line-height: 1.5rem;
+  }
+
+  .desktop-text-lg {
+    font-size: 1.125rem;
+    line-height: 1.75rem;
+  }
+
+  .desktop-text-xl {
+    font-size: 1.25rem;
+    line-height: 1.75rem;
+  }
+
+  .desktop-text-2xl {
+    font-size: 1.5rem;
+    line-height: 2rem;
+  }
+
+  .desktop-text-3xl {
+    font-size: 1.875rem;
+    line-height: 2.25rem;
+  }
+
+  /* Legacy responsive classes for backward compatibility */
+  .large-screen-2-col {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+
+  @media (min-width: 1536px) {
+    .large-screen-2-col {
+      grid-template-columns: 1fr 1fr;
+      gap: 3rem;
+    }
+  }
+
+  .large-screen-3-col {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+
+  @media (min-width: 1280px) {
+    .large-screen-3-col {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  @media (min-width: 1536px) {
+    .large-screen-3-col {
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 2rem;
+    }
+  }
+
+  /* Enhanced mobile-friendly spacing */
+  .mobile-space-y {
+    @apply space-y-4 sm:space-y-5 md:space-y-6 lg:space-y-8;
+  }
+
+  /* Enhanced form field visibility */
+  input[data-slot="input"],
+  textarea[data-slot="textarea"],
+  [data-slot="select-trigger"] {
+    border: 1px solid var(--border) !important;
+    background-color: var(--input-background) !important;
+  }
+
+  input[data-slot="input"]:focus,
+  textarea[data-slot="textarea"]:focus,
+  [data-slot="select-trigger"]:focus {
+    border-color: var(--ring) !important;
+    box-shadow: 0 0 0 2px var(--ring)/20 !important;
+  }
+
+  /* Ensure placeholder text is visible */
+  input[data-slot="input"]::placeholder,
+  textarea[data-slot="textarea"]::placeholder {
+    color: var(--muted-foreground) !important;
+    opacity: 0.7 !important;
+  }
+
+  .mobile-gap {
+    @apply gap-3 sm:gap-4 md:gap-5 lg:gap-6;
+  }
+
+  .mobile-gap-sm {
+    @apply gap-2 sm:gap-3 md:gap-4;
+  }
+
+  .mobile-gap-lg {
+    @apply gap-4 sm:gap-6 md:gap-8;
+  }
+
+  /* Mobile-specific flex layouts */
+  .mobile-flex-col {
+    @apply flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4;
+  }
+
+  .mobile-flex-wrap {
+    @apply flex flex-wrap gap-2 sm:gap-3 md:gap-4;
+  }
+
+  .mobile-responsive-header {
+    @apply flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between;
+  }
+
+  /* Mobile-friendly button spacing */
+  .mobile-button-group {
+    @apply flex flex-col gap-3 sm:flex-row sm:gap-2;
+  }
+
+  .mobile-badge-group {
+    @apply flex flex-wrap gap-2 sm:gap-3;
+  }
+
+  /* Touch-friendly minimum sizes */
+  .mobile-touch-target {
+    @apply min-h-[44px] min-w-[44px];
+  }
+
+  .mobile-touch-button {
+    @apply h-10 sm:h-9 px-4 sm:px-3;
+  }
+
+  /* Max width constraint for large screens */
+  .max-screen-width {
+    @apply max-w-[1920px] mx-auto;
+  }
+
+  /* Full width container for responsive layouts */
+  .full-width-container {
+    @apply w-full;
+  }
+
+  /* Better space utilization layouts */
+  .space-efficient-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  @media (min-width: 768px) {
+    .space-efficient-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .space-efficient-grid {
+      grid-template-columns: 2fr 1fr;
+      gap: 1.5rem;
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .space-efficient-grid {
+      grid-template-columns: 2fr 1fr 1fr;
+      gap: 2rem;
+    }
+  }
+
+  @media (min-width: 1536px) {
+    .space-efficient-grid {
+      grid-template-columns: 3fr 1fr 1fr;
+      gap: 2rem;
+    }
+  }
+
+  /* Wide content layout for better space usage */
+  .wide-content-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    width: 100%;
+  }
+
+  @media (min-width: 1024px) {
+    .wide-content-grid {
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .wide-content-grid {
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+    }
+  }
+
+  @media (min-width: 1536px) {
+    .wide-content-grid {
+      grid-template-columns: 1fr 1fr ;
+      gap: 2rem;
+    }
+  }
+
+  @media (min-width: 1800px) {
+    .wide-content-grid {
+      grid-template-columns: 1fr 1fr ;
+      gap: 2rem;
+    }
+  }
+
+  /* Adaptive stats grid for large screens */
+  .adaptive-stats-grid {
+    @apply grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4  gap-4 lg:gap-6;
+  }
+
+  /* Adaptive content grid */
+  .adaptive-content-grid {
+    @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-4 gap-4 lg:gap-6;
+  }
+
+  /* Full width utilization on large screens */
+  .full-width-large {
+    @apply w-full;
+  }
+
+  @media (min-width: 1536px) {
+    .full-width-large {
+      width: 100%;
+      max-width: none;
+    }
+  }
+
+  /* Maximum space utilization layouts */
+  .max-space-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    width: 100%;
+  }
+
+  @media (min-width: 768px) {
+    .max-space-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .max-space-grid {
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 1.5rem;
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .max-space-grid {
+      grid-template-columns: 2fr 1fr 1fr 1fr;
+      gap: 2rem;
+    }
+  }
+
+  @media (min-width: 1536px) {
+    .max-space-grid {
+      grid-template-columns: 3fr 2fr 1fr 1fr 1fr;
+      gap: 2rem;
+    }
+  }
+
+  /* Ultra-wide dashboard layout */
+  .ultra-wide-dashboard {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    width: 100%;
+  }
+
+  @media (min-width: 1280px) {
+    .ultra-wide-dashboard {
+      grid-template-columns: 3fr 1fr;
+      gap: 2rem;
+    }
+  }
+
+  @media (min-width: 1536px) {
+    .ultra-wide-dashboard {
+      grid-template-columns: 4fr 2fr 1fr;
+      gap: 2rem;
+    }
+  }
+
+  @media (min-width: 1800px) {
+    .ultra-wide-dashboard {
+      grid-template-columns: 5fr 2fr 1fr 1fr;
+      gap: 3rem;
+    }
+  }
+
+  /* Text truncation utilities */
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* Full-screen utilization classes */
+  .full-screen-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    width: 100%;
+    min-height: 100%;
+  }
+
+  @media (min-width: 768px) {
+    .full-screen-grid {
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .full-screen-grid {
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 2rem;
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .full-screen-grid {
+      grid-template-columns: 1fr 1fr 1fr 1fr;
+      gap: 2rem;
+    }
+  }
+
+  @media (min-width: 1536px) {
+    .full-screen-grid {
+      grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+      gap: 2rem;
+    }
+  }
+
+  @media (min-width: 1800px) {
+    .full-screen-grid {
+      grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1fr;
+      gap: 2rem;
+    }
+  }
+
+  /* Ensure content stretches properly */
+  .stretch-content {
+    width: 100%;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .stretch-content > * {
+    flex-grow: 1;
+  }
+
+  /* Responsive text sizes */
+  .responsive-text-xs {
+    @apply text-xs sm:text-sm;
+  }
+
+  .responsive-text-sm {
+    @apply text-sm sm:text-base;
+  }
+
+  .responsive-text-base {
+    @apply text-sm sm:text-base md:text-lg;
+  }
+
+  .responsive-text-lg {
+    @apply text-base sm:text-lg md:text-xl;
+  }
+
+  .responsive-text-xl {
+    @apply text-lg sm:text-xl md:text-2xl;
+  }
+
+  .responsive-text-2xl {
+    @apply text-xl sm:text-2xl md:text-3xl;
+  }
+
+  .responsive-text-3xl {
+    @apply text-2xl sm:text-3xl md:text-4xl;
+  }
+
+  /* Responsive table wrapper */
+  .responsive-table {
+    @apply overflow-x-auto;
+  }
+
+  .responsive-table table {
+    @apply min-w-full;
+  }
+
+  .responsive-table th,
+  .responsive-table td {
+    @apply text-sm whitespace-nowrap;
+  }
+
+  @media (min-width: 640px) {
+    .responsive-table th,
+    .responsive-table td {
+      @apply text-base whitespace-normal;
+    }
+  }
+
+  /* Mobile-first card layouts for tables */
+  .mobile-card-table {
+    @apply block sm:hidden;
+  }
+
+  .desktop-table {
+    @apply hidden sm:block;
+  }
+
+  /* Responsive charts */
+  .responsive-chart {
+    @apply h-[250px] sm:h-[300px] md:h-[350px] lg:h-[400px];
+  }
+
+  .responsive-chart-small {
+    @apply h-[200px] sm:h-[250px] md:h-[300px];
+  }
+
+  /* Hide scrollbar utility */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Mobile-specific overflow and text handling */
+  .mobile-overflow-wrap {
+    @apply break-words;
+    overflow-wrap: anywhere;
+  }
+
+  .mobile-flex-safe {
+    @apply flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4;
+  }
+
+  .mobile-grid-safe {
+    @apply grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-3 md:gap-4;
+  }
+
+  /* Mobile-friendly text truncation */
+  .mobile-text-truncate {
+    @apply truncate sm:text-clip;
+  }
+
+  /* Ensure minimum spacing on small screens */
+  .mobile-min-spacing {
+    @apply space-y-4 sm:space-y-3 md:space-y-4;
+  }
+
+  /* Mobile button improvements */
+  .mobile-button-stack {
+    @apply flex flex-col gap-3 sm:flex-row sm:gap-2;
+  }
+
+  /* Safe responsive padding for mobile */
+  .mobile-safe-padding {
+    @apply p-4 sm:p-5 md:p-6;
+  }
+
+  /* Tab navigation improvements */
+  .mobile-tab-trigger {
+    @apply px-2 sm:px-3 md:px-4 py-2 text-xs sm:text-sm font-medium whitespace-nowrap;
+  }
+
+  .mobile-tab-icon {
+    @apply h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0;
+  }
+
+  .mobile-tab-spacing {
+    @apply gap-1 sm:gap-2 md:gap-3;
+  }
+
+  /* Extra small breakpoint utilities for very cramped layouts */
+  @media (max-width: 475px) {
+    .xs\:hidden {
+      display: none;
+    }
+    
+    .xs\:inline {
+      display: inline;
+    }
+    
+    .xs\:flex {
+      display: flex;
+    }
+  }
+
+  @media (min-width: 476px) {
+    .hidden.xs\:inline {
+      display: inline;
+    }
+    
+    .hidden.xs\:flex {
+      display: flex;
+    }
+    
+    .inline.xs\:hidden {
+      display: none;
+    }
+  }
+
+  /* Calendar component improvements */
+  .calendar-improved {
+    @apply w-full max-w-sm mx-auto;
+  }
+
+  .calendar-improved .rdp {
+    @apply w-full;
+  }
+
+  .calendar-improved .rdp-months {
+    @apply w-full;
+  }
+
+  .calendar-improved .rdp-month {
+    @apply w-full space-y-4;
+  }
+
+  .calendar-improved .rdp-table {
+    @apply w-full border-collapse;
+  }
+
+  .calendar-improved .rdp-head_row {
+    @apply flex w-full;
+  }
+
+  .calendar-improved .rdp-head_cell {
+    @apply text-muted-foreground rounded-md w-9 font-normal text-xs flex-1 text-center p-0;
+  }
+
+  .calendar-improved .rdp-row {
+    @apply flex w-full mt-2;
+  }
+
+  .calendar-improved .rdp-cell {
+    @apply h-9 w-9 text-center text-sm p-0 relative flex-1 flex items-center justify-center;
+  }
+
+  .calendar-improved .rdp-button {
+    @apply inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-8 w-8 p-0 font-normal aria-selected:opacity-100;
+  }
+
+  .calendar-improved .rdp-button_reset {
+    @apply bg-transparent border-0;
+    font-family: inherit;
+  }
+
+  .calendar-improved .rdp-day_today {
+    @apply bg-accent text-accent-foreground;
+  }
+
+  .calendar-improved .rdp-day_selected {
+    @apply bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground;
+  }
+
+  .calendar-improved .rdp-day_disabled {
+    @apply text-muted-foreground opacity-50;
+  }
+
+  .calendar-improved .rdp-day_range_middle {
+    @apply aria-selected:bg-accent aria-selected:text-accent-foreground;
+  }
+
+  .calendar-improved .rdp-day_hidden {
+    @apply invisible;
+  }
+
+  .calendar-improved .rdp-caption {
+    @apply flex justify-center pt-1 relative items-center;
+  }
+
+  .calendar-improved .rdp-caption_label {
+    @apply text-sm font-medium;
+  }
+
+  .calendar-improved .rdp-nav {
+    @apply space-x-1 flex items-center;
+  }
+
+  .calendar-improved .rdp-nav_button {
+    @apply inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100;
+  }
+
+  .calendar-improved .rdp-nav_button_previous {
+    @apply absolute left-1;
+  }
+
+  .calendar-improved .rdp-nav_button_next {
+    @apply absolute right-1;
+  }
+
+  /* Specific size adjustments for better spacing */
+  .calendar-improved .rdp-cell {
+    @apply min-h-[36px] min-w-[36px];
+  }
+
+  .calendar-improved .rdp-button {
+    @apply min-h-[32px] min-w-[32px];
+  }
+
+  /* Responsive calendar sizing */
+  @media (min-width: 640px) {
+    .calendar-improved .rdp-cell {
+      @apply min-h-[40px] min-w-[40px];
+    }
+    
+    .calendar-improved .rdp-button {
+      @apply min-h-[36px] min-w-[36px];
+    }
+  }
+
+  /* Additional calendar improvements for text overlap prevention */
+  .calendar-improved .rdp-button {
+    @apply leading-none text-sm font-normal;
+    line-height: 1;
+  }
+
+  .calendar-improved .rdp-head_cell {
+    @apply font-medium text-xs uppercase tracking-wider;
+    line-height: 1;
+  }
+
+  /* Ensure proper spacing between calendar elements */
+  .calendar-improved .rdp-month {
+    @apply space-y-3;
+  }
+
+  .calendar-improved .rdp-week {
+    @apply flex w-full;
+  }
+
+  /* Fix for multiple selection modes */
+  .calendar-improved .rdp-day_range_start {
+    @apply bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground;
+  }
+
+  .calendar-improved .rdp-day_range_end {
+    @apply bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground;
+  }
+
+  /* Better contrast for disabled dates */
+  .calendar-improved .rdp-day_disabled {
+    @apply text-muted-foreground/40 cursor-not-allowed;
+  }
+
+  /* Improve hover states */
+  .calendar-improved .rdp-button:hover:not(.rdp-day_selected):not(.rdp-day_disabled) {
+    @apply bg-accent text-accent-foreground;
+  }
+
+  /* Fix calendar container width issues */
+  .calendar-improved {
+    @apply w-full max-w-[280px] mx-auto;
+  }
+
+  @media (min-width: 640px) {
+    .calendar-improved {
+      @apply max-w-[320px];
+    }
+  }
+
+  /* Ensure calendar doesn't overflow on small screens */
+  .calendar-improved .rdp {
+    @apply min-w-[250px];
+  }
+
+  /* Mobile dialog improvements */
+  .mobile-dialog-content {
+    @apply w-[95vw] sm:w-full max-h-[90vh] sm:max-h-[90vh];
+  }
+
+  .mobile-dialog-header {
+    @apply flex-shrink-0;
+  }
+
+  .mobile-dialog-body {
+    @apply flex-1 overflow-y-auto;
+  }
+
+  .mobile-dialog-footer {
+    @apply flex-shrink-0;
+  }
+}
+
+/**
+ * Base typography. This is not applied to elements which have an ancestor with a Tailwind text class.
+ */
+@layer base {
+  :where(:not(:has([class*=" text-"]), :not(:has([class^="text-"])))) {
+    h1 {
+      font-size: var(--text-2xl);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
+
+    h2 {
+      font-size: var(--text-xl);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
+
+    h3 {
+      font-size: var(--text-lg);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
+
+    h4 {
+      font-size: var(--text-base);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
+
+    p {
+      font-size: var(--text-base);
+      font-weight: var(--font-weight-normal);
+      line-height: 1.5;
+    }
+
+    label {
+      font-size: var(--text-base);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
+
+    button {
+      font-size: var(--text-base);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
+
+    input {
+      font-size: var(--text-base);
+      font-weight: var(--font-weight-normal);
+      line-height: 1.5;
+    }
+  }
+}
+
+html {
+  font-size: var(--font-size);
+}
+
+/* Background Patterns */
+.bg-grid-pattern {
+  background-image: 
+    linear-gradient(rgba(0, 0, 0, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.1) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* Professional color utilities for sophisticated red usage */
+.text-wine { color: var(--red-wine); }
+.text-merlot { color: var(--red-merlot); }
+.text-garnet { color: var(--red-garnet); }
+.text-sangria { color: var(--red-sangria); }
+.text-berry { color: var(--red-berry); }
+.text-brick { color: var(--red-brick); }
+.text-blush { color: var(--red-blush); }
+
+.bg-wine { background-color: var(--red-wine); }
+.bg-merlot { background-color: var(--red-merlot); }
+.bg-garnet { background-color: var(--red-garnet); }
+.bg-sangria { background-color: var(--red-sangria); }
+.bg-berry { background-color: var(--red-berry); }
+.bg-brick { background-color: var(--red-brick); }
+.bg-blush { background-color: var(--red-blush); }
+
+.border-wine { border-color: var(--red-wine); }
+.border-merlot { border-color: var(--red-merlot); }
+.border-garnet { border-color: var(--red-garnet); }
+.border-sangria { border-color: var(--red-sangria); }
+.border-berry { border-color: var(--red-berry); }
+.border-brick { border-color: var(--red-brick); }
+.border-blush { border-color: var(--red-blush); }

@@ -1,0 +1,464 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum Role {
+  STAFF
+  ADMIN
+  MANAGER
+  CLIENT
+  SUB_ADMIN
+  SCHEDULER
+}
+
+enum EventStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum ShiftStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+  YET_TO_START
+  TRAVEL_TO_VENUE // Staff started travel (Uber-like flow)
+  ARRIVED // Staff arrived at venue
+  ONGOING
+  IN_PROGRESS
+  BREAK
+  COMPLETED
+  TRAVEL_HOME // Staff traveling home
+}
+
+// ─── Core Identity ───────────────────────────────────────────────────────────
+
+model User {
+  id        String    @id @default(uuid())
+  name      String
+  email     String    @unique
+  phone     String?
+  password  String
+  role      Role
+  avatar    String?
+  isActive  Boolean   @default(true)
+  lastLogin DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // Profiles
+  staffProfile  StaffProfile?
+  clientProfile ClientProfile?
+
+  // Events & Shifts
+  managedEvents Event[] @relation("EventManager")
+  shifts        Shift[]
+
+  // HR
+  applications        Application[]
+  certifications      Certification[] @relation("StaffCertifications")
+  interviews          Interview[]
+  interviewsConducted Interview[]     @relation("Interviewer")
+  documents           Document[]
+
+  // Finance
+  approvedTimesheets Timesheet[]  @relation("TimesheetApprover")
+  payrollsProcessed  PayrollRun[] @relation("PayrollProcessor")
+  timesheets         Timesheet[]
+
+  // Operations
+  incidentsReported IncidentReport[] @relation("IncidentReporter")
+
+  // Chat & Notifications
+  conversations ConversationParticipant[]
+  messagesSent  Message[]
+  notifications Notification[]
+
+  // Favorites
+  favoriteStaffEntries FavoriteStaff[] @relation("ClientFavorites")
+  favoritedByClients   FavoriteStaff[] @relation("StaffFavorited")
+}
+
+// ─── Staff & Client Profiles ─────────────────────────────────────────────────
+
+model StaffProfile {
+  id                 String   @id @default(uuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  location           String?
+  locationLat        Float?
+  locationLng        Float?
+  skills             String[]
+  hourlyRate         Float    @default(0)
+  rating             Float    @default(0)
+  totalEvents        Int      @default(0)
+  availabilityStatus String   @default("available") // available, busy, off
+  isActive           Boolean  @default(true)
+  joinDate           DateTime @default(now())
+  emergencyContact   String?
+  emergencyPhone     String?
+  bankAccountInfo    String? // Encrypted
+  taxId              String? // SSN/EIN (Encrypted)
+}
+
+model ClientProfile {
+  id           String  @id @default(uuid())
+  userId       String  @unique
+  user         User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type         String  @default("corporate") // corporate, individual, venue
+  company      String?
+  address      String?
+  creditLimit  Float?
+  paymentTerms String? // NET30, NET60, etc.
+  totalEvents  Int     @default(0)
+  totalSpent   Float   @default(0)
+  rating       Float   @default(0)
+  isActive     Boolean @default(true)
+
+  events   Event[]   @relation("ClientEvents")
+  invoices Invoice[]
+}
+
+// ─── Favorite Staff (Client → Staff bookmark list) ──────────────────────────
+
+model FavoriteStaff {
+  id        String   @id @default(uuid())
+  clientId  String
+  client    User     @relation("ClientFavorites", fields: [clientId], references: [id])
+  staffId   String
+  staff     User     @relation("StaffFavorited", fields: [staffId], references: [id])
+  notes     String?
+  createdAt DateTime @default(now())
+
+  @@unique([clientId, staffId])
+}
+
+// ─── Event & Shift Operations ────────────────────────────────────────────────
+
+model Event {
+  id        String        @id @default(uuid())
+  clientId  String
+  client    ClientProfile @relation("ClientEvents", fields: [clientId], references: [id])
+  managerId String?
+  manager   User?         @relation("EventManager", fields: [managerId], references: [id])
+
+  title               String
+  description         String
+  eventType           String? // Corporate, Wedding, Concert, etc.
+  venue               String?
+  date                DateTime
+  startTime           String
+  endTime             String
+  location            String
+  locationLat         Float?
+  locationLng         Float?
+  status              EventStatus @default(PENDING)
+  staffRequired       Int
+  budget              Float       @default(0)
+  deposit             Float       @default(0)
+  tips                Float       @default(0)
+  specialRequirements String?
+  dressCode           String?
+  contactOnSite       String?
+  contactOnSitePhone  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shifts        Shift[]
+  invoices      Invoice[]
+  incidents     IncidentReport[]
+  conversations Conversation[]
+}
+
+model Shift {
+  id      String @id @default(uuid())
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  staffId String
+  staff   User   @relation(fields: [staffId], references: [id])
+
+  date            DateTime
+  startTime       String
+  endTime         String
+  status          ShiftStatus @default(PENDING)
+  role            String? // Bartender, Server, Security, etc.
+  hourlyRate      Float       @default(0)
+  guaranteedHours Float? // Minimum hours guaranteed (MoM item)
+
+  // Clock tracking
+  clockIn    DateTime?
+  clockOut   DateTime?
+  location   String?
+  totalHours Float?
+  totalPay   Float?
+
+  // Travel tracking (Uber-like flow per MoM)
+  travelStartTime   DateTime? // Staff tapped "Start Travel"
+  travelArrivalTime DateTime? // Staff arrived at venue
+  travelHomeStart   DateTime? // Staff tapped "Travel Home"
+  travelHomeEnd     DateTime? // Staff arrived home
+  travelDuration    Float? // Total travel minutes
+  travelLat         Float? // Last known lat during travel
+  travelLng         Float? // Last known lng during travel
+
+  // Parking (MoM parking receipt)
+  parkingAmount     Float?
+  parkingReceiptUrl String?
+
+  // Tips
+  tipsReceived Float @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  timesheet Timesheet?
+  breaks    ShiftBreak[]
+}
+
+model ShiftBreak {
+  id              String    @id @default(uuid())
+  shiftId         String
+  shift           Shift     @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  startTime       DateTime  @default(now())
+  endTime         DateTime?
+  durationMinutes Float?
+}
+
+// ─── HR & Recruitment ────────────────────────────────────────────────────────
+
+model Application {
+  id          String   @id @default(uuid())
+  applicantId String
+  applicant   User     @relation(fields: [applicantId], references: [id])
+  position    String? // Role they're applying for
+  status      String   @default("PENDING") // PENDING, REVIEWING, INTERVIEWED, HIRED, REJECTED
+  resumeUrl   String?
+  coverLetter String?
+  source      String? // QR code, website, referral
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Certification {
+  id          String    @id @default(uuid())
+  staffId     String
+  staff       User      @relation("StaffCertifications", fields: [staffId], references: [id])
+  name        String
+  issuer      String?
+  issueDate   DateTime?
+  expiryDate  DateTime?
+  documentUrl String?
+  verified    Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+}
+
+model Interview {
+  id            String   @id @default(uuid())
+  candidateId   String
+  candidate     User     @relation(fields: [candidateId], references: [id])
+  interviewerId String?
+  interviewer   User?    @relation("Interviewer", fields: [interviewerId], references: [id])
+  scheduledAt   DateTime
+  location      String? // In-person or Virtual link
+  status        String   @default("SCHEDULED") // SCHEDULED, COMPLETED, CANCELLED, NO_SHOW
+  notes         String?
+  rating        Int?
+  createdAt     DateTime @default(now())
+}
+
+// ─── Document Management (Onboarding & Compliance) ──────────────────────────
+
+model Document {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  category   String // ID, CONTRACT, TAX_FORM, CERTIFICATION, NDA, OTHER
+  fileUrl    String
+  fileSize   Int?
+  mimeType   String?
+  status     String    @default("PENDING") // PENDING, VERIFIED, REJECTED, EXPIRED
+  expiresAt  DateTime?
+  verifiedAt DateTime?
+  notes      String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+}
+
+// ─── Financial Models ────────────────────────────────────────────────────────
+
+model Timesheet {
+  id                String    @id @default(uuid())
+  shiftId           String    @unique
+  shift             Shift     @relation(fields: [shiftId], references: [id])
+  staffId           String
+  staff             User      @relation(fields: [staffId], references: [id])
+  clockInTime       DateTime
+  clockOutTime      DateTime?
+  totalHours        Float?
+  regularHours      Float?
+  additionalWork    Float? // Replaces 'overtime' per MoM
+  breakMinutes      Float?
+  driveTime         Float? // Travel time in hours
+  parkingAmount     Float? // Parking reimbursement
+  tipsAmount        Float?
+  workersCompRate   Float? // Workers comp percentage
+  workersCompAmount Float? // Calculated workers comp deduction
+  status            String    @default("PENDING") // PENDING, APPROVED, REJECTED
+  approvedById      String?
+  approvedBy        User?     @relation("TimesheetApprover", fields: [approvedById], references: [id])
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
+model Invoice {
+  id            String        @id @default(uuid())
+  invoiceNumber String        @unique @default(uuid()) // Human-readable invoice #
+  clientId      String
+  client        ClientProfile @relation(fields: [clientId], references: [id])
+  eventId       String?
+  event         Event?        @relation(fields: [eventId], references: [id])
+  subtotal      Float         @default(0)
+  taxRate       Float         @default(0)
+  taxAmount     Float         @default(0)
+  amount        Float
+  status        String        @default("DRAFT") // DRAFT, SENT, PAID, OVERDUE, CANCELLED
+  dueDate       DateTime
+  paidDate      DateTime?
+  stripeId      String? // Payment gateway reference
+  pdfUrl        String?
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  lineItems InvoiceLineItem[]
+}
+
+model InvoiceLineItem {
+  id          String  @id @default(uuid())
+  invoiceId   String
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Float
+  unitPrice   Float
+  amount      Float
+}
+
+model PayrollRun {
+  id          String   @id @default(uuid())
+  periodStart DateTime
+  periodEnd   DateTime
+  processedBy String
+  processor   User     @relation("PayrollProcessor", fields: [processedBy], references: [id])
+  totalAmount Float
+  status      String   @default("DRAFT") // DRAFT, PROCESSING, COMPLETED, CANCELLED
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items PayrollItem[]
+}
+
+model PayrollItem {
+  id                   String     @id @default(uuid())
+  payrollRunId         String
+  payrollRun           PayrollRun @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
+  staffId              String
+  staffName            String
+  regularHours         Float      @default(0)
+  additionalHours      Float      @default(0) // "Additional Work" hours
+  hourlyRate           Float      @default(0)
+  regularPay           Float      @default(0)
+  additionalPay        Float      @default(0)
+  driveTimePay         Float      @default(0)
+  parkingReimbursement Float      @default(0)
+  tipsAmount           Float      @default(0)
+  workersCompDeduction Float      @default(0)
+  otherDeductions      Float      @default(0)
+  grossPay             Float      @default(0)
+  netPay               Float      @default(0)
+  notes                String?
+}
+
+// ─── Operations ──────────────────────────────────────────────────────────────
+
+model IncidentReport {
+  id          String   @id @default(uuid())
+  eventId     String
+  event       Event    @relation(fields: [eventId], references: [id])
+  reportedBy  String
+  reporter    User     @relation("IncidentReporter", fields: [reportedBy], references: [id])
+  severity    String   @default("LOW") // LOW, MEDIUM, HIGH, CRITICAL
+  description String
+  status      String   @default("OPEN") // OPEN, INVESTIGATING, RESOLVED
+  resolution  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ─── Chat & Communication ────────────────────────────────────────────────────
+
+model Conversation {
+  id            String   @id @default(uuid())
+  isGroup       Boolean  @default(false)
+  name          String? // For group chats
+  eventId       String? // Optional link to event group chat
+  event         Event?   @relation(fields: [eventId], references: [id])
+  lastMessageAt DateTime @default(now())
+
+  participants ConversationParticipant[]
+  messages     Message[]
+  createdAt    DateTime                  @default(now())
+}
+
+model ConversationParticipant {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id])
+  joinedAt       DateTime     @default(now())
+  lastReadAt     DateTime     @default(now())
+
+  @@unique([conversationId, userId])
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User         @relation(fields: [senderId], references: [id])
+  content        String
+  type           String       @default("TEXT") // TEXT, FILE, IMAGE
+  fileUrl        String?
+  fileName       String?
+  isSystem       Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+}
+
+// ─── Notifications ───────────────────────────────────────────────────────────
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  body      String
+  type      String   @default("INFO") // INFO, ALERT, MESSAGE, SHIFT, EVENT, PAYROLL, SYSTEM
+  isRead    Boolean  @default(false)
+  linkUrl   String?
+  metadata  String? // JSON string for extra context
+  createdAt DateTime @default(now())
+}
