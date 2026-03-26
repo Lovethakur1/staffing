@@ -1,0 +1,81 @@
+﻿[dotenv@17.3.1] injecting env (8) from .env -- tip: ΓÜí∩╕Å secrets for agents: https://dotenvx.com/as2
+[
+  {
+    "id": "15e0f83e-e0af-4d36-bc28-5e85a4d6608d",
+    "userId": "d75eb0a1-7421-440e-9a40-25158c4eb74f",
+    "type": "corporate",
+    "company": null,
+    "address": null,
+    "creditLimit": null,
+    "paymentTerms": null,
+    "totalEvents": 0,
+    "totalSpent": 0,
+    "rating": 0,
+    "isActive": true,
+    "user": {
+      "id": "d75eb0a1-7421-440e-9a40-25158c4eb74f",
+      "name": "Riverside Events LLC",
+      "email": "booking@riversideevents.com",
+      "phone": "+1 555-200-0002",
+      "password": "$2b$12$MeLV27a357MrBdJM2YEmPOwlLrbVDPjoH6/aNXJ4p8q6fXour5laG",
+      "role": "CLIENT",
+      "avatar": null,
+      "isActive": true,
+      "lastLogin": null,
+      "createdAt": "2026-02-24T11:24:12.835Z",
+      "updatedAt": "2026-02-24T11:24:12.835Z"
+    }
+  },
+  {
+    "id": "49100749-eb39-4141-89d5-484327885906",
+    "userId": "64fc758b-cab8-4457-9909-340cdeb181e1",
+    "type": "corporate",
+    "company": "Acme Corp",
+    "address": null,
+    "creditLimit": null,
+    "paymentTerms": null,
+    "totalEvents": 4,
+    "totalSpent": 0,
+    "rating": 0,
+    "isActive": true,
+    "user": {
+      "id": "64fc758b-cab8-4457-9909-340cdeb181e1",
+      "name": "Corporate Client",
+      "email": "client@company.com",
+      "phone": "+1 555-101-1303",
+      "password": "$2b$12$tEygk8mv8vi1PYprV5QFU.NmHbtiz3qIWqy9AK9UyDV/okhZlT9iK",
+      "role": "CLIENT",
+      "avatar": null,
+      "isActive": true,
+      "lastLogin": "2026-03-16T11:31:21.817Z",
+      "createdAt": "2026-02-23T12:36:17.417Z",
+      "updatedAt": "2026-03-16T11:31:21.818Z"
+    }
+  },
+  {
+    "id": "4ae7017d-93f7-4175-b5a4-1652efe42173",
+    "userId": "814ef909-bd95-4e6b-8757-91b5df19773e",
+    "type": "corporate",
+    "company": null,
+    "address": null,
+    "creditLimit": null,
+    "paymentTerms": null,
+    "totalEvents": 0,
+    "totalSpent": 0,
+    "rating": 0,
+    "isActive": true,
+    "user": {
+      "id": "814ef909-bd95-4e6b-8757-91b5df19773e",
+      "name": "TechCorp Industries",
+      "email": "events@techcorp.com",
+      "phone": "+1 555-200-0001",
+      "password": "$2b$12$p3ldjqKC5r/iFeVWNRKR..HYXGNpZtwWCICUjYv7GgLyM51jKSXSq",
+      "role": "CLIENT",
+      "avatar": null,
+      "isActive": true,
+      "lastLogin": null,
+      "createdAt": "2026-02-24T11:24:12.546Z",
+      "updatedAt": "2026-02-24T11:24:12.546Z"
+    }
+  }
+]

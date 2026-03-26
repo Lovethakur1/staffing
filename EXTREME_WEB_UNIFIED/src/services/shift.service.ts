@@ -89,5 +89,10 @@ export const shiftService = {
     updateLocation: async (id: string, lat: number, lng: number) => {
         const response = await api.post(`/shifts/${id}/update-location`, { lat, lng });
         return response.data;
+    },
+
+    toggleTravel: async (id: string, enabled: boolean) => {
+        const response = await api.put(`/shifts/${id}/toggle-travel`, { enabled });
+        return response.data;
     }
 };

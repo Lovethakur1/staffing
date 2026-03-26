@@ -77,10 +77,7 @@ export function Staff({ userRole, userId }: StaffProps) {
         const mapped: EventWithDetails[] = raw
           .filter((ev: any) => {
             const status = (ev.status || '').toLowerCase();
-            if (userRole === 'client') {
-              return ev.clientId === userId && (status === 'completed');
-            }
-            return status === 'completed';
+            return ['completed', 'confirmed', 'in-progress', 'pending'].includes(status);
           })
           .map((ev: any) => ({
             id: ev.id,

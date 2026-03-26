@@ -39,6 +39,7 @@ import {
 } from "../components/ui/dropdown-menu";
 import { eventService } from "../services/event.service";
 import { useNavigation } from "../contexts/NavigationContext";
+import { format } from "date-fns";
 
 interface OngoingEventsProps {
   userRole: string;
@@ -85,7 +86,7 @@ export function OngoingEvents({ userRole, userId }: OngoingEventsProps) {
   const baseEvents = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const todayStr = today.toISOString().split('T')[0];
+    const todayStr = format(today, 'yyyy-MM-dd');
 
     return rawEvents.filter(event => {
       const status = (event.status || '').toUpperCase();
@@ -432,7 +433,7 @@ export function OngoingEvents({ userRole, userId }: OngoingEventsProps) {
 
                         <TableCell>
                           <Badge variant="secondary" className={`${getStatusColor(event.status)} capitalize border px-2.5 py-0.5 rounded-md shadow-none flex w-fit items-center gap-1`}>
-                            {event.status === 'in-progress' || (event.status === 'confirmed' && event.date === new Date().toISOString().split('T')[0]) ? (
+                            {event.status === 'in-progress' || (event.status === 'confirmed' && event.date === format(new Date(), 'yyyy-MM-dd')) ? (
                               <>
                                 <span className="relative flex h-2 w-2 mr-1">
                                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>

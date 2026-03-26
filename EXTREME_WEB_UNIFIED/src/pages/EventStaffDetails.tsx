@@ -48,6 +48,8 @@ import {
 import { Staff } from "../data/mockData";
 import { useNavigation } from "../contexts/NavigationContext";
 import api from "../services/api";
+import { toast } from "sonner";
+import { reviewService } from "../services/review.service";
 
 interface EventStaffDetailsProps {
   userRole: string;
@@ -125,6 +127,27 @@ export function EventStaffDetails({ userRole, userId }: EventStaffDetailsProps) 
               time: `${ev.startTime || ''} - ${ev.endTime || ''}`,
               assignedStaff: ev.shifts?.map((s: any) => s.staffId) || [],
             });
+            // Extract staff directly from the event's shifts (already included in the getEvent response)
+            const staffFromShifts = (ev.shifts || []).map((s: any) => {
+              const staffUser = s.staff || {};
+              const profile = staffUser.staffProfile || {};
+              return {
+                id: staffUser.id || s.staffId,
+                name: staffUser.name || 'Staff Member',
+                email: staffUser.email || '',
+                phone: staffUser.phone || '',
+                location: profile.location || '',
+                skills: profile.skills || [],
+                rating: profile.rating || 4.5,
+                hourlyRate: s.hourlyRate || profile.hourlyRate || 0,
+                totalEvents: profile.totalEvents || 0,
+                availabilityStatus: profile.availabilityStatus || 'available',
+                experience: profile.totalEvents || 0,
+                shiftStatus: (s.status || '').toLowerCase(),
+                role: s.role || '',
+              };
+            });
+            setEventStaff(staffFromShifts);
           } else {
             setError('Event not found.');
           }
@@ -134,33 +157,15 @@ export function EventStaffDetails({ userRole, userId }: EventStaffDetailsProps) 
       } catch {
         setError('Unable to load event details. Please check your connection and try again.');
       }
-      try {
-        const staffRes = await api.get('/staff');
-        const staffRaw = staffRes.data;
-        const staffArr = Array.isArray(staffRaw) ? staffRaw : (staffRaw?.data || []);
-        const mapped = staffArr.map((s: any) => ({
-          id: s.id,
-          name: s.name || s.user?.name || 'Staff',
-          email: s.email || s.user?.email || '',
-          phone: s.phone || s.user?.phone || '',
-          location: s.location || '',
-          skills: s.skills || [],
-          rating: s.rating || 4.5,
-          hourlyRate: s.hourlyRate || 25,
-          totalEvents: s.totalEvents || s._count?.shifts || 0,
-          availabilityStatus: s.availabilityStatus || 'available',
-          experience: s.experience || 1,
-        }));
-        setEventStaff(mapped);
-      } catch {
-        if (!error) setError('Unable to load staff data.');
-      }
       setLoading(false);
     };
     fetchData();
   }, [eventId]);
 
-  const eventManager = event?.manager ? { name: event.manager.name || event.manager.user?.name, role: 'Manager' } : null;
+
+
+  const eventManager = event?.manager ? { name: event.manager.name || event.manager.user?.name, email: event.manager.email || event.manager.user?.email || '', role: 'Manager' } : null;
+
 
   // Get all unique skills
   const allSkills = Array.from(new Set(eventStaff.flatMap(staff => staff.skills)));
@@ -174,7 +179,7 @@ export function EventStaffDetails({ userRole, userId }: EventStaffDetailsProps) 
       filtered = filtered.filter(staff =>
         staff.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         staff.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        staff.skills.some(skill => skill.toLowerCase().includes(searchQuery.toLowerCase()))
+        staff.skills.some((skill: string) => skill.toLowerCase().includes(searchQuery.toLowerCase()))
       );
     }
 
@@ -281,21 +286,45 @@ export function EventStaffDetails({ userRole, userId }: EventStaffDetailsProps) 
       }));
     };
 
-    const handleSubmitRating = () => {
-      // In a real app, this would submit to backend
-      if (ratingType === "group") {
-        console.log("Submitting group ratings:", groupRatings);
-      } else {
-        console.log("Submitting individual rating:", {
-          staffId: selectedStaffForRating?.id,
-          rating,
-          review
-        });
+    const handleSubmitRating = async () => {
+      try {
+        if (ratingType === "group") {
+          // Submit all ratings in parallel
+          const promises = Object.entries(groupRatings).map(([staffId, data]) => 
+            reviewService.submitReview({
+              staffId,
+              eventId: event?.id || '',
+              rating: data.rating,
+              feedback: data.review
+            })
+          );
+          await Promise.all(promises);
+          toast.success('Successfully submitted ratings for all staff!');
+        } else if (selectedStaffForRating) {
+          // Submit individual rating
+          await reviewService.submitReview({
+            staffId: selectedStaffForRating.id,
+            eventId: event?.id || '',
+            rating,
+            feedback: review
+          });
+          toast.success(`Successfully rated ${selectedStaffForRating.name}!`);
+        }
+        
+        // Refresh event data to reflect new ratings/favorites if needed
+        setTimeout(() => {
+          window.location.reload();
+        }, 1500);
+
+      } catch (error: any) {
+        toast.error(error.response?.data?.error || 'Failed to submit rating. Please try again.');
+        console.error('Error submitting rating:', error);
+      } finally {
+        setShowRatingDialog(false);
+        setRating(5);
+        setReview("");
+        setGroupRatings({});
       }
-      setShowRatingDialog(false);
-      setRating(5);
-      setReview("");
-      setGroupRatings({});
     };
 
     return (
@@ -374,7 +403,7 @@ export function EventStaffDetails({ userRole, userId }: EventStaffDetailsProps) 
                       <div className="flex items-start gap-4">
                         <Avatar className="w-12 h-12">
                           <AvatarFallback>
-                            {staff.name.split(' ').map(n => n[0]).join('')}
+                            {staff.name.split(' ').map((n: string) => n[0]).join('')}
                           </AvatarFallback>
                         </Avatar>
 
@@ -583,7 +612,7 @@ export function EventStaffDetails({ userRole, userId }: EventStaffDetailsProps) 
             <div className="flex items-center gap-4">
               <Avatar className="w-16 h-16 border-2 border-border">
                 <AvatarFallback className="text-lg bg-primary text-primary-foreground font-medium">
-                  {eventManager.name.split(' ').map(n => n[0]).join('')}
+                  {eventManager.name.split(' ').map((n: string) => n[0]).join('')}
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1">
@@ -666,7 +695,7 @@ export function EventStaffDetails({ userRole, userId }: EventStaffDetailsProps) 
                 </SelectContent>
               </Select>
 
-              {userRole === 'client' && (
+              {['client', 'admin', 'manager', 'scheduler'].includes(userRole?.toLowerCase() || '') && (
                 <Button
                   variant="outline"
                   onClick={() => {
@@ -696,13 +725,13 @@ export function EventStaffDetails({ userRole, userId }: EventStaffDetailsProps) 
                   <div className="flex items-center gap-4">
                     <Avatar className="w-16 h-16 border-2 border-border">
                       <AvatarFallback className="text-lg bg-primary text-primary-foreground font-medium">
-                        {staff.name.split(" ").map((n) => n[0]).join("")}
+                        {staff.name.split(" ").map((n: string) => n[0]).join("")}
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
                         <h3 className="text-lg font-medium text-foreground">{staff.name}</h3>
-                        {userRole === 'client' && (
+                        {['client', 'admin', 'manager', 'scheduler'].includes(userRole?.toLowerCase() || '') && (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -759,7 +788,7 @@ export function EventStaffDetails({ userRole, userId }: EventStaffDetailsProps) 
                 <div>
                   <h4 className="text-sm font-medium mb-2">Skills</h4>
                   <div className="flex flex-wrap gap-1">
-                    {staff.skills.slice(0, 4).map((skill) => (
+                    {staff.skills.slice(0, 4).map((skill: string) => (
                       <Badge key={skill} variant="secondary" className="text-xs">
                         {skill}
                       </Badge>
@@ -801,7 +830,7 @@ export function EventStaffDetails({ userRole, userId }: EventStaffDetailsProps) 
                 </div>
 
                 {/* Actions */}
-                {userRole === 'client' && (
+                {['client', 'admin', 'manager', 'scheduler'].includes(userRole?.toLowerCase() || '') && (
                   <div className="flex gap-2 pt-2">
                     <Button
                       variant="outline"

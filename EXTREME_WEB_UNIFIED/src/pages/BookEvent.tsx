@@ -224,7 +224,7 @@ export function BookEvent({
             name: meRes.data.name || '',
             company: profile.companyName || '',
             favoriteEvents: [],
-          } as Client);
+          } as unknown as Client);
         }
       } catch { /* optional */ }
     };
@@ -1311,9 +1311,9 @@ export function BookEvent({
           </div>
 
           {/* Sidebar */}
-          <div className="space-y-6">
+          <div className="space-y-6 lg:sticky lg:top-4 self-start">
             {/* Estimated Cost */}
-            <Card className="border-0 shadow-lg sticky top-4">
+            <Card className="border-0 shadow-lg">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <DollarSign className="h-5 w-5 text-primary" />
@@ -1533,7 +1533,7 @@ function FavoriteEventsSelection({ userId, onEventSelect, selectedEventId }: Fav
             name: meRes.data.name || '',
             company: profile.companyName || '',
             favoriteEvents: [],
-          } as Client);
+          } as unknown as Client);
         }
       } catch { /* optional */ }
     };

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+﻿import { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -7,193 +7,143 @@ import { Switch } from "../components/ui/switch";
 import { Badge } from "../components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Alert, AlertDescription } from "../components/ui/alert";
+import { Separator } from "../components/ui/separator";
 import {
-  Shield,
-  Key,
-  Smartphone,
-  Eye,
-  EyeOff,
-  AlertTriangle,
-  CheckCircle,
-  Clock,
-  MapPin,
-  Monitor,
-  Save,
-  Trash2,
-  Download,
-  Lock,
-  Unlock,
-  Info
+  Shield, Key, Eye, EyeOff, AlertTriangle, CheckCircle,
+  Clock, Monitor, Lock, Info, LogOut, Smartphone,
 } from "lucide-react";
-import api from "../services/api";
 import { toast } from "sonner";
+import settingsService from "../services/settings.service";
+import api from "../services/api";
 
 interface SecurityProps {
   userRole: string;
   userId: string;
 }
 
+interface LoginLog {
+  id: string;
+  success: boolean;
+  ipAddress: string | null;
+  userAgent: string | null;
+  createdAt: string;
+}
+
+function parseDevice(ua: string | null): { browser: string; os: string } {
+  if (!ua) return { browser: "Unknown browser", os: "Unknown OS" };
+  const browser =
+    /Edg\//.test(ua) ? "Edge" :
+    /Chrome\//.test(ua) ? "Chrome" :
+    /Firefox\//.test(ua) ? "Firefox" :
+    /Safari\//.test(ua) && !/Chrome/.test(ua) ? "Safari" :
+    /MSIE|Trident/.test(ua) ? "IE" : "Browser";
+  const os =
+    /Windows NT/.test(ua) ? "Windows" :
+    /Mac OS X/.test(ua) ? "macOS" :
+    /Linux/.test(ua) ? "Linux" :
+    /iPhone|iPad/.test(ua) ? "iOS" :
+    /Android/.test(ua) ? "Android" : "Unknown OS";
+  return { browser, os };
+}
+
+function getPasswordStrength(password: string) {
+  let score = 0;
+  if (password.length >= 8) score++;
+  if (/[a-z]/.test(password)) score++;
+  if (/[A-Z]/.test(password)) score++;
+  if (/\d/.test(password)) score++;
+  if (/[^a-zA-Z\d]/.test(password)) score++;
+  if (score < 2) return { score, label: "Weak", barColor: "bg-red-500" };
+  if (score < 4) return { score, label: "Medium", barColor: "bg-yellow-500" };
+  return { score, label: "Strong", barColor: "bg-green-500" };
+}
+
 export function Security({ userRole }: SecurityProps) {
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-
+  //  Password 
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [passwordForm, setPasswordForm] = useState({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: ''
+    currentPassword: "", newPassword: "", confirmPassword: "",
   });
+  const [isSavingPw, setIsSavingPw] = useState(false);
 
-  const [securitySettings, setSecuritySettings] = useState({
-    twoFactorEnabled: false,
-    emailVerification: true,
-    loginNotifications: true,
-    sessionTimeout: 30, // minutes
-    allowMultipleSessions: true,
-    requirePasswordChange: false,
-    dataBackup: true
-  });
+  //  Security prefs (loginNotifications) from UserPreferences 
+  const [loginNotifications, setLoginNotifications] = useState(true);
+  const [isSavingPrefs, setIsSavingPrefs] = useState(false);
 
-  // Mock security data
-  const securityData = {
-    lastPasswordChange: "2024-09-15",
-    activeSessions: [
-      {
-        id: '1',
-        device: 'Chrome on Windows',
-        location: 'New York, NY',
-        lastActive: '2024-10-25T14:30:00Z',
-        current: true
-      },
-      {
-        id: '2',
-        device: 'Safari on iPhone',
-        location: 'New York, NY',
-        lastActive: '2024-10-25T09:15:00Z',
-        current: false
-      },
-      {
-        id: '3',
-        device: 'Chrome on Mac',
-        location: 'New York, NY',
-        lastActive: '2024-10-24T16:45:00Z',
-        current: false
-      }
-    ],
-    loginHistory: [
-      {
-        id: '1',
-        timestamp: '2024-10-25T14:30:00Z',
-        device: 'Chrome on Windows',
-        location: 'New York, NY',
-        ip: '192.168.1.1',
-        success: true
-      },
-      {
-        id: '2',
-        timestamp: '2024-10-25T09:15:00Z',
-        device: 'Safari on iPhone',
-        location: 'New York, NY',
-        ip: '192.168.1.2',
-        success: true
-      },
-      {
-        id: '3',
-        timestamp: '2024-10-24T16:45:00Z',
-        device: 'Chrome on Mac',
-        location: 'New York, NY',
-        ip: '192.168.1.3',
-        success: true
-      },
-      {
-        id: '4',
-        timestamp: '2024-10-24T10:22:00Z',
-        device: 'Unknown device',
-        location: 'Los Angeles, CA',
-        ip: '203.0.113.1',
-        success: false
-      }
-    ],
-    backupHistory: [
-      {
-        id: '1',
-        date: '2024-10-20',
-        type: 'Full Backup',
-        size: '2.5 MB',
-        status: 'completed'
-      },
-      {
-        id: '2',
-        date: '2024-10-15',
-        type: 'Incremental Backup',
-        size: '1.2 MB',
-        status: 'completed'
-      },
-      {
-        id: '3',
-        date: '2024-10-10',
-        type: 'Full Backup',
-        size: '2.3 MB',
-        status: 'completed'
-      }
-    ]
-  };
+  //  Activity 
+  const [logs, setLogs] = useState<LoginLog[]>([]);
+  const [lastLogin, setLastLogin] = useState<string | null>(null);
+  const [isLoadingActivity, setIsLoadingActivity] = useState(true);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  const handlePasswordChange = async () => {
+  //  Load preferences 
+  useEffect(() => {
+    settingsService.getPreferences()
+      .then(({ notificationPrefs }) => {
+        setLoginNotifications((notificationPrefs as any).loginNotifications ?? true);
+      })
+      .catch(() => {});
+  }, []);
+
+  //  Load activity 
+  useEffect(() => {
+    setIsLoadingActivity(true);
+    api.get("/settings/activity")
+      .then(r => {
+        setLogs(r.data.logs || []);
+        setLastLogin(r.data.lastLogin || null);
+      })
+      .catch(() => toast.error("Failed to load activity"))
+      .finally(() => setIsLoadingActivity(false));
+  }, []);
+
+  //  Handlers 
+  const handleChangePassword = async () => {
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      toast.error('New passwords do not match');
+      toast.error("New passwords do not match");
       return;
     }
+    setIsSavingPw(true);
     try {
-      await api.post('/auth/change-password', {
-        currentPassword: passwordForm.currentPassword,
-        newPassword: passwordForm.newPassword,
-      });
-      toast.success('Password changed successfully');
-      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      await settingsService.changePassword(passwordForm.currentPassword, passwordForm.newPassword);
+      setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+      toast.success("Password changed successfully");
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to change password');
+      toast.error(err?.response?.data?.error || "Failed to change password");
+    } finally {
+      setIsSavingPw(false);
     }
   };
 
-  const handleSecuritySettingChange = (key: string, value: any) => {
-    setSecuritySettings(prev => ({
-      ...prev,
-      [key]: value
-    }));
-  };
-
-  const handleTerminateSession = async (sessionId: string) => {
+  const handleSaveLoginNotif = async (checked: boolean) => {
+    setLoginNotifications(checked);
+    setIsSavingPrefs(true);
     try {
-      await api.delete(`/auth/sessions/${sessionId}`);
-      toast.success('Session terminated');
+      await settingsService.updateNotificationPrefs({ loginNotifications: checked } as any);
     } catch {
-      toast.error('Failed to terminate session');
+      toast.error("Failed to save preference");
+    } finally {
+      setIsSavingPrefs(false);
     }
   };
 
-  const handleDownloadBackup = (backupId: string) => {
-    toast.info(`Preparing backup download ${backupId}...`);
+  const handleLogoutAllDevices = async () => {
+    setIsLoggingOut(true);
+    try {
+      await api.post("/settings/logout-all");
+      toast.success("All other devices have been signed out");
+    } catch {
+      toast.error("Failed to sign out other devices");
+    } finally {
+      setIsLoggingOut(false);
+    }
   };
 
-  const formatDateTime = (dateString: string) => {
-    return new Date(dateString).toLocaleString();
-  };
-
-  const getPasswordStrength = (password: string) => {
-    let strength = 0;
-    if (password.length >= 8) strength++;
-    if (/[a-z]/.test(password)) strength++;
-    if (/[A-Z]/.test(password)) strength++;
-    if (/\d/.test(password)) strength++;
-    if (/[^a-zA-Z\d]/.test(password)) strength++;
-
-    if (strength < 2) return { score: strength, label: 'Weak', color: 'text-destructive' };
-    if (strength < 4) return { score: strength, label: 'Medium', color: 'text-warning' };
-    return { score: strength, label: 'Strong', color: 'text-success' };
-  };
-
-  const passwordStrength = getPasswordStrength(passwordForm.newPassword);
+  const strength = getPasswordStrength(passwordForm.newPassword);
+  const successCount = logs.filter(l => l.success).length;
+  const failCount = logs.filter(l => !l.success).length;
 
   return (
     <div className="space-y-4 sm:space-y-6 w-full">
@@ -204,30 +154,39 @@ export function Security({ userRole }: SecurityProps) {
             <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Security & Access</h1>
             <Badge variant="outline" className="flex items-center gap-1">
               <Lock className="h-3 w-3" />
-              Admin
+              {userRole}
             </Badge>
           </div>
           <p className="text-sm lg:text-base text-muted-foreground mt-1">
             Manage your account security and privacy settings
           </p>
         </div>
-        <Badge className="bg-success text-success-foreground">
-          <Shield className="w-4 h-4 mr-1" />
-          Account Secure
-        </Badge>
+        {failCount === 0 ? (
+          <Badge className="bg-green-600 text-white self-start lg:self-auto">
+            <Shield className="w-4 h-4 mr-1" />
+            Account Secure
+          </Badge>
+        ) : (
+          <Badge variant="destructive" className="self-start lg:self-auto">
+            <AlertTriangle className="w-4 h-4 mr-1" />
+            {failCount} Failed Login{failCount > 1 ? "s" : ""} Detected
+          </Badge>
+        )}
       </div>
 
       <Tabs defaultValue="password" className="space-y-6">
-        <div className="w-full overflow-x-auto pb-2">
-          <TabsList className="inline-flex lg:grid grid-cols-2 lg:grid-cols-5 w-full min-w-max lg:min-w-0">
-            <TabsTrigger value="password" className="whitespace-nowrap">Password</TabsTrigger>
-            <TabsTrigger value="2fa" className="whitespace-nowrap">Two-Factor</TabsTrigger>
-            <TabsTrigger value="sessions" className="whitespace-nowrap">Sessions</TabsTrigger>
-            <TabsTrigger value="activity" className="whitespace-nowrap">Activity</TabsTrigger>
-            <TabsTrigger value="backup" className="whitespace-nowrap">Data Backup</TabsTrigger>
-          </TabsList>
-        </div>
+        <TabsList className="grid grid-cols-2 w-full max-w-sm">
+          <TabsTrigger value="password" className="flex items-center gap-2">
+            <Key className="h-4 w-4" />
+            Password
+          </TabsTrigger>
+          <TabsTrigger value="activity" className="flex items-center gap-2">
+            <Clock className="h-4 w-4" />
+            Activity
+          </TabsTrigger>
+        </TabsList>
 
+        {/*  Password Tab  */}
         <TabsContent value="password" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Change Password */}
@@ -237,394 +196,292 @@ export function Security({ userRole }: SecurityProps) {
                   <Key className="w-5 h-5" />
                   Change Password
                 </CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Update your password regularly to keep your account secure
-                </p>
+                <CardDescription>Update your password regularly to keep your account secure</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Current */}
                 <div className="space-y-2">
                   <Label htmlFor="currentPassword">Current Password</Label>
                   <div className="relative">
                     <Input
                       id="currentPassword"
-                      type={showCurrentPassword ? "text" : "password"}
+                      type={showCurrent ? "text" : "password"}
                       value={passwordForm.currentPassword}
-                      onChange={(e) => setPasswordForm(prev => ({ ...prev, currentPassword: e.target.value }))}
+                      onChange={e => setPasswordForm(p => ({ ...p, currentPassword: e.target.value }))}
+                      placeholder="Enter current password"
                     />
                     <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                      onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                      type="button" variant="ghost" size="sm"
+                      className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                      onClick={() => setShowCurrent(v => !v)}
                     >
-                      {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      {showCurrent ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </Button>
                   </div>
                 </div>
 
+                {/* New */}
                 <div className="space-y-2">
                   <Label htmlFor="newPassword">New Password</Label>
                   <div className="relative">
                     <Input
                       id="newPassword"
-                      type={showNewPassword ? "text" : "password"}
+                      type={showNew ? "text" : "password"}
                       value={passwordForm.newPassword}
-                      onChange={(e) => setPasswordForm(prev => ({ ...prev, newPassword: e.target.value }))}
+                      onChange={e => setPasswordForm(p => ({ ...p, newPassword: e.target.value }))}
+                      placeholder="Min. 8 characters"
                     />
                     <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      type="button" variant="ghost" size="sm"
+                      className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                      onClick={() => setShowNew(v => !v)}
                     >
-                      {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      {showNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </Button>
                   </div>
                   {passwordForm.newPassword && (
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 bg-muted rounded-full h-2">
+                    <div className="flex items-center gap-2 mt-1">
+                      <div className="flex-1 bg-muted rounded-full h-1.5">
                         <div
-                          className={`h-2 rounded-full ${passwordStrength.score < 2 ? 'bg-destructive' :
-                              passwordStrength.score < 4 ? 'bg-warning' : 'bg-success'
-                            }`}
-                          style={{ width: `${(passwordStrength.score / 5) * 100}%` }}
-                        ></div>
+                          className={`h-1.5 rounded-full transition-all ${strength.barColor}`}
+                          style={{ width: `${(strength.score / 5) * 100}%` }}
+                        />
                       </div>
-                      <span className={`text-xs ${passwordStrength.color}`}>
-                        {passwordStrength.label}
-                      </span>
+                      <span className={`text-xs font-medium ${
+                        strength.score < 2 ? "text-red-500" :
+                        strength.score < 4 ? "text-yellow-600" : "text-green-600"
+                      }`}>{strength.label}</span>
                     </div>
                   )}
                 </div>
 
+                {/* Confirm */}
                 <div className="space-y-2">
                   <Label htmlFor="confirmPassword">Confirm New Password</Label>
                   <div className="relative">
                     <Input
                       id="confirmPassword"
-                      type={showConfirmPassword ? "text" : "password"}
+                      type={showConfirm ? "text" : "password"}
                       value={passwordForm.confirmPassword}
-                      onChange={(e) => setPasswordForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                      onChange={e => setPasswordForm(p => ({ ...p, confirmPassword: e.target.value }))}
+                      placeholder="Repeat new password"
                     />
                     <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      type="button" variant="ghost" size="sm"
+                      className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                      onClick={() => setShowConfirm(v => !v)}
                     >
-                      {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </Button>
                   </div>
                   {passwordForm.confirmPassword && passwordForm.newPassword !== passwordForm.confirmPassword && (
-                    <p className="text-xs text-destructive">Passwords do not match</p>
+                    <p className="text-xs text-red-500 flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" /> Passwords do not match
+                    </p>
+                  )}
+                  {passwordForm.confirmPassword && passwordForm.newPassword === passwordForm.confirmPassword && (
+                    <p className="text-xs text-green-600 flex items-center gap-1">
+                      <CheckCircle className="h-3 w-3" /> Passwords match
+                    </p>
                   )}
                 </div>
 
                 <Button
-                  onClick={handlePasswordChange}
-                  disabled={!passwordForm.currentPassword || !passwordForm.newPassword || passwordForm.newPassword !== passwordForm.confirmPassword}
-                  className="w-full"
+                  onClick={handleChangePassword}
+                  disabled={
+                    isSavingPw ||
+                    !passwordForm.currentPassword ||
+                    !passwordForm.newPassword ||
+                    passwordForm.newPassword !== passwordForm.confirmPassword
+                  }
+                  className="w-full bg-[#5E1916] hover:bg-[#5E1916]/90"
                 >
-                  <Save className="w-4 h-4 mr-2" />
-                  Change Password
+                  {isSavingPw ? "Updating" : "Change Password"}
                 </Button>
               </CardContent>
             </Card>
 
-            {/* Password Security */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Shield className="w-5 h-5" />
-                  Password Security
-                </CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Current password status and security settings
-                </p>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between p-3 bg-accent rounded-lg">
-                  <div>
-                    <p className="text-sm font-medium">Last Password Change</p>
-                    <p className="text-xs text-muted-foreground">{new Date(securityData.lastPasswordChange).toLocaleDateString()}</p>
-                  </div>
-                  <CheckCircle className="w-5 h-5 text-success" />
-                </div>
+            {/* Security Info + Settings */}
+            <div className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Shield className="w-5 h-5" />
+                    Account Security
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {lastLogin && (
+                    <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                      <div>
+                        <p className="text-sm font-medium">Last Login</p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(lastLogin).toLocaleString()}
+                        </p>
+                      </div>
+                      <CheckCircle className="w-5 h-5 text-green-600" />
+                    </div>
+                  )}
 
-                <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="requirePasswordChange">Require password change</Label>
+                    <div className="space-y-0.5">
+                      <Label>Login Notifications</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Get notified on new sign-ins
+                      </p>
+                    </div>
                     <Switch
-                      id="requirePasswordChange"
-                      checked={securitySettings.requirePasswordChange}
-                      onCheckedChange={(checked) => handleSecuritySettingChange('requirePasswordChange', checked)}
+                      checked={loginNotifications}
+                      onCheckedChange={handleSaveLoginNotif}
+                      disabled={isSavingPrefs}
+                      className="data-[state=checked]:bg-[#5E1916]"
                     />
                   </div>
 
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="loginNotifications">Login notifications</Label>
-                    <Switch
-                      id="loginNotifications"
-                      checked={securitySettings.loginNotifications}
-                      onCheckedChange={(checked) => handleSecuritySettingChange('loginNotifications', checked)}
-                    />
-                  </div>
-                </div>
+                  <Separator />
 
-                <Alert>
-                  <Info className="h-4 w-4" />
-                  <AlertDescription>
-                    Use a strong password with at least 8 characters, including uppercase, lowercase, numbers, and special characters.
-                  </AlertDescription>
-                </Alert>
-              </CardContent>
-            </Card>
+                  <Alert>
+                    <Info className="h-4 w-4" />
+                    <AlertDescription>
+                      Use a strong password with uppercase, lowercase, numbers, and special characters.
+                    </AlertDescription>
+                  </Alert>
+                </CardContent>
+              </Card>
+
+              {/* 2FA Status */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Smartphone className="w-5 h-5" />
+                    Two-Factor Authentication
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center gap-3 p-3 border rounded-lg">
+                    <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                      <Lock className="w-4 h-4 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">TOTP Authentication</p>
+                      <p className="text-xs text-muted-foreground">Coming soon — will support authenticator apps</p>
+                    </div>
+                    <Badge variant="secondary" className="ml-auto text-xs">Planned</Badge>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </div>
         </TabsContent>
 
-        <TabsContent value="2fa" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Smartphone className="w-5 h-5" />
-                Two-Factor Authentication
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Add an extra layer of security to your account
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between p-4 border rounded-lg">
-                <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${securitySettings.twoFactorEnabled ? 'bg-success text-success-foreground' : 'bg-muted text-muted-foreground'
-                    }`}>
-                    {securitySettings.twoFactorEnabled ? <CheckCircle className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
-                  </div>
+        {/*  Activity Tab  */}
+        <TabsContent value="activity" className="space-y-6">
+          {/* Stats + Sign-out-all */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="font-medium">
-                      Two-Factor Authentication {securitySettings.twoFactorEnabled ? 'Enabled' : 'Disabled'}
-                    </h3>
-                    <p className="text-sm text-muted-foreground">
-                      {securitySettings.twoFactorEnabled
-                        ? 'Your account is protected with 2FA'
-                        : 'Secure your account with an additional verification step'
-                      }
+                    <p className="text-sm text-muted-foreground">Successful Logins</p>
+                    <p className="text-2xl font-semibold text-green-600">{successCount}</p>
+                  </div>
+                  <CheckCircle className="w-8 h-8 text-green-200" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Failed Attempts</p>
+                    <p className={`text-2xl font-semibold ${failCount > 0 ? "text-red-600" : "text-muted-foreground"}`}>
+                      {failCount}
                     </p>
                   </div>
+                  <AlertTriangle className={`w-8 h-8 ${failCount > 0 ? "text-red-200" : "text-muted"}`} />
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4 flex flex-col justify-between h-full gap-3">
+                <div>
+                  <p className="text-sm font-medium">Sign Out All Devices</p>
+                  <p className="text-xs text-muted-foreground">Invalidates all active sessions except this one</p>
                 </div>
                 <Button
-                  variant={securitySettings.twoFactorEnabled ? "destructive" : "default"}
-                  onClick={() => handleSecuritySettingChange('twoFactorEnabled', !securitySettings.twoFactorEnabled)}
+                  variant="outline"
+                  size="sm"
+                  onClick={handleLogoutAllDevices}
+                  disabled={isLoggingOut}
+                  className="gap-2 border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300"
                 >
-                  {securitySettings.twoFactorEnabled ? (
-                    <>
-                      <Unlock className="w-4 h-4 mr-2" />
-                      Disable 2FA
-                    </>
-                  ) : (
-                    <>
-                      <Lock className="w-4 h-4 mr-2" />
-                      Enable 2FA
-                    </>
-                  )}
+                  <LogOut className="w-3.5 h-3.5" />
+                  {isLoggingOut ? "Signing out" : "Sign Out Everywhere"}
                 </Button>
-              </div>
+              </CardContent>
+            </Card>
+          </div>
 
-              {securitySettings.twoFactorEnabled && (
-                <Alert>
-                  <CheckCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    Two-factor authentication is enabled using your mobile device. You'll receive a verification code each time you sign in.
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              <div className="flex items-center justify-between">
-                <Label htmlFor="emailVerification">Email verification for logins</Label>
-                <Switch
-                  id="emailVerification"
-                  checked={securitySettings.emailVerification}
-                  onCheckedChange={(checked) => handleSecuritySettingChange('emailVerification', checked)}
-                />
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="sessions" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Monitor className="w-5 h-5" />
-                Active Sessions
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Manage your active login sessions across different devices
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {securityData.activeSessions.map((session) => (
-                <div key={session.id} className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <Monitor className="w-8 h-8 text-muted-foreground" />
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h4 className="font-medium">{session.device}</h4>
-                        {session.current && (
-                          <Badge className="bg-success text-success-foreground text-xs">Current</Badge>
-                        )}
-                      </div>
-                      <p className="text-sm text-muted-foreground flex items-center gap-1">
-                        <MapPin className="w-3 h-3" />
-                        {session.location}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Last active: {formatDateTime(session.lastActive)}
-                      </p>
-                    </div>
-                  </div>
-                  {!session.current && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleTerminateSession(session.id)}
-                    >
-                      <Trash2 className="w-4 h-4 mr-1" />
-                      Terminate
-                    </Button>
-                  )}
-                </div>
-              ))}
-
-              <div className="flex items-center justify-between pt-4 border-t">
-                <Label htmlFor="allowMultipleSessions">Allow multiple sessions</Label>
-                <Switch
-                  id="allowMultipleSessions"
-                  checked={securitySettings.allowMultipleSessions}
-                  onCheckedChange={(checked) => handleSecuritySettingChange('allowMultipleSessions', checked)}
-                />
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="activity" className="space-y-6">
+          {/* Login log */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Clock className="w-5 h-5" />
-                Login Activity
+                Recent Login Activity
               </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Recent login attempts and security activity
-              </p>
+              <CardDescription>
+                Last {logs.length} login attempt{logs.length !== 1 ? "s" : ""} on your account
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {securityData.loginHistory.map((login) => (
-                  <div key={login.id} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${login.success ? 'bg-success text-success-foreground' : 'bg-destructive text-destructive-foreground'
-                        }`}>
-                        {login.success ? <CheckCircle className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
+              {isLoadingActivity ? (
+                <div className="flex items-center justify-center py-10">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#5E1916]" />
+                </div>
+              ) : logs.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">No login activity yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {logs.map(log => {
+                    const device = parseDevice(log.userAgent);
+                    return (
+                      <div key={log.id} className="flex items-center justify-between p-3 border rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                            log.success ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                          }`}>
+                            {log.success
+                              ? <CheckCircle className="w-4 h-4" />
+                              : <AlertTriangle className="w-4 h-4" />}
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium flex items-center gap-1.5">
+                              <Monitor className="w-3.5 h-3.5 text-muted-foreground" />
+                              {device.browser} on {device.os}
+                            </p>
+                            {log.ipAddress && (
+                              <p className="text-xs text-muted-foreground">IP: {log.ipAddress}</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right flex-shrink-0 ml-4">
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(log.createdAt).toLocaleString()}
+                          </p>
+                          <Badge
+                            variant={log.success ? "outline" : "destructive"}
+                            className="text-xs mt-1"
+                          >
+                            {log.success ? "Success" : "Failed"}
+                          </Badge>
+                        </div>
                       </div>
-                      <div>
-                        <h4 className="text-sm font-medium">{login.device}</h4>
-                        <p className="text-xs text-muted-foreground flex items-center gap-1">
-                          <MapPin className="w-3 h-3" />
-                          {login.location} • IP: {login.ip}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs text-muted-foreground">{formatDateTime(login.timestamp)}</p>
-                      <Badge variant={login.success ? "outline" : "destructive"} className="text-xs">
-                        {login.success ? 'Success' : 'Failed'}
-                      </Badge>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
-        </TabsContent>
-
-        <TabsContent value="backup" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Backup Settings */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Download className="w-5 h-5" />
-                  Data Backup Settings
-                </CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Configure automatic backup of your account data
-                </p>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="dataBackup">Enable automatic backups</Label>
-                  <Switch
-                    id="dataBackup"
-                    checked={securitySettings.dataBackup}
-                    onCheckedChange={(checked) => handleSecuritySettingChange('dataBackup', checked)}
-                  />
-                </div>
-
-                <Alert>
-                  <Info className="h-4 w-4" />
-                  <AlertDescription>
-                    Backups include your profile data, work history, and preferences. Personal documents are not included for privacy.
-                  </AlertDescription>
-                </Alert>
-
-                <Button className="w-full">
-                  <Download className="w-4 h-4 mr-2" />
-                  Create Manual Backup
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* Backup History */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Backup History</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Recent data backups and downloads
-                </p>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {securityData.backupHistory.map((backup) => (
-                    <div key={backup.id} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div>
-                        <h4 className="text-sm font-medium">{backup.type}</h4>
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(backup.date).toLocaleDateString()} • {backup.size}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge className="bg-success text-success-foreground text-xs">
-                          {backup.status}
-                        </Badge>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDownloadBackup(backup.id)}
-                        >
-                          <Download className="w-3 h-3" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
         </TabsContent>
       </Tabs>
     </div>

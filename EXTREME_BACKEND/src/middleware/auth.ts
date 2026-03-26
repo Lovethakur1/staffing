@@ -31,12 +31,21 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
     // Verify user still exists and is active
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
-      select: { id: true, role: true, isActive: true },
+      select: { id: true, role: true, isActive: true, loggedOutAllAt: true },
     });
 
     if (!user || !user.isActive) {
       res.status(401).json({ error: 'User not found or deactivated.' });
       return;
+    }
+
+    // Reject tokens issued before a "logout all devices" timestamp
+    if (user.loggedOutAllAt) {
+      const tokenIssuedAt = (decoded as any).iat as number | undefined;
+      if (tokenIssuedAt && tokenIssuedAt < Math.floor(user.loggedOutAllAt.getTime() / 1000)) {
+        res.status(401).json({ error: 'Session has been invalidated. Please log in again.' });
+        return;
+      }
     }
 
     req.user = { userId: user.id, role: user.role };

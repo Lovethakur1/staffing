@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import prisma from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { asyncHandler, parsePagination, calculateHours } from '../utils/helpers';
+import { calculateAndSaveStaffRating } from '../services/rating.service';
+import { emitToRole } from '../services/socket.service';
 
 /**
  * GET /api/shifts
@@ -180,10 +182,30 @@ export const updateShiftStatus = asyncHandler(async (req: AuthRequest, res: Resp
 // ═══════════════════════════════════════════════════════════════════
 
 /**
+ * PUT /api/shifts/:id/toggle-travel
+ * Admin enables/disables travel for a specific shift.
+ */
+export const toggleTravel = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { enabled } = req.body;
+  const shift = await prisma.shift.update({
+    where: { id: req.params.id },
+    data: { travelEnabled: Boolean(enabled) },
+    include: { staff: { select: { id: true, name: true } }, event: { select: { id: true, title: true } } },
+  });
+  res.json({ message: `Travel ${shift.travelEnabled ? 'enabled' : 'disabled'}.`, shift });
+});
+
+/**
  * POST /api/shifts/:id/start-travel
  * Staff starts traveling to the venue.
  */
 export const startTravel = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const existing = await prisma.shift.findUnique({ where: { id: req.params.id } });
+  if (!existing?.travelEnabled) {
+    res.status(403).json({ error: 'Travel is not enabled for this shift.' });
+    return;
+  }
+
   const { lat, lng } = req.body || {};
 
   const shift = await prisma.shift.update({
@@ -358,7 +380,23 @@ export const clockOut = asyncHandler(async (req: AuthRequest, res: Response) => 
     return;
   }
 
-  const totalHours = calculateHours(shift.clockIn, now);
+  let effectiveClockOutTime = now;
+  let systemNote = undefined;
+
+  if (shift.date && shift.endTime) {
+     const [h, m] = shift.endTime.split(':').map(Number);
+     const shiftEnd = new Date(shift.date);
+     shiftEnd.setHours(h, m, 0, 0);
+     
+     const gracePeriodEnd = new Date(shiftEnd.getTime() + 2 * 60 * 60 * 1000); // end + 2h
+     
+     if (now > gracePeriodEnd) {
+         effectiveClockOutTime = shiftEnd;
+         systemNote = 'System auto-capped check-out at scheduled end time due to >2 hours missed punch.';
+     }
+  }
+
+  const totalHours = calculateHours(shift.clockIn, effectiveClockOutTime);
   const guaranteedHours = shift.guaranteedHours || 0;
   const regularHours = Math.min(totalHours, guaranteedHours || totalHours);
   const additionalWork = guaranteedHours > 0 ? Math.max(0, totalHours - guaranteedHours) : 0;
@@ -368,7 +406,7 @@ export const clockOut = asyncHandler(async (req: AuthRequest, res: Response) => 
     where: { id: req.params.id },
     data: {
       status: 'COMPLETED',
-      clockOut: now,
+      clockOut: effectiveClockOutTime,
       totalHours,
       totalPay,
     },
@@ -379,12 +417,13 @@ export const clockOut = asyncHandler(async (req: AuthRequest, res: Response) => 
     await prisma.timesheet.update({
       where: { id: shift.timesheet.id },
       data: {
-        clockOutTime: now,
+        clockOutTime: effectiveClockOutTime,
         totalHours,
         regularHours,
         additionalWork,
         tipsAmount: shift.tipsReceived,
         parkingAmount: shift.parkingAmount,
+        ...(systemNote && { notes: systemNote }),
       },
     });
   }
@@ -395,6 +434,9 @@ export const clockOut = asyncHandler(async (req: AuthRequest, res: Response) => 
     data: { totalEvents: { increment: 1 } },
   });
 
+  // Calculate and Update Dynamic Staff Rating immediately
+  await calculateAndSaveStaffRating(shift.staffId);
+
   res.json({ message: 'Clocked out.', shift: updatedShift, totalHours, totalPay });
 });
 
@@ -403,6 +445,12 @@ export const clockOut = asyncHandler(async (req: AuthRequest, res: Response) => 
  * Staff starts traveling home.
  */
 export const startTravelHome = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const existing = await prisma.shift.findUnique({ where: { id: req.params.id } });
+  if (!existing?.travelEnabled) {
+    res.status(403).json({ error: 'Travel is not enabled for this shift.' });
+    return;
+  }
+
   const { lat, lng } = req.body || {};
 
   const shift = await prisma.shift.update({
@@ -459,10 +507,27 @@ export const endTravelHome = asyncHandler(async (req: AuthRequest, res: Response
 export const updateLocation = asyncHandler(async (req: AuthRequest, res: Response) => {
   const { lat, lng } = req.body || {};
 
-  await prisma.shift.update({
+  const shift = await prisma.shift.update({
     where: { id: req.params.id },
     data: { travelLat: lat, travelLng: lng },
+    include: { staff: { select: { id: true, name: true } }, event: { select: { id: true, title: true } } },
   });
+
+  // Broadcast to admins/managers for live tracking
+  const locationData = {
+    shiftId: shift.id,
+    eventId: shift.eventId,
+    eventTitle: shift.event?.title,
+    staffId: shift.staff?.id || shift.staffId,
+    staffName: shift.staff?.name || 'Staff',
+    lat,
+    lng,
+    status: shift.status,
+    timestamp: new Date(),
+  };
+  emitToRole('ADMIN', 'staff:location', locationData);
+  emitToRole('MANAGER', 'staff:location', locationData);
+  emitToRole('SUB_ADMIN', 'staff:location', locationData);
 
   res.json({ message: 'Location updated.' });
 });

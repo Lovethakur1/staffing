@@ -12,7 +12,7 @@ import {
   AlertTriangle, Phone, Send, UserCheck, CreditCard, Activity, Star,
   Briefcase, ChevronRight, Users, Mail, DollarSign, Timer, Shield,
   CheckCircle, XCircle, AlertCircle, Ban, Search, Filter, X, CalendarClock,
-  Coffee, MessageSquare, Pause
+  Coffee, MessageSquare, Pause, Navigation
 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
@@ -324,6 +324,7 @@ export function AdminEventDetail({ userRole = 'admin' }: AdminEventDetailProps) 
           rating: s.rating || 0,
           phone: s.phone || s.user?.phone || '',
           certifications: s.skills || [],
+          travelEnabled: shift.travelEnabled || false,
         };
       });
     }
@@ -1017,6 +1018,31 @@ export function AdminEventDetail({ userRole = 'admin' }: AdminEventDetailProps) 
                           handleRemoveStaff(staff);
                         }}>
                           <X className="w-4 h-4 mr-1" /> Remove
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          variant={staff.travelEnabled ? 'default' : 'outline'}
+                          className={`hidden group-hover:flex ${staff.travelEnabled ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'text-purple-600 hover:bg-purple-50'}`}
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            try {
+                              const newVal = !staff.travelEnabled;
+                              await api.put(`/shifts/${staff.shiftId}/toggle-travel`, { enabled: newVal });
+                              setApiEvent((prev: any) => ({
+                                ...prev,
+                                shifts: (prev?.shifts || []).map((s: any) =>
+                                  s.id === staff.shiftId ? { ...s, travelEnabled: newVal } : s
+                                )
+                              }));
+                              toast.success(`Travel ${newVal ? 'enabled' : 'disabled'} for ${staff.name}`);
+                            } catch {
+                              toast.error('Failed to toggle travel');
+                            }
+                          }}
+                        >
+                          <Navigation className="w-4 h-4 mr-1" />
+                          {staff.travelEnabled ? 'Travel On' : 'Travel Off'}
                         </Button>
 
                         {staff.status === 'not-arrived' && (

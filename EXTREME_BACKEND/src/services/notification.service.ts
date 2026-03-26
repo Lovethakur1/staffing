@@ -4,10 +4,12 @@ import { emitToUser, emitToRole } from './socket.service';
 export interface NotificationPayload {
   userId: string;
   title: string;
-  body: string;
-  type?: string;    // INFO, ALERT, MESSAGE, SHIFT, EVENT, PAYROLL, SYSTEM
-  linkUrl?: string;
-  metadata?: Record<string, any>;
+  message: string;
+  type?: string;
+  category?: string;
+  priority?: string;
+  actionRequired?: boolean;
+  data?: any;
 }
 
 /**
@@ -19,10 +21,12 @@ export const sendNotification = async (payload: NotificationPayload) => {
     data: {
       userId: payload.userId,
       title: payload.title,
-      body: payload.body,
-      type: payload.type || 'INFO',
-      linkUrl: payload.linkUrl,
-      metadata: payload.metadata ? JSON.stringify(payload.metadata) : undefined,
+      message: payload.message,
+      type: payload.type || 'system',
+      category: payload.category,
+      priority: payload.priority || 'medium',
+      actionRequired: payload.actionRequired || false,
+      data: payload.data || {},
     },
   });
 
@@ -64,7 +68,7 @@ export const sendRoleNotification = async (
   // Also broadcast via socket to the role room
   emitToRole(role, 'notification:new', {
     title: data.title,
-    body: data.body,
+    message: data.message,
     type: data.type,
   });
 
@@ -77,9 +81,11 @@ export const notifyShiftAssigned = async (staffId: string, eventTitle: string, s
   return sendNotification({
     userId: staffId,
     title: 'New Shift Assigned',
-    body: `You have been assigned to "${eventTitle}" on ${shiftDate}.`,
-    type: 'SHIFT',
-    linkUrl: '/shifts',
+    message: `You have been assigned to "${eventTitle}" on ${shiftDate}.`,
+    type: 'shift',
+    category: 'work',
+    priority: 'high',
+    actionRequired: true,
   });
 };
 
@@ -87,9 +93,9 @@ export const notifyTimesheetApproved = async (staffId: string, eventTitle: strin
   return sendNotification({
     userId: staffId,
     title: 'Timesheet Approved',
-    body: `Your timesheet for "${eventTitle}" has been approved.`,
-    type: 'PAYROLL',
-    linkUrl: '/timesheets',
+    message: `Your timesheet for "${eventTitle}" has been approved.`,
+    type: 'payment',
+    category: 'finance',
   });
 };
 
@@ -97,17 +103,17 @@ export const notifyEventCreated = async (managerId: string, eventTitle: string) 
   return sendNotification({
     userId: managerId,
     title: 'New Event Created',
-    body: `A new event "${eventTitle}" has been created and needs staffing.`,
-    type: 'EVENT',
-    linkUrl: '/events',
+    message: `A new event "${eventTitle}" has been created and needs staffing.`,
+    type: 'event',
+    category: 'work',
   });
 };
 
 export const notifyIncidentReport = async (eventTitle: string, severity: string) => {
   return sendRoleNotification('ADMIN', {
     title: `Incident Report: ${severity}`,
-    body: `An incident has been reported at "${eventTitle}".`,
-    type: 'ALERT',
-    linkUrl: '/events',
+    message: `An incident has been reported at "${eventTitle}".`,
+    type: 'alert',
+    priority: 'high',
   });
 };

@@ -32,6 +32,13 @@ interface DocumentationProps {
 
 export function Documentation({ userRole, onNavigate }: DocumentationProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const isAdmin = userRole === 'admin';
+
+  // Determine which tabs are visible
+  const visibleTabs = isAdmin
+    ? ["user-guides", "api", "videos", "policies"]
+    : ["user-guides", "videos", "policies"];
+
   const [activeTab, setActiveTab] = useState("user-guides");
 
   const userGuides = [
@@ -41,7 +48,9 @@ export function Documentation({ userRole, onNavigate }: DocumentationProps) {
       icon: BookOpen,
       pages: 12,
       lastUpdated: "2024-11-10",
-      category: "Getting Started"
+      category: "Getting Started",
+      roles: ["admin", "sub-admin", "scheduler", "manager", "staff", "client"],
+      route: "getting-started-guide"
     },
     {
       title: "Event Management",
@@ -49,7 +58,9 @@ export function Documentation({ userRole, onNavigate }: DocumentationProps) {
       icon: Calendar,
       pages: 18,
       lastUpdated: "2024-11-12",
-      category: "Core Features"
+      category: "Core Features",
+      roles: ["admin", "sub-admin", "scheduler", "manager", "client"],
+      route: "event-management-guide"
     },
     {
       title: "Staff & Workforce Management",
@@ -57,7 +68,9 @@ export function Documentation({ userRole, onNavigate }: DocumentationProps) {
       icon: Users,
       pages: 24,
       lastUpdated: "2024-11-08",
-      category: "Core Features"
+      category: "Core Features",
+      roles: ["admin", "sub-admin", "scheduler"],
+      route: "staff-workforce-guide"
     },
     {
       title: "Scheduling & Dispatch",
@@ -65,7 +78,9 @@ export function Documentation({ userRole, onNavigate }: DocumentationProps) {
       icon: Calendar,
       pages: 20,
       lastUpdated: "2024-11-14",
-      category: "Core Features"
+      category: "Core Features",
+      roles: ["admin", "sub-admin", "scheduler", "manager", "staff"],
+      route: "scheduling-dispatch-guide"
     },
     {
       title: "Payroll Processing",
@@ -73,7 +88,9 @@ export function Documentation({ userRole, onNavigate }: DocumentationProps) {
       icon: DollarSign,
       pages: 16,
       lastUpdated: "2024-11-09",
-      category: "Financial"
+      category: "Financial",
+      roles: ["admin", "staff"],
+      route: "payroll-processing-guide"
     },
     {
       title: "Financial Management",
@@ -81,7 +98,9 @@ export function Documentation({ userRole, onNavigate }: DocumentationProps) {
       icon: TrendingUp,
       pages: 22,
       lastUpdated: "2024-11-11",
-      category: "Financial"
+      category: "Financial",
+      roles: ["admin"],
+      route: "financial-management-guide"
     },
     {
       title: "System Settings & Configuration",
@@ -89,7 +108,9 @@ export function Documentation({ userRole, onNavigate }: DocumentationProps) {
       icon: Settings,
       pages: 14,
       lastUpdated: "2024-11-07",
-      category: "Administration"
+      category: "Administration",
+      roles: ["admin"],
+      route: "system-settings-guide"
     },
     {
       title: "Security & Permissions",
@@ -97,7 +118,9 @@ export function Documentation({ userRole, onNavigate }: DocumentationProps) {
       icon: Shield,
       pages: 10,
       lastUpdated: "2024-11-13",
-      category: "Administration"
+      category: "Administration",
+      roles: ["admin"],
+      route: "security-permissions-guide"
     }
   ];
 
@@ -157,37 +180,43 @@ export function Documentation({ userRole, onNavigate }: DocumentationProps) {
       title: "Platform Overview - Getting Started",
       duration: "15:30",
       views: 3421,
-      category: "Getting Started"
+      category: "Getting Started",
+      roles: ["admin", "sub-admin", "scheduler", "manager", "staff", "client"]
     },
     {
       title: "Creating and Managing Events",
       duration: "22:45",
       views: 2156,
-      category: "Events"
+      category: "Events",
+      roles: ["admin", "sub-admin", "scheduler", "manager", "client"]
     },
     {
       title: "Staff Management Best Practices",
       duration: "18:20",
       views: 1987,
-      category: "Staff"
+      category: "Staff",
+      roles: ["admin", "sub-admin", "scheduler"]
     },
     {
       title: "Automated Scheduling Workflow",
       duration: "25:10",
       views: 2543,
-      category: "Scheduling"
+      category: "Scheduling",
+      roles: ["admin", "sub-admin", "scheduler", "manager", "staff"]
     },
     {
       title: "Payroll Processing Step-by-Step",
       duration: "20:15",
       views: 1876,
-      category: "Payroll"
+      category: "Payroll",
+      roles: ["admin", "staff"]
     },
     {
       title: "Financial Reporting & Analytics",
       duration: "17:40",
       views: 1654,
-      category: "Financial"
+      category: "Financial",
+      roles: ["admin"]
     }
   ];
 
@@ -196,29 +225,44 @@ export function Documentation({ userRole, onNavigate }: DocumentationProps) {
       title: "Terms of Service",
       description: "Platform terms and conditions",
       icon: FileText,
-      lastUpdated: "2024-10-01"
+      lastUpdated: "2024-10-01",
+      route: "terms-of-service"
     },
     {
       title: "Privacy Policy",
       description: "How we handle your data",
       icon: Shield,
-      lastUpdated: "2024-10-01"
+      lastUpdated: "2024-10-01",
+      route: "privacy-policy"
     },
     {
       title: "Security Policy",
       description: "Our security practices and protocols",
       icon: Shield,
-      lastUpdated: "2024-10-15"
+      lastUpdated: "2024-10-15",
+      route: "security-policy"
     },
     {
       title: "Data Processing Agreement",
       description: "GDPR and data protection compliance",
       icon: FileText,
-      lastUpdated: "2024-10-01"
+      lastUpdated: "2024-10-01",
+      route: "data-processing-agreement"
     }
   ];
 
-  const filteredUserGuides = userGuides.filter(guide =>
+  // Filter guides by role
+  const roleFilteredGuides = userGuides.filter(guide =>
+    guide.roles.includes(userRole)
+  );
+
+  // Filter videos by role
+  const roleFilteredVideos = videoTutorials.filter(video =>
+    video.roles.includes(userRole)
+  );
+
+  // Apply search filter on top of role filter
+  const filteredUserGuides = roleFilteredGuides.filter(guide =>
     guide.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     guide.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
     guide.category.toLowerCase().includes(searchQuery.toLowerCase())
@@ -227,6 +271,16 @@ export function Documentation({ userRole, onNavigate }: DocumentationProps) {
   const filteredApiDocs = apiDocs.filter(doc =>
     doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     doc.description.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const filteredVideos = roleFilteredVideos.filter(video =>
+    video.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    video.category.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const filteredPolicies = policyDocs.filter(policy =>
+    policy.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    policy.description.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const getMethodBadge = (method: string) => {
@@ -244,21 +298,51 @@ export function Documentation({ userRole, onNavigate }: DocumentationProps) {
     return <Badge className={colors[method] || 'bg-gray-100 text-gray-700'}>{method}</Badge>;
   };
 
-  const getGuideRoute = (title: string): string | null => {
-    const routes: Record<string, string> = {
-      'Getting Started Guide': 'getting-started-guide',
-      'Event Management': 'event-management-guide',
-      'Payroll Processing': 'payroll-processing-guide'
+  const getRoleName = () => {
+    const names: Record<string, string> = {
+      'admin': 'Admin',
+      'sub-admin': 'Sub-Admin',
+      'scheduler': 'Scheduler',
+      'manager': 'Manager',
+      'client': 'Client',
+      'staff': 'Staff'
     };
-    return routes[title] || null;
+    return names[userRole] || 'User';
   };
 
-  const getPolicyRoute = (title: string): string | null => {
-    const routes: Record<string, string> = {
-      'Terms of Service': 'terms-of-service',
-      'Privacy Policy': 'privacy-policy'
-    };
-    return routes[title] || null;
+  const handleDownloadPdf = () => {
+    // Generate a text summary and download as a simple file
+    const visibleGuides = roleFilteredGuides.map(g => `• ${g.title}: ${g.description}`).join('\n');
+    const policies = policyDocs.map(p => `• ${p.title}: ${p.description}`).join('\n');
+
+    const content = [
+      'EXTREME STAFFING — DOCUMENTATION',
+      '='.repeat(50),
+      '',
+      `Generated for: ${getRoleName()} Role`,
+      `Date: ${new Date().toLocaleDateString()}`,
+      '',
+      'USER GUIDES',
+      '-'.repeat(30),
+      visibleGuides,
+      '',
+      'POLICIES & LEGAL',
+      '-'.repeat(30),
+      policies,
+      '',
+      '='.repeat(50),
+      'For full documentation, visit the Documentation page in your Extreme Staffing portal.'
+    ].join('\n');
+
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Extreme-Staffing-Documentation-${getRoleName()}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -270,7 +354,7 @@ export function Documentation({ userRole, onNavigate }: DocumentationProps) {
             <h1 className="text-[#5E1916]">Documentation</h1>
             <Badge variant="outline" className="flex items-center gap-1">
               <BookOpen className="h-3 w-3" />
-              {userRole === 'admin' ? 'Admin' : userRole === 'sub-admin' ? 'Sub-Admin' : userRole === 'scheduler' ? 'Scheduler' : userRole === 'manager' ? 'Manager' : userRole === 'client' ? 'Client' : 'Staff'}
+              {getRoleName()}
             </Badge>
           </div>
           <p className="text-muted-foreground">
@@ -278,7 +362,7 @@ export function Documentation({ userRole, onNavigate }: DocumentationProps) {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline">
+          <Button variant="outline" onClick={handleDownloadPdf}>
             <Download className="h-4 w-4 mr-2" />
             Download PDF
           </Button>
@@ -302,15 +386,17 @@ export function Documentation({ userRole, onNavigate }: DocumentationProps) {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-4' : 'grid-cols-3'}`}>
           <TabsTrigger value="user-guides">
             <BookOpen className="h-4 w-4 mr-2" />
             User Guides
           </TabsTrigger>
-          <TabsTrigger value="api">
-            <Code className="h-4 w-4 mr-2" />
-            API Reference
-          </TabsTrigger>
+          {isAdmin && (
+            <TabsTrigger value="api">
+              <Code className="h-4 w-4 mr-2" />
+              API Reference
+            </TabsTrigger>
+          )}
           <TabsTrigger value="videos">
             <Video className="h-4 w-4 mr-2" />
             Video Tutorials
@@ -352,12 +438,7 @@ export function Documentation({ userRole, onNavigate }: DocumentationProps) {
                   <Button
                     variant="outline"
                     className="w-full"
-                    onClick={() => {
-                      const route = getGuideRoute(guide.title);
-                      if (route) {
-                        onNavigate(route);
-                      }
-                    }}
+                    onClick={() => onNavigate(guide.route)}
                   >
                     Read Guide
                     <ChevronRight className="h-4 w-4 ml-2" />
@@ -377,43 +458,44 @@ export function Documentation({ userRole, onNavigate }: DocumentationProps) {
           )}
         </TabsContent>
 
-        {/* API Reference Tab */}
-        <TabsContent value="api" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>REST API Documentation</CardTitle>
-              <CardDescription>
-                Complete API reference for integrating with Extreme Staffing
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {filteredApiDocs.map((doc, idx) => (
-                <div key={idx} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <h4 className="font-semibold">{doc.title}</h4>
-                      {getMethodBadge(doc.method)}
+        {/* API Reference Tab (Admin only) */}
+        {isAdmin && (
+          <TabsContent value="api" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>REST API Documentation</CardTitle>
+                <CardDescription>
+                  Complete API reference for integrating with Extreme Staffing
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {filteredApiDocs.map((doc, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <h4 className="font-semibold">{doc.title}</h4>
+                        {getMethodBadge(doc.method)}
+                      </div>
+                      <p className="text-sm text-muted-foreground mb-2">{doc.description}</p>
+                      <code className="text-xs bg-muted px-2 py-1 rounded">{doc.endpoint}</code>
                     </div>
-                    <p className="text-sm text-muted-foreground mb-2">{doc.description}</p>
-                    <code className="text-xs bg-muted px-2 py-1 rounded">{doc.endpoint}</code>
+                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
                   </div>
-                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                </div>
-              ))}
-            </CardContent>
-          </Card>
+                ))}
+              </CardContent>
+            </Card>
 
-          {/* Code Example */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileCode className="h-5 w-5" />
-                Quick Start Example
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="bg-muted p-4 rounded-lg font-mono text-sm overflow-x-auto">
-                <pre>{`// Initialize API client
+            {/* Code Example */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileCode className="h-5 w-5" />
+                  Quick Start Example
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="bg-muted p-4 rounded-lg font-mono text-sm overflow-x-auto">
+                  <pre>{`// Initialize API client
 const client = new ExtremeStaffingAPI({
   apiKey: 'your_api_key',
   baseUrl: 'https://api.extremestaffing.com/v1'
@@ -432,25 +514,26 @@ const newEvent = await client.events.create({
   venue: 'Grand Hotel',
   staffRequired: 20
 });`}</pre>
-              </div>
-              <div className="flex gap-2 mt-4">
-                <Button variant="outline">
-                  <Code className="h-4 w-4 mr-2" />
-                  View Full Docs
-                </Button>
-                <Button variant="outline">
-                  <Download className="h-4 w-4 mr-2" />
-                  Download SDK
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+                </div>
+                <div className="flex gap-2 mt-4">
+                  <Button variant="outline">
+                    <Code className="h-4 w-4 mr-2" />
+                    View Full Docs
+                  </Button>
+                  <Button variant="outline">
+                    <Download className="h-4 w-4 mr-2" />
+                    Download SDK
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
 
         {/* Video Tutorials Tab */}
         <TabsContent value="videos" className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {videoTutorials.map((video, idx) => (
+            {filteredVideos.map((video, idx) => (
               <Card key={idx} className="hover:shadow-lg transition-shadow cursor-pointer">
                 <CardContent className="pt-6">
                   <div className="aspect-video bg-muted rounded-lg flex items-center justify-center mb-4">
@@ -468,12 +551,21 @@ const newEvent = await client.events.create({
               </Card>
             ))}
           </div>
+
+          {filteredVideos.length === 0 && (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <Video className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">No video tutorials found matching your search</p>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* Policies Tab */}
         <TabsContent value="policies" className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {policyDocs.map((policy, idx) => (
+            {filteredPolicies.map((policy, idx) => (
               <Card key={idx} className="hover:shadow-lg transition-shadow cursor-pointer">
                 <CardHeader>
                   <div className="flex items-start gap-4">
@@ -494,12 +586,7 @@ const newEvent = await client.events.create({
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => {
-                        const route = getPolicyRoute(policy.title);
-                        if (route) {
-                          onNavigate(route);
-                        }
-                      }}
+                      onClick={() => onNavigate(policy.route)}
                     >
                       <FileText className="h-4 w-4 mr-2" />
                       View Document
@@ -509,6 +596,15 @@ const newEvent = await client.events.create({
               </Card>
             ))}
           </div>
+
+          {filteredPolicies.length === 0 && (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <Shield className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">No policies found matching your search</p>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
 

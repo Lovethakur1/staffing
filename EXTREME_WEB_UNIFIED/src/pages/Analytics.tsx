@@ -43,7 +43,8 @@ import {
   RadialBarChart,
   RadialBar,
 } from "recharts";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { analyticsService } from "../services/analytics.service";
 
 interface AnalyticsProps {
   userRole: string;
@@ -53,233 +54,57 @@ interface AnalyticsProps {
 export function Analytics({ userRole, userId }: AnalyticsProps) {
   const [dateRange, setDateRange] = useState("6months");
   const [metric, setMetric] = useState("revenue");
+  const [adminData, setAdminData] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
-  // Sample data based on user role
+  useEffect(() => {
+    if (userRole === 'admin') {
+      setIsLoading(true);
+      setLoadError(false);
+      analyticsService.getAdminAnalytics()
+        .then(data => setAdminData(data))
+        .catch(() => setLoadError(true))
+        .finally(() => setIsLoading(false));
+    }
+  }, [userRole]);
+
   const getAnalyticsData = () => {
     switch (userRole) {
-      case "client":
-        return {
-          title: "Client Analytics",
-          subtitle: "Your event performance and spending insights",
-          metrics: [
-            { label: "Total Spent", value: "$24,500", change: "+12%", trend: "up" },
-            { label: "Events Hosted", value: "12", change: "+3", trend: "up" },
-            { label: "Avg Event Cost", value: "$2,041", change: "-5%", trend: "down" },
-            { label: "Staff Rating", value: "4.8", change: "+0.2", trend: "up" },
-            { label: "Success Rate", value: "96%", change: "+4%", trend: "up" },
-            { label: "Rebookings", value: "8", change: "+2", trend: "up" },
-          ],
-          monthlyData: [
-            { month: 'Jan', spending: 2400, events: 2, satisfaction: 95 },
-            { month: 'Feb', spending: 1800, events: 1, satisfaction: 92 },
-            { month: 'Mar', spending: 3200, events: 3, satisfaction: 96 },
-            { month: 'Apr', spending: 2800, events: 2, satisfaction: 94 },
-            { month: 'May', spending: 4200, events: 4, satisfaction: 98 },
-            { month: 'Jun', spending: 3600, events: 3, satisfaction: 97 },
-          ],
-        };
-      
-      case "staff":
-        return {
-          title: "Staff Analytics",
-          subtitle: "Your performance metrics and earnings overview",
-          metrics: [
-            { label: "Total Earnings", value: "$8,450", change: "+15%", trend: "up" },
-            { label: "Hours Worked", value: "234", change: "+22h", trend: "up" },
-            { label: "Events Completed", value: "28", change: "+6", trend: "up" },
-            { label: "Average Rating", value: "4.9", change: "+0.1", trend: "up" },
-            { label: "Punctuality", value: "98%", change: "+2%", trend: "up" },
-            { label: "Rebookings", value: "85%", change: "+5%", trend: "up" },
-          ],
-          monthlyData: [
-            { month: 'Jan', earnings: 1200, hours: 42, rating: 4.8 },
-            { month: 'Feb', earnings: 950, hours: 38, rating: 4.7 },
-            { month: 'Mar', earnings: 1400, hours: 45, rating: 4.9 },
-            { month: 'Apr', earnings: 1100, hours: 40, rating: 4.8 },
-            { month: 'May', earnings: 1650, hours: 48, rating: 4.9 },
-            { month: 'Jun', earnings: 1350, hours: 44, rating: 4.9 },
-          ],
-        };
-      
       case "admin":
         return {
-          title: "Admin Analytics",
-          subtitle: "Complete system overview and business intelligence",
-          metrics: [
-            { label: "Total Revenue", value: "$145K", change: "+24%", trend: "up" },
-            { label: "Active Events", value: "47", change: "+8", trend: "up" },
-            { label: "Staff Utilization", value: "87%", change: "+5%", trend: "up" },
-            { label: "Client Satisfaction", value: "96%", change: "+2%", trend: "up" },
-            { label: "Profit Margin", value: "23%", change: "+1%", trend: "up" },
-            { label: "Growth Rate", value: "18%", change: "+3%", trend: "up" },
-          ],
-          monthlyData: [
-            { month: 'Jan', revenue: 24000, events: 18, clients: 12 },
-            { month: 'Feb', revenue: 18000, events: 14, clients: 9 },
-            { month: 'Mar', revenue: 32000, events: 24, clients: 16 },
-            { month: 'Apr', revenue: 28000, events: 21, clients: 14 },
-            { month: 'May', revenue: 42000, events: 32, clients: 22 },
-            { month: 'Jun', revenue: 36000, events: 28, clients: 19 },
-          ],
+          title: adminData?.title ?? "Admin Analytics",
+          subtitle: adminData?.subtitle ?? "Complete system overview and business intelligence",
+          metrics: adminData?.metrics ?? [],
+          monthlyData: adminData?.monthlyData ?? [],
         };
-      
+      case "client":
+        return { title: "Client Analytics", subtitle: "Your event performance and spending insights", metrics: [], monthlyData: [] };
+      case "staff":
+        return { title: "Staff Analytics", subtitle: "Your performance metrics and earnings overview", metrics: [], monthlyData: [] };
       case "manager":
-        return {
-          title: "Manager Analytics",
-          subtitle: "Event and team performance overview",
-          metrics: [
-            { label: "Active Events", value: "12", change: "+3", trend: "up" },
-            { label: "Team Size", value: "24", change: "+2", trend: "up" },
-            { label: "Staff Utilization", value: "89%", change: "+4%", trend: "up" },
-            { label: "Team Rating", value: "4.7", change: "+0.2", trend: "up" },
-            { label: "On-Time Rate", value: "94%", change: "+3%", trend: "up" },
-            { label: "Completion Rate", value: "98%", change: "+1%", trend: "up" },
-          ],
-          monthlyData: [
-            { month: 'Jan', events: 8, staff: 18, utilization: 85 },
-            { month: 'Feb', events: 6, staff: 20, utilization: 82 },
-            { month: 'Mar', events: 10, staff: 22, utilization: 88 },
-            { month: 'Apr', events: 9, staff: 21, utilization: 86 },
-            { month: 'May', events: 13, staff: 24, utilization: 91 },
-            { month: 'Jun', events: 11, staff: 24, utilization: 89 },
-          ],
-        };
-      
+        return { title: "Manager Analytics", subtitle: "Event and team performance overview", metrics: [], monthlyData: [] };
       default:
-        return {
-          title: "Analytics",
-          subtitle: "Performance insights and metrics",
-          metrics: [],
-          monthlyData: [],
-        };
+        return { title: "Analytics", subtitle: "Performance insights and metrics", metrics: [], monthlyData: [] };
     }
   };
 
   const analyticsData = getAnalyticsData();
 
   // Performance by category data
-  const categoryData = [
-    { name: 'Corporate', value: 45, color: 'var(--primary)' },
-    { name: 'Wedding', value: 30, color: 'var(--chart-2)' },
-    { name: 'Private', value: 15, color: 'var(--chart-3)' },
-    { name: 'Conference', value: 10, color: 'var(--chart-4)' },
-  ];
+  const categoryData = (userRole === 'admin' && adminData?.categoryData) ? adminData.categoryData : [];
 
   // Detailed event category analytics for admin
-  const eventCategoryAnalytics = userRole === 'admin' ? [
-    { 
-      category: 'Corporate Events', 
-      count: 124, 
-      revenue: 485000, 
-      avgRevenue: 3911,
-      growth: '+18%',
-      trend: 'up',
-      percentage: 42,
-      staffRequired: 1240,
-      avgStaff: 10,
-      satisfaction: 94,
-      color: '#5E1916'
-    },
-    { 
-      category: 'Weddings', 
-      count: 89, 
-      revenue: 312000, 
-      avgRevenue: 3506,
-      growth: '+24%',
-      trend: 'up',
-      percentage: 30,
-      staffRequired: 890,
-      avgStaff: 10,
-      satisfaction: 98,
-      color: '#8B4513'
-    },
-    { 
-      category: 'Private Parties', 
-      count: 67, 
-      revenue: 178000, 
-      avgRevenue: 2657,
-      growth: '+12%',
-      trend: 'up',
-      percentage: 23,
-      staffRequired: 470,
-      avgStaff: 7,
-      satisfaction: 92,
-      color: '#A0522D'
-    },
-    { 
-      category: 'Conferences', 
-      count: 28, 
-      revenue: 156000, 
-      avgRevenue: 5571,
-      growth: '-5%',
-      trend: 'down',
-      percentage: 9,
-      staffRequired: 420,
-      avgStaff: 15,
-      satisfaction: 91,
-      color: '#CD853F'
-    },
-    { 
-      category: 'Galas & Fundraisers', 
-      count: 22, 
-      revenue: 142000, 
-      avgRevenue: 6455,
-      growth: '+31%',
-      trend: 'up',
-      percentage: 7,
-      staffRequired: 330,
-      avgStaff: 15,
-      satisfaction: 96,
-      color: '#DEB887'
-    },
-    { 
-      category: 'Sports Events', 
-      count: 18, 
-      revenue: 89000, 
-      avgRevenue: 4944,
-      growth: '+8%',
-      trend: 'up',
-      percentage: 6,
-      staffRequired: 360,
-      avgStaff: 20,
-      satisfaction: 89,
-      color: '#F4A460'
-    },
-  ] : [];
+  const eventCategoryAnalytics = (userRole === 'admin' && adminData?.eventCategoryAnalytics) ? adminData.eventCategoryAnalytics : [];
 
   // Monthly trend by category for admin
-  const categoryTrendData = userRole === 'admin' ? [
-    { month: 'Jan', Corporate: 42000, Wedding: 28000, Private: 15000, Conference: 12000, Gala: 10000, Sports: 8000 },
-    { month: 'Feb', Corporate: 38000, Wedding: 24000, Private: 12000, Conference: 14000, Gala: 12000, Sports: 7000 },
-    { month: 'Mar', Corporate: 45000, Wedding: 32000, Private: 18000, Conference: 16000, Gala: 14000, Sports: 9000 },
-    { month: 'Apr', Corporate: 48000, Wedding: 29000, Private: 16000, Conference: 15000, Gala: 13000, Sports: 8500 },
-    { month: 'May', Corporate: 52000, Wedding: 35000, Private: 20000, Conference: 18000, Gala: 16000, Sports: 10000 },
-    { month: 'Jun', Corporate: 49000, Wedding: 31000, Private: 17000, Conference: 13000, Gala: 15000, Sports: 9000 },
-  ] : [];
+  const categoryTrendData = (userRole === 'admin' && adminData?.categoryTrendData) ? adminData.categoryTrendData : [];
 
   // Weekly performance data
-  const weeklyData = [
-    { day: 'Mon', performance: 85, target: 90 },
-    { day: 'Tue', performance: 92, target: 90 },
-    { day: 'Wed', performance: 88, target: 90 },
-    { day: 'Thu', performance: 95, target: 90 },
-    { day: 'Fri', performance: 90, target: 90 },
-    { day: 'Sat', performance: 97, target: 90 },
-    { day: 'Sun', performance: 93, target: 90 },
-  ];
+  const weeklyData = (userRole === 'admin' && adminData?.weeklyData) ? adminData.weeklyData : [];
 
-  // Goal progress data
-  const goalData = userRole === 'admin' ? [
-    { goal: 'Revenue Target', progress: 78, color: 'var(--primary)' },
-    { goal: 'Customer Satisfaction', progress: 96, color: 'var(--success)' },
-    { goal: 'Staff Utilization', progress: 87, color: 'var(--info)' },
-    { goal: 'Growth Rate', progress: 65, color: 'var(--warning)' },
-  ] : [
-    { goal: 'Event Completion', progress: 94, color: 'var(--primary)' },
-    { goal: 'Customer Satisfaction', progress: 96, color: 'var(--success)' },
-    { goal: 'Staff Utilization', progress: 87, color: 'var(--info)' },
-    { goal: 'Team Performance', progress: 89, color: 'var(--warning)' },
-  ];
+  // Goal progress data — admin only, from real API
+  const goalData: { goal: string; progress: number; color: string }[] = [];
 
   return (
     <div className="space-y-4 sm:space-y-6 w-full">
@@ -297,7 +122,39 @@ export function Analytics({ userRole, userId }: AnalyticsProps) {
         </p>
       </div>
 
-      {/* Filters */}
+      {/* Loading state */}
+      {isLoading && (
+        <Card className="p-12">
+          <div className="flex flex-col items-center justify-center gap-4 text-muted-foreground">
+            <RefreshCw className="h-8 w-8 animate-spin" />
+            <p className="text-sm">Loading analytics data…</p>
+          </div>
+        </Card>
+      )}
+
+      {/* Error state */}
+      {loadError && !isLoading && (
+        <Card className="p-8 border-destructive/30">
+          <div className="flex flex-col items-center justify-center gap-3 text-center">
+            <AlertTriangle className="h-8 w-8 text-destructive" />
+            <p className="font-medium">Failed to load analytics</p>
+            <p className="text-sm text-muted-foreground">Could not reach the server. Please check your connection and try again.</p>
+            <Button variant="outline" size="sm" onClick={() => {
+              setLoadError(false);
+              setIsLoading(true);
+              analyticsService.getAdminAnalytics()
+                .then(data => setAdminData(data))
+                .catch(() => setLoadError(true))
+                .finally(() => setIsLoading(false));
+            }}>
+              <RefreshCw className="h-4 w-4 mr-2" />Retry
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {/* Content — hidden while loading or errored */}
+      {!isLoading && !loadError && <>
       <Card className="p-4 sm:p-6">
         <div className="flex flex-col lg:flex-row gap-4">
           <div className="flex flex-col sm:flex-row gap-3">
@@ -336,6 +193,14 @@ export function Analytics({ userRole, userId }: AnalyticsProps) {
       </Card>
 
       {/* Key Metrics */}
+      {analyticsData.metrics.length === 0 ? (
+        <Card className="p-8">
+          <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
+            <BarChart3 className="h-8 w-8" />
+            <p className="text-sm">No metrics data available yet</p>
+          </div>
+        </Card>
+      ) : (
       <div className="adaptive-stats-grid">
         {analyticsData.metrics.map((metric, index) => (
           <Card key={index} className="p-4 sm:p-6">
@@ -363,8 +228,10 @@ export function Analytics({ userRole, userId }: AnalyticsProps) {
           </Card>
         ))}
       </div>
+      )}
 
       {/* Main Charts */}
+      {analyticsData.monthlyData.length > 0 && (
       <div className="wide-content-grid">
         <Card className="p-4 sm:p-6">
           <CardHeader className="px-0 pb-4">
@@ -445,6 +312,7 @@ export function Analytics({ userRole, userId }: AnalyticsProps) {
           </CardContent>
         </Card>
       </div>
+      )}
 
       {/* Event Category Analytics - Admin Only */}
       {userRole === 'admin' && eventCategoryAnalytics.length > 0 && (
@@ -755,6 +623,7 @@ export function Analytics({ userRole, userId }: AnalyticsProps) {
           </div>
         </CardContent>
       </Card>
+      </>}
     </div>
   );
 }

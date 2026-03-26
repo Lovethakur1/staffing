@@ -38,6 +38,7 @@ import {
 import { Avatar, AvatarFallback } from "../components/ui/avatar";
 import { toast } from "sonner";
 import api from "../services/api";
+import roleService from "../services/role.service";
 
 interface PageProps {
   userRole: string;
@@ -74,6 +75,10 @@ export function RolesPermissions({ userRole, userId }: PageProps) {
   const [selectedUser, setSelectedUser] = useState<SystemUser | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<UserRole | ''>('');
+  const [isLoadingPerms, setIsLoadingPerms] = useState(true);
+  const [isDirty, setIsDirty] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [roleCounts, setRoleCounts] = useState({ admin: 0, subadmin: 0, manager: 0, scheduler: 0, staff: 0 });
 
   // Load users from API
   const [users, setUsers] = useState<SystemUser[]>([]);
@@ -81,7 +86,7 @@ export function RolesPermissions({ userRole, userId }: PageProps) {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const res = await api.get('/users');
+        const res = await api.get('/users?limit=200');
         const raw = Array.isArray(res.data) ? res.data : (res.data?.data || res.data?.users || []);
         const mapped: SystemUser[] = raw.map((u: any) => ({
           id: u.id,
@@ -98,7 +103,24 @@ export function RolesPermissions({ userRole, userId }: PageProps) {
         toast.error('Failed to load users');
       }
     };
+
+    const fetchRoleSummary = async () => {
+      try {
+        const summary = await roleService.getRoleSummary();
+        setRoleCounts({
+          admin: summary['ADMIN'] || 0,
+          subadmin: summary['SUB_ADMIN'] || 0,
+          manager: summary['MANAGER'] || 0,
+          scheduler: summary['SCHEDULER'] || 0,
+          staff: summary['STAFF'] || 0,
+        });
+      } catch {
+        // fallback: counts derived from users list (below)
+      }
+    };
+
     fetchUsers();
+    fetchRoleSummary();
   }, []);
 
   // All available permissions
@@ -174,8 +196,8 @@ export function RolesPermissions({ userRole, userId }: PageProps) {
     { id: 'inventory_manage', name: 'Manage Inventory', description: 'Add and manage equipment', category: 'Inventory & Equipment', icon: Package },
   ];
 
-  // Default permissions for each role
-  const [rolePermissions, setRolePermissions] = useState<RolePermissions>({
+  // Default permissions for each role (overridden by API data on mount)
+  const defaultPermissions: RolePermissions = {
     admin: allPermissions.map(p => p.id), // Admin has all permissions
     subadmin: [
       'event_view', 'event_create', 'event_edit', 'event_assign_staff',
@@ -225,7 +247,39 @@ export function RolesPermissions({ userRole, userId }: PageProps) {
       'comm_view', 'comm_send',
       'training_view'
     ]
-  });
+  };
+
+  const [rolePermissions, setRolePermissions] = useState<RolePermissions>(defaultPermissions);
+
+  // Load saved permissions from API
+  useEffect(() => {
+    const fetchPermissions = async () => {
+      setIsLoadingPerms(true);
+      try {
+        const saved = await roleService.getPermissions();
+        // Map backend role keys (SUB_ADMIN) to frontend keys (subadmin)
+        const keyMap: Record<string, string> = {
+          ADMIN: 'admin', SUB_ADMIN: 'subadmin', MANAGER: 'manager',
+          SCHEDULER: 'scheduler', STAFF: 'staff',
+        };
+        const merged: RolePermissions = { ...defaultPermissions };
+        for (const [backendKey, perms] of Object.entries(saved)) {
+          const frontKey = keyMap[backendKey];
+          if (frontKey) merged[frontKey] = perms;
+        }
+        setRolePermissions(merged);
+      } catch {
+        // keep defaults silently
+      } finally {
+        setIsLoadingPerms(false);
+      }
+    };
+    fetchPermissions();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Derive counts from users list if API summary not yet available
+  // (roleCounts is set from API; it starts at 0 until hydrated)
 
   // Filter users based on search
   const filteredUsers = users.filter(user =>
@@ -235,14 +289,7 @@ export function RolesPermissions({ userRole, userId }: PageProps) {
     user.department.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Get role counts
-  const roleCounts = {
-    admin: users.filter(u => u.role === 'admin').length,
-    subadmin: users.filter(u => u.role === 'subadmin').length,
-    manager: users.filter(u => u.role === 'manager').length,
-    scheduler: users.filter(u => u.role === 'scheduler').length,
-    staff: users.filter(u => u.role === 'staff').length,
-  };
+
 
   const getRoleBadgeColor = (role: UserRole) => {
     switch (role) {
@@ -313,17 +360,35 @@ export function RolesPermissions({ userRole, userId }: PageProps) {
     const hasPermission = currentPerms.includes(permissionId);
 
     setRolePermissions(prev => {
-      const currentPerms = prev[role] || [];
-
+      const cur = prev[role] || [];
       return {
         ...prev,
         [role]: hasPermission
-          ? currentPerms.filter(p => p !== permissionId)
-          : [...currentPerms, permissionId]
+          ? cur.filter(p => p !== permissionId)
+          : [...cur, permissionId]
       };
     });
+    setIsDirty(true);
+  };
 
-    toast.success(`Permission ${hasPermission ? 'removed from' : 'added to'} ${getRoleDisplayName(role)}`);
+  const handleSavePermissions = async () => {
+    setIsSaving(true);
+    const roleKeyMap: Record<string, string> = {
+      subadmin: 'SUB_ADMIN', manager: 'MANAGER', scheduler: 'SCHEDULER', staff: 'STAFF',
+    };
+    try {
+      await Promise.all(
+        (['subadmin', 'manager', 'scheduler', 'staff'] as UserRole[]).map(role =>
+          roleService.updatePermissions(roleKeyMap[role] || role.toUpperCase(), rolePermissions[role] || [])
+        )
+      );
+      setIsDirty(false);
+      toast.success('Permissions saved successfully');
+    } catch {
+      toast.error('Failed to save permissions');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // Group permissions by category
@@ -535,13 +600,40 @@ export function RolesPermissions({ userRole, userId }: PageProps) {
         <TabsContent value="permissions" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Permission Configuration</CardTitle>
-              <CardDescription>
-                Configure which features each role can access. Toggle permissions on/off for each role type.
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Permission Configuration</CardTitle>
+                  <CardDescription>
+                    Configure which features each role can access. Toggle permissions on/off for each role type.
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-3">
+                  {isDirty && (
+                    <span className="text-sm text-amber-600 dark:text-amber-400 font-medium">
+                      Unsaved changes
+                    </span>
+                  )}
+                  <Button
+                    onClick={handleSavePermissions}
+                    disabled={!isDirty || isSaving}
+                    className="bg-[#5E1916] hover:bg-[#5E1916]/90 gap-2"
+                  >
+                    <Save className="w-4 h-4" />
+                    {isSaving ? 'Saving…' : 'Save Changes'}
+                  </Button>
+                </div>
+              </div>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Role Selector */}
+              {isLoadingPerms ? (
+                <div className="flex items-center justify-center py-12 text-muted-foreground">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#5E1916]" />
+                    <span className="text-sm">Loading permissions…</span>
+                  </div>
+                </div>
+              ) : (
+              <>
               <div className="flex items-center gap-4 pb-4 border-b">
                 <Label className="text-sm font-medium">Configure permissions for:</Label>
                 <div className="flex gap-2">
@@ -647,6 +739,8 @@ export function RolesPermissions({ userRole, userId }: PageProps) {
                   </div>
                 </div>
               </div>
+              </>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

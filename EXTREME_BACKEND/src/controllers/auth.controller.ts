@@ -84,6 +84,14 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
   }
 
   const validPassword = await bcrypt.compare(password, user.password);
+
+  // Always record the attempt in LoginLog
+  const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress || null;
+  const ua = req.headers['user-agent'] || null;
+  await prisma.loginLog.create({
+    data: { userId: user.id, success: validPassword, ipAddress: ip, userAgent: ua },
+  });
+
   if (!validPassword) {
     res.status(401).json({ error: 'Invalid email or password.' });
     return;

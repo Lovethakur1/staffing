@@ -33,6 +33,7 @@ import { toast } from "sonner";
 import { useNavigation } from "../contexts/NavigationContext";
 import { eventService } from "../services/event.service";
 import { shiftService } from "../services/shift.service";
+import { format } from "date-fns";
 
 interface AttendanceProps {
   userRole: string;
@@ -126,7 +127,7 @@ export function Attendance({ userRole }: AttendanceProps) {
           return {
             eventId: ev.id,
             eventName: ev.title || ev.eventName || 'Event',
-            eventDate: ev.date ? new Date(ev.date).toISOString().split('T')[0] : '',
+            eventDate: ev.date ? format(new Date(ev.date), 'yyyy-MM-dd') : '',
             eventTime: `${ev.startTime || ''} - ${ev.endTime || ''}`,
             venue: ev.venue || ev.location || '',
             totalStaff: total,
@@ -193,7 +194,7 @@ export function Attendance({ userRole }: AttendanceProps) {
       event.eventId.toLowerCase().includes(searchQuery.toLowerCase()) ||
       event.venue.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === "all" || event.status === statusFilter;
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
     const matchesDate = dateFilter === "all" ||
       (dateFilter === "today" && event.eventDate === todayStr) ||
       (dateFilter === "upcoming" && event.status === "upcoming") ||

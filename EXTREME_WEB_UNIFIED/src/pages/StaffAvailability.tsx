@@ -66,7 +66,7 @@ export function StaffAvailability({ userRole = 'admin', userId }: StaffAvailabil
     try {
       const [staffRes, shiftsRes] = await Promise.all([
         staffService.getStaffList(),
-        shiftService.getShifts({ status: 'ASSIGNED' }).catch(() => ({ data: [] }))
+        shiftService.getShifts({ status: 'CONFIRMED' }).catch(() => ({ data: [] }))
       ]);
       
       const shifts = shiftsRes?.data || [];

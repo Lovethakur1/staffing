@@ -33,7 +33,7 @@ import {
 } from "lucide-react";
 import { useNavigation } from "../contexts/NavigationContext";
 import { toast } from "sonner";
-import api from "../services/api";
+import { invoiceService } from "../services/invoice.service";
 
 interface PaymentVerificationDetailProps {
   userRole: string;
@@ -56,9 +56,53 @@ export function PaymentVerificationDetail({ userRole }: PaymentVerificationDetai
   useEffect(() => {
     const fetchPayment = async () => {
       try {
-        const res = await api.get(`/payments/submissions/${paymentId}`);
-        setPayment(res.data);
-      } catch { /* endpoint may not exist yet */ }
+        const inv = await invoiceService.getInvoice(paymentId);
+        const lineItems = inv.lineItems || [];
+        const mapped = {
+          id: inv.invoiceNumber || inv.id,
+          rawId: inv.id,
+          clientName: inv.client?.name || inv.client?.user?.name || '',
+          clientCompany: inv.client?.company || inv.client?.user?.company || '',
+          clientEmail: inv.client?.email || inv.client?.user?.email || '',
+          clientPhone: inv.client?.phone || inv.client?.user?.phone || '',
+          clientAddress: inv.client?.address || '',
+          eventName: inv.event?.title || '',
+          eventDate: inv.event?.date || inv.dueDate || inv.createdAt,
+          eventTime: inv.event?.startTime || '',
+          eventLocation: inv.event?.location || inv.event?.venue || '',
+          guestCount: inv.event?.guestCount || '',
+          staffCount: inv.event?._count?.shifts || '',
+          breakdown: lineItems.length > 0
+            ? lineItems.map((item: any) => ({
+                item: item.description,
+                quantity: item.quantity,
+                rate: item.unitPrice,
+                hours: '',
+                total: item.quantity * item.unitPrice,
+              }))
+            : [{ item: 'Invoice Amount', quantity: 1, rate: inv.amount || 0, hours: '', total: inv.amount || 0 }],
+          subtotal: inv.subtotal || inv.amount || 0,
+          tax: inv.taxAmount || 0,
+          total: inv.amount || 0,
+          deposit: 0,
+          totalContract: inv.amount || 0,
+          remaining: inv.amount || 0,
+          amount: inv.amount || 0,
+          paymentType: 'Invoice Payment',
+          paymentMethod: inv.stripeId ? 'Credit Card' : 'Bank Transfer',
+          reference: inv.invoiceNumber || inv.id,
+          accountLast4: null,
+          submittedBy: inv.client?.name || inv.client?.user?.name || '',
+          submittedDate: inv.paidDate || inv.updatedAt || inv.createdAt,
+          submittedTime: new Date(inv.paidDate || inv.updatedAt || inv.createdAt).toLocaleTimeString(),
+          attachmentDetails: [],
+          status: inv.status === 'PAID' ? 'approved'
+               : inv.status === 'CANCELLED' ? 'rejected'
+               : 'pending',
+          notes: inv.notes || '',
+        };
+        setPayment(mapped);
+      } catch { /* failed to fetch invoice */ }
     };
     fetchPayment();
   }, [paymentId]);
@@ -67,27 +111,37 @@ export function PaymentVerificationDetail({ userRole }: PaymentVerificationDetai
     setCurrentPage('verify-payment');
   };
 
-  const handleApprove = () => {
+  const handleApprove = async () => {
     if (!paymentMethod) {
       toast.error("Please confirm the payment method");
       return;
     }
-    toast.success(`Payment ${payment.id} approved successfully`);
-    setShowApproveDialog(false);
-    setNotes("");
-    setPaymentMethod("");
-    setTimeout(() => handleBack(), 1500);
+    try {
+      await invoiceService.updateInvoice(payment.rawId, { status: 'PAID' });
+      toast.success(`Payment ${payment.id} approved successfully`);
+      setShowApproveDialog(false);
+      setNotes("");
+      setPaymentMethod("");
+      setTimeout(() => handleBack(), 1500);
+    } catch {
+      toast.error("Failed to approve payment");
+    }
   };
 
-  const handleReject = () => {
+  const handleReject = async () => {
     if (!rejectionReason) {
       toast.error("Please provide a reason for rejection");
       return;
     }
-    toast.success(`Payment ${payment.id} rejected. Client will be notified.`);
-    setShowRejectDialog(false);
-    setRejectionReason("");
-    setTimeout(() => handleBack(), 1500);
+    try {
+      await invoiceService.updateInvoice(payment.rawId, { status: 'CANCELLED' });
+      toast.success(`Payment ${payment.id} rejected. Client will be notified.`);
+      setShowRejectDialog(false);
+      setRejectionReason("");
+      setTimeout(() => handleBack(), 1500);
+    } catch {
+      toast.error("Failed to reject payment");
+    }
   };
 
   const handleViewDocument = (doc: any) => {

@@ -34,6 +34,7 @@ import {
   BarChart3,
   RefreshCw
 } from "lucide-react";
+import { format } from "date-fns";
 import { useNavigation } from "../contexts/NavigationContext";
 import { useAppState } from "../contexts/AppStateContext";
 import { toast } from "sonner";
@@ -122,7 +123,7 @@ export function Manager({ userRole, userId }: ManagerProps) {
   };
 
   // Convert API events to AssignedEvent format
-  const today = new Date().toISOString().split('T')[0];
+  const today = format(new Date(), 'yyyy-MM-dd');
 
   const assignedEvents: AssignedEvent[] = rawEvents.map((event: any, index: number) => {
     const staffAssignedCount = event.shifts?.length || 0;

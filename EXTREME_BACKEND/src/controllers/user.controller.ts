@@ -30,7 +30,9 @@ export const listUsers = asyncHandler(async (req: Request, res: Response) => {
       orderBy: { createdAt: 'desc' },
       select: {
         id: true, name: true, email: true, phone: true,
-        role: true, avatar: true, isActive: true,
+        role: true, avatar: true, bio: true, isActive: true,
+        dob: true, gender: true,
+        address: true, city: true, state: true, zipCode: true, country: true,
         createdAt: true, lastLogin: true,
         staffProfile: true,
         clientProfile: true,
@@ -48,8 +50,14 @@ export const listUsers = asyncHandler(async (req: Request, res: Response) => {
 /**
  * GET /api/users/:id
  */
-export const getUser = asyncHandler(async (req: Request, res: Response) => {
+export const getUser = asyncHandler(async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string;
+  
+  // Authorization: Only admin/manager/sub-admin can view other users' profiles
+  if (req.user?.userId !== id && !['ADMIN', 'SUB_ADMIN', 'MANAGER'].includes(req.user?.role || '')) {
+    res.status(403).json({ error: 'Forbidden: Cannot access another user\'s profile.' });
+    return;
+  }
   const user = await prisma.user.findUnique({
     where: { id },
     include: {
@@ -74,7 +82,22 @@ export const getUser = asyncHandler(async (req: Request, res: Response) => {
  */
 export const updateUser = asyncHandler(async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string;
-  const { name, phone, avatar, role, isActive } = req.body;
+  const { name, phone, avatar, bio, role, isActive, dob, gender, address, city, state, zipCode, country } = req.body;
+
+  // Prevent role escalation by SUB_ADMIN or MANAGER
+  if (role && role !== req.user?.role && !['ADMIN'].includes(req.user?.role || '')) {
+     res.status(403).json({ error: 'Forbidden: Cannot change user roles without ADMIN privileges.' });
+     return;
+  }
+
+  // Prevent sub-admins or managers from deactivating/modifying an ADMIN
+  if (req.user?.role !== 'ADMIN') {
+    const targetUser = await prisma.user.findUnique({ where: { id }, select: { role: true } });
+    if (targetUser?.role === 'ADMIN') {
+      res.status(403).json({ error: 'Forbidden: Cannot modify an ADMIN account.' });
+      return;
+    }
+  }
 
   const user = await prisma.user.update({
     where: { id },
@@ -82,12 +105,22 @@ export const updateUser = asyncHandler(async (req: AuthRequest, res: Response) =
       ...(name && { name }),
       ...(phone !== undefined && { phone }),
       ...(avatar !== undefined && { avatar }),
+      ...(bio !== undefined && { bio }),
       ...(role && { role }),
       ...(isActive !== undefined && { isActive }),
+      ...(dob !== undefined && { dob: dob ? new Date(dob) : null }),
+      ...(gender !== undefined && { gender }),
+      ...(address !== undefined && { address }),
+      ...(city !== undefined && { city }),
+      ...(state !== undefined && { state }),
+      ...(zipCode !== undefined && { zipCode }),
+      ...(country !== undefined && { country }),
     },
     select: {
-      id: true, name: true, email: true, phone: true,
+      id: true, name: true, email: true, phone: true, bio: true,
       role: true, avatar: true, isActive: true, updatedAt: true,
+      dob: true, gender: true,
+      address: true, city: true, state: true, zipCode: true, country: true,
     },
   });
 
@@ -111,7 +144,7 @@ export const deleteUser = asyncHandler(async (req: Request, res: Response) => {
  * POST /api/users (admin create)
  */
 export const createUser = asyncHandler(async (req: Request, res: Response) => {
-  const { name, email, phone, password, role } = req.body;
+  const { name, email, phone, password, role, bio, dob, gender, address, city, state, zipCode, country } = req.body;
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
@@ -126,12 +159,22 @@ export const createUser = asyncHandler(async (req: Request, res: Response) => {
       name, email, phone,
       password: hashedPassword,
       role: role || 'STAFF',
+      ...(bio && { bio }),
+      ...(dob && { dob: new Date(dob) }),
+      ...(gender && { gender }),
+      ...(address && { address }),
+      ...(city && { city }),
+      ...(state && { state }),
+      ...(zipCode && { zipCode }),
+      ...(country && { country }),
       ...((!role || role === 'STAFF') && { staffProfile: { create: {} } }),
       ...(role === 'CLIENT' && { clientProfile: { create: {} } }),
     },
     select: {
       id: true, name: true, email: true, phone: true,
-      role: true, createdAt: true,
+      role: true, dob: true, gender: true,
+      address: true, city: true, state: true, zipCode: true, country: true,
+      createdAt: true,
     },
   });
 

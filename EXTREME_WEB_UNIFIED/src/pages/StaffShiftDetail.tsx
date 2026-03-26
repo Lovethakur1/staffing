@@ -111,8 +111,8 @@ function mapApiShiftToData(raw: any): ShiftData {
     startTime,
     endTime,
     breakDuration: raw.breakDuration || 30,
-    clockInTime: raw.clockInTime || null,
-    clockOutTime: raw.clockOutTime || null,
+    clockInTime: raw.clockIn || raw.timesheet?.clockInTime || null,
+    clockOutTime: raw.clockOut || raw.timesheet?.clockOutTime || null,
     event: {
       id: ev.id || '',
       name: ev.title || ev.name || 'Event',
@@ -144,7 +144,17 @@ function mapApiShiftToData(raw: any): ShiftData {
 
 export function StaffShiftDetail({ userId, shiftId }: StaffShiftDetailProps) {
   const { setCurrentPage } = useNavigation();
-  const { showSuccess, showInfo } = useAppState();
+  const { 
+    showSuccess, 
+    showInfo,
+    setActiveShift,
+    setTimerStartTime,
+    setCurrentTimer,
+    setIsAnyShiftActive,
+    setCurrentShiftStatus,
+    startBreak: globalStartBreak,
+    endBreak: globalEndBreak
+  } = useAppState();
 
   const [shiftStatus, setShiftStatus] = useState<'not-started' | 'working' | 'break' | 'completed'>('not-started');
   const [showClockDialog, setShowClockDialog] = useState(false);
@@ -199,11 +209,32 @@ export function StaffShiftDetail({ userId, shiftId }: StaffShiftDetailProps) {
 
   const handleClockIn = async () => {
     try {
-      if (shiftId) await shiftService.clockIn(shiftId);
+      if (shiftId) {
+        await shiftService.clockIn(shiftId);
+        
+        if (shift) {
+          const mappedShift = {
+            id: shift.id,
+            eventId: shift.event.id,
+            staffId: userId,
+            date: shift.event.date,
+            startTime: shift.event.startTime,
+            endTime: shift.event.endTime,
+            status: 'ongoing' as const,
+            location: shift.event.venue || shift.event.address || '',
+            role: shift.role || '',
+            hourlyRate: 0,
+          };
+          setActiveShift(mappedShift);
+          setTimerStartTime(new Date());
+          setCurrentTimer('00:00:00');
+          setIsAnyShiftActive(true);
+          setCurrentShiftStatus('in-progress');
+        }
+      }
       setShiftStatus('working');
       setShowClockDialog(false);
       showSuccess('Clocked in successfully! Your shift has started.');
-      toast.success('Shift started - Good luck!');
     } catch {
       toast.error('Failed to clock in. Please try again.');
     }
@@ -216,22 +247,36 @@ export function StaffShiftDetail({ userId, shiftId }: StaffShiftDetailProps) {
 
   const confirmClockOut = async () => {
     try {
-      if (shiftId) await shiftService.clockOut(shiftId);
+      if (shiftId) {
+        await shiftService.clockOut(shiftId);
+        
+        setActiveShift(null);
+        setTimerStartTime(null);
+        setCurrentTimer('00:00:00');
+        setIsAnyShiftActive(false);
+        setCurrentShiftStatus('not-started');
+      }
       setShiftStatus('completed');
       setShowCheckOutModal(false);
       showSuccess('Clocked out successfully! Great work today.');
-      toast.success('Shift completed - Well done!');
     } catch {
       toast.error('Failed to clock out. Please try again.');
     }
   };
 
-  const handleStartBreak = () => {
+  const handleStartBreak = async () => {
     if (!shift) return;
     if (breaks.length >= (shift.event.breakCount || 0)) {
       toast.error('You have used all your breaks for this event');
       return;
     }
+
+    try {
+      if (globalStartBreak) await globalStartBreak();
+    } catch (e) {
+      console.error(e);
+    }
+
     const breakId = `break-${Date.now()}`;
     setBreaks(prev => [...prev, { id: breakId, startTime: new Date().toLocaleTimeString(), endTime: null, duration: shift.event.breakDuration || 15 }]);
     setShiftStatus('break');
@@ -239,8 +284,15 @@ export function StaffShiftDetail({ userId, shiftId }: StaffShiftDetailProps) {
     toast.success(`Break started - ${shift.event.breakDuration} minutes`);
   };
 
-  const handleEndBreak = () => {
+  const handleEndBreak = async () => {
     if (!currentBreakId) return;
+
+    try {
+      if (globalEndBreak) await globalEndBreak();
+    } catch (e) {
+      console.error(e);
+    }
+
     setBreaks(prev => prev.map(b => b.id === currentBreakId ? { ...b, endTime: new Date().toLocaleTimeString() } : b));
     setShiftStatus('working');
     setCurrentBreakId(null);

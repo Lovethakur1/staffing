@@ -33,7 +33,11 @@ export const listEvents = asyncHandler(async (req: AuthRequest, res: Response) =
       where: { userId: req.user.userId },
       select: { id: true },
     });
-    if (clientProfile) where.clientId = clientProfile.id;
+    if (clientProfile) {
+      where.clientId = clientProfile.id;
+    } else {
+      where.clientId = 'NO_PROFILE'; // Prevent leaking all events
+    }
   }
 
   // If user is STAFF, show events they have shifts for
@@ -69,6 +73,13 @@ export const listEvents = asyncHandler(async (req: AuthRequest, res: Response) =
  * GET /api/events/:id
  */
 export const getEvent = asyncHandler(async (req: Request, res: Response) => {
+  // Validate UUID format to avoid Prisma P2023 errors returning 400
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(req.params.id)) {
+    res.status(404).json({ error: 'Event not found.' });
+    return;
+  }
+
   const event = await prisma.event.findUnique({
     where: { id: req.params.id },
     include: {
@@ -76,7 +87,7 @@ export const getEvent = asyncHandler(async (req: Request, res: Response) => {
       manager: { select: { id: true, name: true, email: true } },
       shifts: {
         include: {
-          staff: { select: { id: true, name: true, phone: true, avatar: true } },
+          staff: { select: { id: true, name: true, phone: true, avatar: true, staffProfile: { select: { rating: true, skills: true, hourlyRate: true, totalEvents: true, location: true, availabilityStatus: true } } } },
         },
         orderBy: { startTime: 'asc' },
       },
@@ -94,6 +105,7 @@ export const getEvent = asyncHandler(async (req: Request, res: Response) => {
   res.json(event);
 });
 
+
 /**
  * POST /api/events
  */
@@ -105,9 +117,24 @@ export const createEvent = asyncHandler(async (req: AuthRequest, res: Response) 
     dressCode, contactOnSite, contactOnSitePhone,
   } = req.body;
 
+  let finalClientId = clientId;
+
+  // Enforce clientId for CLIENT role
+  if (req.user?.role === 'CLIENT') {
+    const clientProfile = await prisma.clientProfile.findUnique({
+      where: { userId: req.user.userId },
+      select: { id: true },
+    });
+    if (!clientProfile) {
+      res.status(403).json({ error: 'Client profile not found. Cannot create event.' });
+      return;
+    }
+    finalClientId = clientProfile.id; // Override payload with actual client ID
+  }
+
   const event = await prisma.event.create({
     data: {
-      clientId,
+      clientId: finalClientId,
       managerId: req.user?.role === 'MANAGER' ? req.user.userId : undefined,
       title,
       description: description || '',
@@ -136,7 +163,7 @@ export const createEvent = asyncHandler(async (req: AuthRequest, res: Response) 
 
   // Update client's totalEvents count
   await prisma.clientProfile.update({
-    where: { id: clientId },
+    where: { id: finalClientId },
     data: { totalEvents: { increment: 1 } },
   });
 
@@ -202,9 +229,9 @@ export const updateEvent = asyncHandler(async (req: Request, res: Response) => {
         data: {
           userId: clientUser.user.id,
           title: 'Event Request Approved',
-          body: `Your request for the event "${existingEvent.title}" has been approved and moved to Upcoming.`,
+          message: `Your request for the event "${existingEvent.title}" has been approved and moved to Upcoming.`,
           type: 'EVENT',
-          linkUrl: `/client-detail`, // Example routing
+          data: { linkUrl: `/client-detail` }, // Example routing
         }
       });
     }

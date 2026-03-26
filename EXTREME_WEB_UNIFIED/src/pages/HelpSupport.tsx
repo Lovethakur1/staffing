@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigation } from "../contexts/NavigationContext";
+import { supportService, SupportTicket } from "../services/support.service";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -38,9 +40,42 @@ interface HelpSupportProps {
 }
 
 export function HelpSupport({ userRole }: HelpSupportProps) {
+  const { setCurrentPage } = useNavigation();
   const [searchQuery, setSearchQuery] = useState("");
+  const [supportSubject, setSupportSubject] = useState("");
+  const [supportCategory, setSupportCategory] = useState("");
   const [supportMessage, setSupportMessage] = useState("");
   const [activeTab, setActiveTab] = useState("faq");
+
+  // Ticket states
+  const [tickets, setTickets] = useState<SupportTicket[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
+  const [resolutionNote, setResolutionNote] = useState("");
+
+  const fetchTickets = async () => {
+    setIsLoading(true);
+    try {
+      if (userRole === 'admin' || userRole === 'sub-admin') {
+        const data = await supportService.getAllTickets();
+        setTickets(data);
+      } else {
+        const data = await supportService.getMyTickets();
+        setTickets(data);
+      }
+    } catch (err) {
+      toast.error("Failed to load tickets");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'tickets' || activeTab === 'manage') {
+      fetchTickets();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, userRole]);
 
   const faqs = [
     {
@@ -194,13 +229,51 @@ export function HelpSupport({ userRole }: HelpSupportProps) {
     }
   ];
 
-  const handleSubmitTicket = () => {
-    if (!supportMessage.trim()) {
-      toast.error("Please enter your message");
+  const handleSubmitTicket = async () => {
+    if (!supportSubject.trim() || !supportCategory.trim() || !supportMessage.trim()) {
+      toast.error("Please fill in subject, category, and message");
       return;
     }
-    toast.success("Support ticket submitted successfully! We'll get back to you soon.");
-    setSupportMessage("");
+
+    try {
+      await supportService.submitTicket({
+        subject: supportSubject,
+        category: supportCategory,
+        message: supportMessage
+      });
+      toast.success("Support ticket submitted successfully! We'll get back to you soon.");
+      setSupportSubject("");
+      setSupportCategory("");
+      setSupportMessage("");
+    } catch (err) {
+      toast.error("Failed to submit ticket.");
+    }
+  };
+
+  const handleResolveTicket = async (id: string) => {
+    if (!resolutionNote.trim()) {
+      toast.error("Please provide a resolution note.");
+      return;
+    }
+    
+    try {
+      await supportService.resolveTicket(id, resolutionNote);
+      toast.success("Ticket resolved successfully.");
+      setResolutionNote("");
+      setSelectedTicket(null);
+      fetchTickets();
+    } catch (err) {
+      toast.error("Failed to resolve ticket.");
+    }
+  };
+
+  const handleStartChat = async (id: string) => {
+    try {
+      const { conversationId } = await supportService.startChat(id);
+      setCurrentPage('messages', { conversationId });
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || "Failed to start chat.");
+    }
   };
 
   const filteredFaqs = faqs.map(category => ({
@@ -274,12 +347,12 @@ export function HelpSupport({ userRole }: HelpSupportProps) {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="faq">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 h-auto">
+          <TabsTrigger value="faq" className="py-2.5">
             <HelpCircle className="h-4 w-4 mr-2" />
             FAQs
           </TabsTrigger>
-          <TabsTrigger value="contact">
+          <TabsTrigger value="contact" className="py-2.5">
             <MessageSquare className="h-4 w-4 mr-2" />
             Contact Support
           </TabsTrigger>
@@ -291,6 +364,17 @@ export function HelpSupport({ userRole }: HelpSupportProps) {
             <AlertCircle className="h-4 w-4 mr-2" />
             System Status
           </TabsTrigger>
+          {(userRole === 'admin' || userRole === 'sub-admin') ? (
+            <TabsTrigger value="manage">
+              <FileText className="h-4 w-4 mr-2" />
+              Manage Tickets
+            </TabsTrigger>
+          ) : (
+            <TabsTrigger value="tickets">
+              <FileText className="h-4 w-4 mr-2" />
+              My Tickets
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* FAQ Tab */}
@@ -388,17 +472,25 @@ export function HelpSupport({ userRole }: HelpSupportProps) {
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Subject</label>
-                <Input placeholder="Brief description of your issue" />
+                <Input 
+                  placeholder="Brief description of your issue" 
+                  value={supportSubject}
+                  onChange={(e) => setSupportSubject(e.target.value)}
+                />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Category</label>
-                <select className="w-full h-10 px-3 rounded-md border border-input bg-background">
-                  <option>Select a category</option>
-                  <option>Technical Issue</option>
-                  <option>Billing Question</option>
-                  <option>Feature Request</option>
-                  <option>Account Help</option>
-                  <option>Other</option>
+                <select 
+                  className="w-full h-10 px-3 rounded-md border border-input bg-background"
+                  value={supportCategory}
+                  onChange={(e) => setSupportCategory(e.target.value)}
+                >
+                  <option value="">Select a category</option>
+                  <option value="Technical Issue">Technical Issue</option>
+                  <option value="Billing Question">Billing Question</option>
+                  <option value="Feature Request">Feature Request</option>
+                  <option value="Account Help">Account Help</option>
+                  <option value="Other">Other</option>
                 </select>
               </div>
               <div className="space-y-2">
@@ -498,6 +590,117 @@ export function HelpSupport({ userRole }: HelpSupportProps) {
             </CardHeader>
             <CardContent>
               <p className="text-muted-foreground">No scheduled maintenance at this time</p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* My Tickets Tab (Non-Admin) */}
+        <TabsContent value="tickets" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>My Support Tickets</CardTitle>
+              <CardDescription>View the status of your submitted tickets</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <p>Loading tickets...</p>
+              ) : tickets.length === 0 ? (
+                <p className="text-muted-foreground text-center py-4">You have no open support tickets.</p>
+              ) : (
+                <div className="space-y-4">
+                  {tickets.map((t) => (
+                    <div key={t.id} className="border p-4 rounded-lg flex flex-col gap-2">
+                      <div className="flex justify-between items-start">
+                        <h4 className="font-semibold">{t.subject}</h4>
+                        <div className="flex items-center gap-2">
+                          <Button size="sm" variant="outline" onClick={() => handleStartChat(t.id)}>
+                            Message Support
+                          </Button>
+                          <Badge variant={t.status === 'RESOLVED' ? 'outline' : 'default'} className={t.status === 'RESOLVED' ? 'bg-green-100 text-green-800' : ''}>
+                            {t.status}
+                          </Badge>
+                        </div>
+                      </div>
+                      <span className="text-xs text-muted-foreground">{new Date(t.createdAt).toLocaleString()} | {t.category}</span>
+                      <p className="text-sm mt-1">{t.message}</p>
+                      {t.status === 'RESOLVED' && t.resolutionNotes && (
+                         <div className="mt-3 bg-muted p-3 border-l-4 border-green-500 rounded text-sm text-foreground">
+                            <strong>Resolution Note:</strong> {t.resolutionNotes}
+                         </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Manage Tickets Tab (Admin Only) */}
+        <TabsContent value="manage" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Manage Support Tickets</CardTitle>
+              <CardDescription>Review and resolve support requests from users</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <p>Loading tickets...</p>
+              ) : tickets.length === 0 ? (
+                <p className="text-muted-foreground text-center py-4">No support tickets at the moment.</p>
+              ) : (
+                <div className="space-y-4">
+                  {tickets.map((t) => (
+                    <div key={t.id} className="border p-4 rounded-lg flex flex-col gap-3 group relative transition-all">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-semibold">{t.subject}</h4>
+                            <Badge variant={t.status === 'RESOLVED' ? 'outline' : 'default'} className={t.status === 'RESOLVED' ? 'bg-green-100 text-green-800' : ''}>
+                              {t.status}
+                            </Badge>
+                          </div>
+                          <span className="text-xs text-muted-foreground">
+                            Submitted by {t.user?.name} ({t.user?.role}) on {new Date(t.createdAt).toLocaleString()} | Category: {t.category}
+                          </span>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="outline" onClick={() => handleStartChat(t.id)}>
+                            Message User
+                          </Button>
+                          {t.status !== 'RESOLVED' && (
+                            <Button size="sm" onClick={() => setSelectedTicket(t === selectedTicket ? null : t)}>
+                              {selectedTicket?.id === t.id ? 'Cancel' : 'Resolve'}
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="bg-muted p-3 rounded-md text-sm mt-1">
+                        {t.message}
+                      </div>
+                      
+                      {selectedTicket?.id === t.id && (
+                         <div className="mt-2 space-y-3 p-4 bg-background border rounded-md">
+                           <h5 className="font-semibold text-sm">Action: Resolve Ticket</h5>
+                           <Textarea 
+                             placeholder="Add resolution notes for the user..." 
+                             value={resolutionNote}
+                             onChange={(e) => setResolutionNote(e.target.value)}
+                           />
+                           <Button onClick={() => handleResolveTicket(t.id)}>Submit Resolution</Button>
+                         </div>
+                      )}
+
+                      {t.status === 'RESOLVED' && t.resolutionNotes && (
+                         <div className="mt-1 bg-green-50 p-3 border-l-4 border-green-500 rounded text-sm text-green-900">
+                            <strong>Resolution by {t.resolvedBy?.name || 'Admin'}:</strong> {t.resolutionNotes}
+                         </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

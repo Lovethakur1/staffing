@@ -247,3 +247,69 @@ export const sendMessage = asyncHandler(async (req: AuthRequest, res: Response) 
 
   res.status(201).json(message);
 });
+
+/**
+ * GET /api/chat/unread-count
+ * Returns total number of conversations with unread messages.
+ */
+export const getUnreadCount = asyncHandler(async (req: AuthRequest, res: Response) => {
+  try {
+    const participantRecords = await prisma.conversationParticipant.findMany({
+      where: { userId: req.user!.userId },
+      select: {
+        conversationId: true,
+        lastReadAt: true,
+        conversation: {
+          select: { lastMessageAt: true },
+        },
+      },
+    });
+
+    let unreadCount = 0;
+    for (const p of participantRecords) {
+      const lastMsg = p.conversation.lastMessageAt;
+      if (lastMsg && (!p.lastReadAt || lastMsg > p.lastReadAt)) {
+        unreadCount++;
+      }
+    }
+
+    res.json({ count: unreadCount });
+  } catch (error) {
+    console.error('Error fetching unread count:', error);
+    res.status(500).json({ error: 'Failed to fetch unread count' });
+  }
+});
+
+/**
+ * GET /api/chat/users/search
+ * Search users to start a new chat.
+ */
+export const searchUsersForChat = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const q = req.query.q as string;
+  if (!q || q.length < 2) {
+    res.json([]);
+    return;
+  }
+
+  const users = await prisma.user.findMany({
+    where: {
+      isActive: true,
+      id: { not: req.user!.userId },
+      OR: [
+        { name: { contains: q, mode: 'insensitive' } },
+        { email: { contains: q, mode: 'insensitive' } },
+      ],
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      avatar: true,
+      isActive: true,
+    },
+    take: 15,
+  });
+
+  res.json(users);
+});

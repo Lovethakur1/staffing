@@ -35,8 +35,8 @@ import {
   Target,
   Briefcase,
   ClockIcon,
-  Coffee
 } from "lucide-react";
+import { format } from "date-fns";
 import { mockEvents, mockReviews, Shift, getTodayDate } from "../../data/mockData";
 import api from "../../services/api";
 import { toast } from "sonner";
@@ -94,7 +94,7 @@ export function StaffDashboard({ userId }: StaffDashboardProps) {
           id: s.id,
           staffId: s.staffId || userId,
           eventId: s.event?.id || s.eventId || '',
-          date: s.date ? new Date(s.date).toISOString().split('T')[0] : '',
+          date: s.date ? format(new Date(s.date), 'yyyy-MM-dd') : '',
           startTime: s.startTime || '',
           endTime: s.endTime || '',
           role: s.role || 'Staff',

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import {
   listShifts, getShift, createShift, updateShift, deleteShift,
-  updateShiftStatus,
+  updateShiftStatus, toggleTravel,
   startTravel, arriveAtVenue, clockIn, clockOut,
   startBreak, endBreak,
   startTravelHome, endTravelHome, updateLocation,
@@ -19,6 +19,9 @@ router.post('/', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER', 'SCHEDULER'), create
 router.put('/:id', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER', 'SCHEDULER'), updateShift);
 router.put('/:id/status', authorize('STAFF'), updateShiftStatus);
 router.delete('/:id', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER'), deleteShift);
+
+// Admin: toggle travel permission per shift
+router.put('/:id/toggle-travel', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER'), toggleTravel);
 
 // Uber-like travel flow (Staff actions)
 router.post('/:id/start-travel', authorize('STAFF'), startTravel);

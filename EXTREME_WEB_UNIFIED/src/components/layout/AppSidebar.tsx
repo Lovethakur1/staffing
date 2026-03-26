@@ -63,6 +63,7 @@ import {
 } from "lucide-react";
 import { useNavigation } from "../../contexts/NavigationContext";
 import { useAlerts } from "../../contexts/AlertsContext";
+import { useUnreadMessages } from "../../contexts/UnreadMessagesContext";
 import { XtremeLogo } from "../XtremeLogo";
 
 interface AppSidebarProps {
@@ -78,8 +79,10 @@ interface AppSidebarProps {
 export function AppSidebar({ currentUser, onLogout }: AppSidebarProps) {
   const { currentPage, setCurrentPage } = useNavigation();
   const alertsContext = useAlerts();
+  const { unreadCount: unreadMsgCount } = useUnreadMessages();
   const [searchQuery, setSearchQuery] = useState("");
-  
+  const msgBadge = unreadMsgCount > 0 ? String(unreadMsgCount) : undefined;
+
   // Only use alerts for admin role
   const alertsUnreadCount = currentUser.role === 'admin' ? alertsContext.unreadCount : 0;
   const criticalCount = currentUser.role === 'admin' ? alertsContext.criticalCount : 0;
@@ -91,6 +94,7 @@ export function AppSidebar({ currentUser, onLogout }: AppSidebarProps) {
       items: [
         { title: "Command Center", icon: LayoutDashboard, id: "dashboard" },
         { title: "Live Operations", icon: Radio, id: "live-ops", badge: "LIVE" },
+        { title: "Staff Tracker", icon: Target, id: "staff-tracker" },
         { title: "Event Requests Queue", icon: FileText, id: "event-requests-queue", badge: "5" },
       ]
     },
@@ -146,7 +150,7 @@ export function AppSidebar({ currentUser, onLogout }: AppSidebarProps) {
     {
       label: "Communication",
       items: [
-        { title: "Messages", icon: MessageSquare, id: "messages", badge: "12" },
+        { title: "Messages", icon: MessageSquare, id: "messages", badge: msgBadge },
       ]
     },
     {
@@ -196,6 +200,7 @@ export function AppSidebar({ currentUser, onLogout }: AppSidebarProps) {
       label: "Operations",
       items: [
         { title: "Scheduling", icon: Clock, id: "shifts-schedule" },
+        { title: "Staff Tracker", icon: Target, id: "staff-tracker" },
         { title: "Timesheets", icon: ClipboardCheck, id: "timesheets" },
         { title: "Incident Management", icon: AlertTriangle, id: "incident-management" },
       ]
@@ -278,6 +283,7 @@ export function AppSidebar({ currentUser, onLogout }: AppSidebarProps) {
         { title: "Manager Dashboard", icon: LayoutDashboard, id: "manager" },
         { title: "Event Overview", icon: Calendar, id: "events" },
         { title: "Attendance Tracking", icon: CheckCircle2, id: "attendance" },
+        { title: "Staff Tracker", icon: Target, id: "staff-tracker" },
       ]
     },
     {
@@ -305,7 +311,7 @@ export function AppSidebar({ currentUser, onLogout }: AppSidebarProps) {
     {
       label: "Communication",
       items: [
-        { title: "Messages", icon: MessageSquare, id: "messages", badge: "3" },
+        { title: "Messages", icon: MessageSquare, id: "messages", badge: msgBadge },
       ]
     },
     {
@@ -346,6 +352,7 @@ export function AppSidebar({ currentUser, onLogout }: AppSidebarProps) {
       items: [
         { title: "Training Portal", icon: GraduationCap, id: "training-portal" },
         { title: "My Certifications", icon: ClipboardCheck, id: "certifications" },
+        // { title: "Job Openings", icon: Briefcase, id: "careers" },
       ]
     },
     {
@@ -358,7 +365,7 @@ export function AppSidebar({ currentUser, onLogout }: AppSidebarProps) {
     {
       label: "Communication",
       items: [
-        { title: "Messages", icon: MessageSquare, id: "messages", badge: "2" },
+        { title: "Messages", icon: MessageSquare, id: "messages", badge: msgBadge },
       ]
     },
     {
@@ -399,7 +406,7 @@ export function AppSidebar({ currentUser, onLogout }: AppSidebarProps) {
     {
       label: "Communication & Support",
       items: [
-        { title: "Messages", icon: MessageSquare, id: "messages", badge: "4" },
+        { title: "Messages", icon: MessageSquare, id: "messages", badge: msgBadge },
         { title: "Help & Support", icon: Headphones, id: "help-support" },
       ]
     },
@@ -472,27 +479,27 @@ export function AppSidebar({ currentUser, onLogout }: AppSidebarProps) {
             </div>
             <Separator className="my-3" />
             <div className="space-y-1">
-              <Button 
-                variant="ghost" 
-                size="sm" 
+              <Button
+                variant="ghost"
+                size="sm"
                 className="w-full justify-start text-sm"
                 onClick={() => setCurrentPage('profile')}
               >
                 <User className="w-4 h-4 mr-2" />
                 Profile Settings
               </Button>
-              <Button 
-                variant="ghost" 
-                size="sm" 
+              <Button
+                variant="ghost"
+                size="sm"
                 className="w-full justify-start text-sm"
                 onClick={() => setCurrentPage('preferences')}
               >
                 <Settings className="w-4 h-4 mr-2" />
                 Preferences
               </Button>
-              <Button 
-                variant="ghost" 
-                size="sm" 
+              <Button
+                variant="ghost"
+                size="sm"
                 className="w-full justify-start text-sm text-destructive hover:text-destructive hover:bg-destructive/10"
                 onClick={onLogout}
               >
@@ -541,61 +548,66 @@ export function AppSidebar({ currentUser, onLogout }: AppSidebarProps) {
               {section.label}
             </SidebarGroupLabel>
             <SidebarMenu className="space-y-1">
-              {section.items.map((item) => (
-                <SidebarMenuItem key={item.id}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={currentPage === item.id}
-                    className={`group relative rounded-lg transition-all duration-200 ${
-                      currentPage === item.id
+              {section.items.map((item) => {
+                const badge = (item as any).badge as string | undefined;
+                return (
+                  <SidebarMenuItem key={item.id}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={currentPage === item.id}
+                      className={`group relative rounded-lg transition-all duration-200 ${currentPage === item.id
                         ? "bg-primary text-primary-foreground shadow-sm"
                         : "hover:bg-accent text-foreground"
-                    }`}
-                    onClick={() => setCurrentPage(item.id)}
-                  >
-                    <button className="flex items-center gap-3 w-full p-2.5">
-                      <item.icon className="w-4 h-4 flex-shrink-0" />
-                      <span className="text-sm font-medium truncate">{item.title}</span>
-                      {item.badge && (
-                        <Badge
-                          variant={currentPage === item.id ? "secondary" : "default"}
-                          className="ml-auto text-xs px-1.5 py-0.5"
-                        >
-                          {item.badge}
-                        </Badge>
-                      )}
-                    </button>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+                        }`}
+                      onClick={() => setCurrentPage(item.id)}
+                    >
+                      <button className="flex items-center gap-3 w-full p-2.5">
+                        <item.icon className="w-4 h-4 flex-shrink-0" />
+                        <span className="text-sm font-medium truncate">{item.title}</span>
+                        {badge && (
+                          <Badge
+                            variant={currentPage === item.id ? "secondary" : "default"}
+                            className="ml-auto text-xs px-1.5 py-0.5"
+                          >
+                            {badge}
+                          </Badge>
+                        )}
+                      </button>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+
             </SidebarMenu>
           </SidebarGroup>
         ))}
 
-        {/* Quick Actions - Admin Only */}
-        {currentUser.role === 'admin' && (
+        {/* Quick Actions - Admin & Sub-Admin */}
+        {(currentUser.role === 'admin' || currentUser.role === 'sub-admin') && (
           <SidebarGroup className="mt-6">
             <SidebarGroupLabel className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">
               Quick Actions
             </SidebarGroupLabel>
             <SidebarMenu className="space-y-1">
+              {currentUser.role === 'admin' && (
+                <SidebarMenuItem>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="w-full justify-start"
+                    onClick={() => setCurrentPage('event-requests-queue')}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create Event
+                  </Button>
+                </SidebarMenuItem>
+              )}
               <SidebarMenuItem>
-                <Button 
-                  variant="default" 
-                  size="sm" 
+                <Button
+                  variant="outline"
+                  size="sm"
                   className="w-full justify-start"
-                  onClick={() => setCurrentPage('create-event')}
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Create Event
-                </Button>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="w-full justify-start"
-                  onClick={() => setCurrentPage('staff')}
+                  onClick={() => setCurrentPage('staff', { showAddDialog: true })}
                 >
                   <UserPlus className="w-4 h-4 mr-2" />
                   Add Staff

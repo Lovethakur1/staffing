@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "EXTREME_APP_MOBILE",
+    "name": "Extreme Staffing",
     "slug": "EXTREME_APP_MOBILE",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -10,21 +10,47 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#1E3A5F"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Camera is used for face verification during login and attendance check-in.",
+        "NSLocationWhenInUseUsageDescription": "Location is used to track travel to and from event venues.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Background location is used to share travel progress with your manager."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#1E3A5F"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Camera is used for face verification during login and attendance."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Location is used to track travel to event venues."
+        }
+      ],
+      "expo-secure-store",
+      "expo-font"
+    ]
   }
 }

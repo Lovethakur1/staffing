@@ -5,6 +5,7 @@ import { PageRouter } from "./components/PageRouter";
 import { NavigationProvider, useNavigation } from "./contexts/NavigationContext";
 import { AppStateProvider } from "./contexts/AppStateContext";
 import { NotificationsProvider } from "./contexts/NotificationsContext";
+import { UnreadMessagesProvider } from "./contexts/UnreadMessagesContext";
 import { AlertsProvider } from "./contexts/AlertsContext";
 import type { User } from "./data/mockData";
 import { Toaster } from "./components/ui/sonner";
@@ -27,6 +28,7 @@ function AppContent({ currentUser, onLogout }: { currentUser: User; onLogout: ()
 
   return (
     <>
+      <UnreadMessagesProvider>
       <NotificationsProvider>
         <AlertsProvider>
           <AppStateProvider setCurrentPage={setCurrentPage} userRole={currentUser.role}>
@@ -54,6 +56,7 @@ function AppContent({ currentUser, onLogout }: { currentUser: User; onLogout: ()
           </AppStateProvider>
         </AlertsProvider>
       </NotificationsProvider>
+      </UnreadMessagesProvider>
     </>
   );
 }

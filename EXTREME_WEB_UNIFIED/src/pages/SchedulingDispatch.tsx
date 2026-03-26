@@ -94,7 +94,7 @@ interface StaffDispatch {
 
 export function SchedulingDispatch({ userRole, userId }: SchedulingDispatchProps) {
   const { setCurrentPage } = useNavigation();
-  const [activeTab, setActiveTab] = useState<'today' | 'tomorrow' | 'week'>('today');
+  const [activeTab, setActiveTab] = useState<'all' | 'today' | 'tomorrow' | 'week'>('all');
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [events, setEvents] = useState<DispatchEvent[]>([]);
@@ -134,7 +134,7 @@ export function SchedulingDispatch({ userRole, userId }: SchedulingDispatchProps
       const staffList: StaffDispatch[] = [];
       eventsArr.forEach((e: any) => {
         (e.shifts || []).forEach((shift: any) => {
-          const staff = shift.staff?.user;
+          const staff = shift.staff;
           if (staff) {
             let status: StaffDispatch['status'] = 'not-started';
             if (shift.clockOutTime) status = 'completed';
@@ -182,6 +182,8 @@ export function SchedulingDispatch({ userRole, userId }: SchedulingDispatchProps
     const weekEnd = format(addDays(today, 7), 'yyyy-MM-dd');
     
     return events.filter(event => {
+      if (activeTab === 'all') return true;
+      
       const eventDate = event.date.split('T')[0];
       switch (activeTab) {
         case 'today':
@@ -349,6 +351,7 @@ export function SchedulingDispatch({ userRole, userId }: SchedulingDispatchProps
         <div className="flex flex-col md:flex-row gap-4">
           <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v as any); setCurrentPageNum(1); }} className="flex-shrink-0">
             <TabsList>
+              <TabsTrigger value="all">All Events</TabsTrigger>
               <TabsTrigger value="today">Today</TabsTrigger>
               <TabsTrigger value="tomorrow">Tomorrow</TabsTrigger>
               <TabsTrigger value="week">This Week</TabsTrigger>

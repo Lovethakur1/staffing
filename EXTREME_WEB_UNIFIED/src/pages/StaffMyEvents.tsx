@@ -95,7 +95,7 @@ export function StaffMyEvents({ userId }: StaffMyEventsProps) {
             type: ev.eventType || ev.type || 'General',
             status: (s.status || 'pending').toLowerCase().replace(/_/g, '-'),
             role: s.role || 'Staff',
-            date: startDate ? new Date(startDate).toISOString().split('T')[0] : '',
+            date: startDate ? format(new Date(startDate), 'yyyy-MM-dd') : '',
             startTime,
             endTime,
             duration,

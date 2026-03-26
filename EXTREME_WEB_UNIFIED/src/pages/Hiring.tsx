@@ -120,6 +120,11 @@ export function Hiring({ userRole, userId }: PageProps) {
     { stage: 'Hired', count: 0, percentage: 0 }
   ]);
 
+  const [jobPostings, setJobPostings] = useState<JobPosting[]>([]);
+  const [assessments, setAssessments] = useState<Assessment[]>([]);
+  const [contracts, setContracts] = useState<any[]>([]);
+  const [channelStats, setChannelStats] = useState<Array<{ name: string; applications: number; hires: number; rate: number }>>([]);
+
   useEffect(() => {
     const fetchStats = async () => {
       try {
@@ -128,20 +133,72 @@ export function Hiring({ userRole, userId }: PageProps) {
         // Fetch independently so one failure doesn't block the other
         let apps: any[] = [];
         let interviews: any[] = [];
+        let fetchedJobs: any[] = [];
+        let fetchedAssessments: any[] = [];
+        let fetchedContracts: any[] = [];
 
         try {
           const appsRes = await staffService.getApplications();
           apps = Array.isArray(appsRes) ? appsRes : (appsRes?.data || []);
-        } catch {
-          // Applications endpoint unavailable — use empty
-        }
+        } catch {}
 
         try {
           const interviewsRes = await staffService.getInterviews();
           interviews = Array.isArray(interviewsRes) ? interviewsRes : (interviewsRes?.data || []);
-        } catch {
-          // Interviews endpoint unavailable — use empty
-        }
+        } catch {}
+
+        try {
+          const jobsRes = await staffService.getJobPostings();
+          fetchedJobs = Array.isArray(jobsRes) ? jobsRes : (jobsRes?.data || []);
+          setJobPostings(fetchedJobs);
+        } catch {}
+
+        try {
+          const assessmentsRes = await staffService.getAssessments();
+          fetchedAssessments = Array.isArray(assessmentsRes) ? assessmentsRes : (assessmentsRes?.data || []);
+          setAssessments(fetchedAssessments);
+        } catch {}
+
+        try {
+          const contractsRes = await staffService.getAllDocuments({ category: 'CONTRACT' });
+          fetchedContracts = Array.isArray(contractsRes) ? contractsRes : (contractsRes?.data || []);
+          setContracts(fetchedContracts);
+        } catch {}
+
+        // Compute channel stats from real application source data
+        const sourceMap: Record<string, { applications: number; hires: number }> = {
+          company_website: { applications: 0, hires: 0 },
+          linkedin: { applications: 0, hires: 0 },
+          indeed: { applications: 0, hires: 0 },
+          referral: { applications: 0, hires: 0 },
+          other: { applications: 0, hires: 0 },
+        };
+        apps.forEach((a: any) => {
+          const src = (a.source || 'other').toLowerCase();
+          const key = sourceMap[src] ? src : 'other';
+          sourceMap[key].applications++;
+          if (['hired', 'approved'].includes((a.status || '').toLowerCase())) {
+            sourceMap[key].hires++;
+          }
+        });
+        const channelLabels: Record<string, string> = {
+          company_website: 'Company Website',
+          linkedin: 'LinkedIn',
+          indeed: 'Indeed',
+          referral: 'Referrals',
+          other: 'Other',
+        };
+        setChannelStats(
+          Object.entries(sourceMap)
+            .filter(([, v]) => v.applications > 0)
+            .map(([key, v]) => ({
+              name: channelLabels[key],
+              applications: v.applications,
+              hires: v.hires,
+              rate: v.applications > 0 ? Math.round((v.hires / v.applications) * 1000) / 10 : 0,
+            }))
+            .sort((a, b) => b.applications - a.applications)
+        );
 
         const pending = apps.filter((a: any) => (a.status || '').toLowerCase() === 'pending').length;
         const reviewing = apps.filter((a: any) => (a.status || '').toLowerCase() === 'reviewing').length;
@@ -158,12 +215,15 @@ export function Hiring({ userRole, userId }: PageProps) {
           { stage: 'Hired', count: Math.floor(approved * 0.6), percentage: Math.round((Math.floor(approved * 0.6) / total) * 100) }
         ]);
 
+        const activeJobsCount = fetchedJobs.filter((j: any) => j.status === 'active').length;
+
         setStats(prev => ({
           ...prev,
           totalApplications: apps.length,
           pendingReview: pending,
           interviewsScheduled: scheduled,
           approved,
+          activeJobPostings: activeJobsCount,
           onboardingInProgress: Math.floor(approved * 0.6),
           applicationConversionRate: apps.length > 0 ? Math.round((approved / apps.length) * 100) : 0
         }));
@@ -207,6 +267,36 @@ export function Hiring({ userRole, userId }: PageProps) {
     fetchStats();
   }, []);
 
+  const handleJobSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const jobData = {
+      title: formData.get("title") as string,
+      department: formData.get("department") as string,
+      type: formData.get("type") as string,
+      location: formData.get("location") as string,
+      salaryRange: formData.get("salary") as string,
+      description: formData.get("description") as string,
+    };
+
+    try {
+      if (selectedJob) {
+        await staffService.updateJobPosting(selectedJob.id, jobData);
+        toast.success("Job posting updated!");
+      } else {
+        await staffService.createJobPosting(jobData);
+        toast.success("Job posted successfully!");
+      }
+      setShowJobDialog(false);
+      
+      // Refresh list
+      const jobsRes = await staffService.getJobPostings();
+      setJobPostings(Array.isArray(jobsRes) ? jobsRes : (jobsRes?.data || []));
+    } catch {
+      toast.error(selectedJob ? "Failed to update job posting" : "Failed to post job");
+    }
+  };
+
   const alerts = [
     {
       id: 1,
@@ -234,136 +324,7 @@ export function Hiring({ userRole, userId }: PageProps) {
     }
   ];
 
-  const topPerformingChannels = [
-    { name: 'Company Website', applications: 12, hires: 2, rate: 16.7 },
-    { name: 'LinkedIn', applications: 8, hires: 1, rate: 12.5 },
-    { name: 'Indeed', applications: 6, hires: 1, rate: 16.7 },
-    { name: 'Referrals', applications: 4, hires: 2, rate: 50 }
-  ];
-
-  // Job Postings Mock Data
-  const jobPostings: JobPosting[] = [
-    {
-      id: 'job-001',
-      title: 'Event Bartender',
-      department: 'Beverage Service',
-      type: 'part-time',
-      location: 'Multiple Locations',
-      salary: '$25-35/hr + Tips',
-      status: 'active',
-      postedDate: '2025-09-28',
-      applications: 24,
-      views: 156,
-      description: 'Experienced bartender for upscale events. Must have mixology skills and excellent customer service.'
-    },
-    {
-      id: 'job-002',
-      title: 'Event Server',
-      department: 'Service',
-      type: 'part-time',
-      location: 'Los Angeles, CA',
-      salary: '$20-28/hr + Tips',
-      status: 'active',
-      postedDate: '2025-09-25',
-      applications: 38,
-      views: 242,
-      description: 'Professional servers needed for corporate and private events. Weekend availability required.'
-    },
-    {
-      id: 'job-003',
-      title: 'Event Coordinator',
-      department: 'Management',
-      type: 'full-time',
-      location: 'New York, NY',
-      salary: '$55,000-70,000/year',
-      status: 'active',
-      postedDate: '2025-09-20',
-      applications: 12,
-      views: 89,
-      description: 'Coordinate all aspects of events from planning to execution. 3+ years experience required.'
-    },
-    {
-      id: 'job-004',
-      title: 'Catering Manager',
-      department: 'Food Service',
-      type: 'full-time',
-      location: 'Chicago, IL',
-      salary: '$50,000-65,000/year',
-      status: 'paused',
-      postedDate: '2025-09-15',
-      applications: 8,
-      views: 67,
-      description: 'Oversee catering operations for multiple events. Strong leadership and organizational skills required.'
-    }
-  ];
-
-  // Assessments Mock Data
-  const assessments: Assessment[] = [
-    {
-      id: 'assess-001',
-      candidateName: 'Sarah Johnson',
-      position: 'Event Coordinator',
-      type: 'both',
-      completedDate: '2025-10-08',
-      scores: {
-        communication: 92,
-        teamwork: 88,
-        problemSolving: 85,
-        leadership: 90,
-        technical: 87
-      },
-      overallScore: 88,
-      status: 'completed'
-    },
-    {
-      id: 'assess-002',
-      candidateName: 'Michael Chen',
-      position: 'Bartender',
-      type: 'skills',
-      completedDate: '2025-10-09',
-      scores: {
-        communication: 85,
-        teamwork: 80,
-        problemSolving: 78,
-        leadership: 75,
-        technical: 95
-      },
-      overallScore: 83,
-      status: 'completed'
-    },
-    {
-      id: 'assess-003',
-      candidateName: 'Jessica Martinez',
-      position: 'Event Coordinator',
-      type: 'both',
-      completedDate: '2025-10-10',
-      scores: {
-        communication: 95,
-        teamwork: 92,
-        problemSolving: 90,
-        leadership: 93,
-        technical: 89
-      },
-      overallScore: 92,
-      status: 'completed'
-    },
-    {
-      id: 'assess-004',
-      candidateName: 'Daniel Garcia',
-      position: 'Server',
-      type: 'personality',
-      completedDate: '',
-      scores: {
-        communication: 0,
-        teamwork: 0,
-        problemSolving: 0,
-        leadership: 0,
-        technical: 0
-      },
-      overallScore: 0,
-      status: 'scheduled'
-    }
-  ];
+  const topPerformingChannels = channelStats;
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -896,40 +857,35 @@ export function Hiring({ userRole, userId }: PageProps) {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {[
-                  { name: 'Emily Rodriguez', position: 'Server', status: 'signed', date: '2025-10-08', type: 'Employment Contract' },
-                  { name: 'James Wilson', position: 'Bartender', status: 'pending', date: '2025-10-09', type: 'Employment Contract' },
-                  { name: 'Maria Garcia', position: 'Event Coordinator', status: 'signed', date: '2025-10-05', type: 'Employment Contract' },
-                  { name: 'David Chen', position: 'Server', status: 'sent', date: '2025-10-10', type: 'Employment Contract' }
-                ].map((contract, index) => (
-                  <div key={index} className="flex items-center justify-between p-4 border rounded-lg">
+                {contracts.length === 0 ? (
+                  <div className="text-center py-12">
+                    <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground">No contracts on file yet.</p>
+                  </div>
+                ) : contracts.map((contract: any) => (
+                  <div key={contract.id} className="flex items-center justify-between p-4 border rounded-lg">
                     <div className="flex items-center gap-4">
                       <FileText className="h-8 w-8 text-muted-foreground" />
                       <div>
-                        <p className="font-medium">{contract.name}</p>
-                        <p className="text-sm text-muted-foreground">{contract.position} • {contract.type}</p>
-                        <p className="text-xs text-muted-foreground">Sent: {contract.date}</p>
+                        <p className="font-medium">{contract.user?.name || 'Unknown'}</p>
+                        <p className="text-sm text-muted-foreground">{contract.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {contract.createdAt ? new Date(contract.createdAt).toLocaleDateString() : ''}
+                        </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
                       <Badge variant={
-                        contract.status === 'signed' ? 'default' : 
-                        contract.status === 'sent' ? 'secondary' : 'outline'
+                        contract.status === 'VERIFIED' ? 'default' :
+                        contract.status === 'PENDING' ? 'secondary' : 'outline'
                       }>
-                        {contract.status === 'signed' && <CheckCircle className="h-3 w-3 mr-1" />}
-                        {contract.status === 'signed' ? 'Signed' : 
-                         contract.status === 'sent' ? 'Sent' : 'Pending'}
+                        {contract.status === 'VERIFIED' && <CheckCircle className="h-3 w-3 mr-1" />}
+                        {contract.status}
                       </Badge>
-                      <Button variant="outline" size="sm">
+                      <Button variant="outline" size="sm" onClick={() => contract.fileUrl && window.open(contract.fileUrl, '_blank')}>
                         <Download className="h-4 w-4 mr-2" />
                         Download
                       </Button>
-                      {contract.status !== 'signed' && (
-                        <Button variant="ghost" size="sm">
-                          <Send className="h-4 w-4 mr-2" />
-                          Resend
-                        </Button>
-                      )}
                     </div>
                   </div>
                 ))}
@@ -948,15 +904,15 @@ export function Hiring({ userRole, userId }: PageProps) {
               {selectedJob ? 'Update job posting details and requirements' : 'Post a new job opening to attract top talent'}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
+          <form onSubmit={handleJobSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Job Title</Label>
-                <Input placeholder="Event Coordinator" defaultValue={selectedJob?.title} />
+                <Input name="title" placeholder="Event Coordinator" defaultValue={selectedJob?.title} required />
               </div>
               <div className="space-y-2">
                 <Label>Department</Label>
-                <Select defaultValue={selectedJob?.department || 'service'}>
+                <Select name="department" defaultValue={selectedJob?.department || 'service'}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -972,7 +928,7 @@ export function Hiring({ userRole, userId }: PageProps) {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Employment Type</Label>
-                <Select defaultValue={selectedJob?.type || 'part-time'}>
+                <Select name="type" defaultValue={selectedJob?.type || 'part-time'}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -985,48 +941,47 @@ export function Hiring({ userRole, userId }: PageProps) {
               </div>
               <div className="space-y-2">
                 <Label>Location</Label>
-                <Input placeholder="Los Angeles, CA" defaultValue={selectedJob?.location} />
+                <Input name="location" placeholder="Los Angeles, CA" defaultValue={selectedJob?.location} required />
               </div>
             </div>
             <div className="space-y-2">
               <Label>Salary Range</Label>
-              <Input placeholder="$50,000 - $65,000/year" defaultValue={selectedJob?.salary} />
+              <Input name="salary" placeholder="$50,000 - $65,000/year" defaultValue={selectedJob?.salary} required />
             </div>
             <div className="space-y-2">
               <Label>Job Description</Label>
               <Textarea 
+                name="description"
                 placeholder="Describe the role, responsibilities, and requirements..." 
                 rows={6}
                 defaultValue={selectedJob?.description}
+                required
               />
             </div>
             <div className="space-y-2">
               <Label>Posting Links</Label>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" className="flex-1">
+                <Button type="button" variant="outline" size="sm" className="flex-1">
                   <LinkIcon className="h-4 w-4 mr-2" />
                   LinkedIn
                 </Button>
-                <Button variant="outline" size="sm" className="flex-1">
+                <Button type="button" variant="outline" size="sm" className="flex-1">
                   <LinkIcon className="h-4 w-4 mr-2" />
                   Indeed
                 </Button>
-                <Button variant="outline" size="sm" className="flex-1">
+                <Button type="button" variant="outline" size="sm" className="flex-1">
                   <LinkIcon className="h-4 w-4 mr-2" />
                   Company Site
                 </Button>
               </div>
             </div>
             <div className="flex justify-end gap-3">
-              <Button variant="outline" onClick={() => setShowJobDialog(false)}>Cancel</Button>
-              <Button onClick={() => { 
-                toast.success(selectedJob ? 'Job posting updated!' : 'Job posted successfully!'); 
-                setShowJobDialog(false); 
-              }}>
+              <Button type="button" variant="outline" onClick={() => setShowJobDialog(false)}>Cancel</Button>
+              <Button type="submit">
                 {selectedJob ? 'Update Posting' : 'Publish Job'}
               </Button>
             </div>
-          </div>
+          </form>
         </DialogContent>
       </Dialog>
 

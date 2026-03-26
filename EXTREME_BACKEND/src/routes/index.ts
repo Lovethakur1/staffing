@@ -11,6 +11,14 @@ import uploadRoutes from './upload.routes';
 import chatRoutes from './chat.routes';
 import notificationRoutes from './notification.routes';
 import dashboardRoutes from './dashboard.routes';
+import pricingRoutes from './pricing.routes';
+import analyticsRoutes from './analytics.routes';
+import integrationRoutes from './integration.routes';
+import databaseRoutes from './database.routes';
+import roleRoutes from './role.routes';
+import settingsRoutes from './settings.routes';
+import supportRoutes from './support.routes';
+import reviewRoutes from './review.routes';
 
 const router = Router();
 
@@ -26,5 +34,13 @@ router.use('/upload', uploadRoutes);
 router.use('/chat', chatRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/dashboard', dashboardRoutes);
+router.use('/pricing-config', pricingRoutes);
+router.use('/analytics', analyticsRoutes);
+router.use('/integrations', integrationRoutes);
+router.use('/database', databaseRoutes);
+router.use('/roles', roleRoutes);
+router.use('/settings', settingsRoutes);
+router.use('/support', supportRoutes);
+router.use('/reviews', reviewRoutes);
 
 export default router;

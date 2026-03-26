@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -37,6 +37,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigation } from "../contexts/NavigationContext";
+import { invoiceService } from "../services/invoice.service";
+import { financeService } from "../services/finance.service";
 
 interface FinancialReportsProps {
   userRole: string;
@@ -46,109 +48,104 @@ interface FinancialReportsProps {
 export function FinancialReports({ userRole, userId }: FinancialReportsProps) {
   const { setCurrentPage } = useNavigation();
   const [filterPeriod, setFilterPeriod] = useState("month");
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Mock Financial Data
-  const financialMetrics = {
-    totalRevenue: 284750,
-    revenueChange: 12.5,
-    totalExpenses: 156420,
-    expenseChange: -3.2,
-    netProfit: 128330,
-    profitMargin: 45.1,
-    cashFlow: 86200,
-    avgPaymentTime: 12.5
-  };
+  const [financialMetrics, setFinancialMetrics] = useState({
+    totalRevenue: 0, revenueChange: 0,
+    totalExpenses: 0, expenseChange: 0,
+    netProfit: 0, profitMargin: 0,
+    cashFlow: 0, avgPaymentTime: 0,
+  });
+  const [accountTransactions, setAccountTransactions] = useState<any[]>([]);
+  const [expenseByCategory, setExpenseByCategory] = useState<any[]>([]);
+  const [revenueByClient, setRevenueByClient] = useState<any[]>([]);
 
-  const accountTransactions = [
-    {
-      id: "TXN-001",
-      date: "2024-10-12",
-      type: "income",
-      category: "Client Payment",
-      description: "INV-2024-089 - TechCorp Inc",
-      amount: 8500,
-      balance: 86200
-    },
-    {
-      id: "TXN-002",
-      date: "2024-10-11",
-      type: "expense",
-      category: "Payroll",
-      description: "Weekly Payroll - Oct 1-7",
-      amount: -17120,
-      balance: 77700
-    },
-    {
-      id: "TXN-003",
-      date: "2024-10-10",
-      type: "expense",
-      category: "Operating Costs",
-      description: "Software Subscriptions",
-      amount: -450,
-      balance: 94820
-    },
-    {
-      id: "TXN-004",
-      date: "2024-10-08",
-      type: "income",
-      category: "Client Payment",
-      description: "INV-2024-085 - Event Payment",
-      amount: 5600,
-      balance: 95270
-    },
-    {
-      id: "TXN-005",
-      date: "2024-10-07",
-      type: "expense",
-      category: "Operating Costs",
-      description: "Office Supplies",
-      amount: -280,
-      balance: 89670
-    },
-    {
-      id: "TXN-006",
-      date: "2024-10-06",
-      type: "income",
-      category: "Client Payment",
-      description: "INV-2024-083 - Wedding Event",
-      amount: 3200,
-      balance: 89950
-    },
-    {
-      id: "TXN-007",
-      date: "2024-10-05",
-      type: "expense",
-      category: "Marketing",
-      description: "Social Media Advertising",
-      amount: -750,
-      balance: 86750
-    },
-    {
-      id: "TXN-008",
-      date: "2024-10-04",
-      type: "expense",
-      category: "Payroll",
-      description: "Weekly Payroll - Sep 24-30",
-      amount: -15840,
-      balance: 87500
-    }
-  ];
+  useEffect(() => {
+    const fetchAll = async () => {
+      setIsLoading(true);
+      try {
+        const [invoicesRaw, runsRaw] = await Promise.all([
+          invoiceService.getInvoices({ take: 500 }),
+          financeService.getPayrollRuns({ take: 200 }),
+        ]);
 
-  const expenseByCategory = [
-    { category: "Payroll", amount: 123400, percentage: 78.9 },
-    { category: "Operating Costs", amount: 18600, percentage: 11.9 },
-    { category: "Marketing", amount: 8750, percentage: 5.6 },
-    { category: "Equipment", amount: 3420, percentage: 2.2 },
-    { category: "Other", amount: 2250, percentage: 1.4 }
-  ];
+        const invoices: any[] = Array.isArray(invoicesRaw) ? invoicesRaw : (invoicesRaw?.data || []);
+        const runs: any[] = Array.isArray(runsRaw) ? runsRaw : (runsRaw?.data || []);
 
-  const revenueByClient = [
-    { client: "TechCorp Inc", revenue: 45600, events: 12 },
-    { client: "Corporate Events Ltd", revenue: 38400, events: 8 },
-    { client: "Smith Foundation", revenue: 28900, events: 6 },
-    { client: "Global Tech Summit", revenue: 24500, events: 5 },
-    { client: "Wedding - Johnson", revenue: 18200, events: 4 }
-  ];
+        // ── Metrics ───────────────────────────────────────────────────
+        const paidInvoices = invoices.filter(i => (i.status || '').toUpperCase() === 'PAID');
+        const completedRuns = runs.filter(r => (r.status || '').toUpperCase() === 'COMPLETED');
+        const totalRevenue = paidInvoices.reduce((s, i) => s + (i.amount ?? 0), 0);
+        const totalExpenses = completedRuns.reduce((s, r) => s + (r.totalAmount ?? 0), 0);
+        const netProfit = totalRevenue - totalExpenses;
+        setFinancialMetrics({
+          totalRevenue,
+          revenueChange: 0,
+          totalExpenses,
+          expenseChange: 0,
+          netProfit,
+          profitMargin: totalRevenue > 0 ? Math.round((netProfit / totalRevenue) * 1000) / 10 : 0,
+          cashFlow: netProfit,
+          avgPaymentTime: 0,
+        });
+
+        // ── Transaction ledger ────────────────────────────────────────
+        const revTxns = paidInvoices.map(i => ({
+          id: i.id,
+          date: i.paidDate?.split('T')[0] || i.createdAt?.split('T')[0] || '',
+          type: 'income',
+          category: 'Client Payment',
+          description: `${i.invoiceNumber || i.id} — ${i.client?.user?.name || i.client?.company || 'Client'}`,
+          amount: i.amount ?? 0,
+        }));
+        const expTxns = completedRuns.map(r => ({
+          id: r.id,
+          date: r.updatedAt?.split('T')[0] || r.createdAt?.split('T')[0] || '',
+          type: 'expense',
+          category: 'Payroll',
+          description: `Payroll run ${r.periodStart?.split('T')[0] ?? ''} → ${r.periodEnd?.split('T')[0] ?? ''}`,
+          amount: r.totalAmount ?? 0,
+        }));
+        const sorted = [...revTxns, ...expTxns]
+          .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+        // Compute running balance
+        let balance = totalRevenue - totalExpenses;
+        const withBalance = sorted.map(txn => {
+          const row = { ...txn, balance };
+          balance -= txn.type === 'income' ? txn.amount : -txn.amount;
+          return row;
+        });
+        setAccountTransactions(withBalance);
+
+        // ── Expenses by category ──────────────────────────────────────
+        const payrollTotal = totalExpenses;
+        setExpenseByCategory(
+          payrollTotal > 0
+            ? [{ category: 'Payroll', amount: payrollTotal, percentage: 100 }]
+            : []
+        );
+
+        // ── Revenue by client ─────────────────────────────────────────
+        const byClient: Record<string, { client: string; revenue: number; events: Set<string> }> = {};
+        for (const inv of paidInvoices) {
+          const name = inv.client?.user?.name || inv.client?.company || 'Unknown';
+          if (!byClient[name]) byClient[name] = { client: name, revenue: 0, events: new Set() };
+          byClient[name].revenue += inv.amount ?? 0;
+          if (inv.eventId) byClient[name].events.add(inv.eventId);
+        }
+        setRevenueByClient(
+          Object.values(byClient)
+            .map(c => ({ client: c.client, revenue: c.revenue, events: c.events.size }))
+            .sort((a, b) => b.revenue - a.revenue)
+        );
+      } catch {
+        toast.error('Failed to load financial report data');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchAll();
+  }, []);
 
   const handleGenerateReport = (reportType: string) => {
     toast.success(`Generating ${reportType} report...`);
@@ -408,10 +405,17 @@ export function FinancialReports({ userRole, userId }: FinancialReportsProps) {
       <Card>
         <CardHeader>
           <CardTitle>Recent Transactions</CardTitle>
-          <CardDescription>View all financial transactions and ledger entries</CardDescription>
+          <CardDescription>Paid invoices and completed payroll runs</CardDescription>
         </CardHeader>
 
         <CardContent>
+          {accountTransactions.length === 0 && !isLoading ? (
+            <div className="text-center py-12">
+              <CreditCard className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-muted-foreground">No completed transactions yet</p>
+              <p className="text-sm text-muted-foreground mt-1">Paid invoices and completed payroll runs will appear here</p>
+            </div>
+          ) : (
           <Table>
             <TableHeader>
               <TableRow>
@@ -420,7 +424,7 @@ export function FinancialReports({ userRole, userId }: FinancialReportsProps) {
                 <TableHead>Category</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Amount</TableHead>
-                <TableHead>Balance</TableHead>
+                <TableHead>Running Balance</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -433,7 +437,8 @@ export function FinancialReports({ userRole, userId }: FinancialReportsProps) {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={txn.type === 'income' ? 'default' : 'secondary'}>
+                    <Badge variant={txn.type === 'income' ? 'default' : 'secondary'}
+                      className={txn.type === 'income' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}>
                       {txn.type === 'income' ? (
                         <ArrowUpRight className="h-3 w-3 mr-1" />
                       ) : (
@@ -447,13 +452,14 @@ export function FinancialReports({ userRole, userId }: FinancialReportsProps) {
                   <TableCell
                     className={txn.type === 'income' ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}
                   >
-                    {txn.type === 'income' ? '+' : ''}${Math.abs(txn.amount).toLocaleString()}
+                    {txn.type === 'income' ? '+' : '-'}${txn.amount.toLocaleString()}
                   </TableCell>
                   <TableCell className="font-medium">${txn.balance.toLocaleString()}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
+          )}
         </CardContent>
       </Card>
 
@@ -465,6 +471,11 @@ export function FinancialReports({ userRole, userId }: FinancialReportsProps) {
             <CardDescription>Distribution of expenses across categories</CardDescription>
           </CardHeader>
           <CardContent>
+            {expenseByCategory.length === 0 && !isLoading ? (
+              <div className="text-center py-8">
+                <p className="text-sm text-muted-foreground">No expense data yet</p>
+              </div>
+            ) : (
             <div className="space-y-4">
               {expenseByCategory.map((item) => (
                 <div key={item.category}>
@@ -483,6 +494,7 @@ export function FinancialReports({ userRole, userId }: FinancialReportsProps) {
                 </div>
               ))}
             </div>
+            )}
           </CardContent>
         </Card>
 
@@ -492,6 +504,12 @@ export function FinancialReports({ userRole, userId }: FinancialReportsProps) {
             <CardDescription>Top revenue-generating clients</CardDescription>
           </CardHeader>
           <CardContent>
+            {revenueByClient.length === 0 && !isLoading ? (
+              <div className="text-center py-8">
+                <Users className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
+                <p className="text-sm text-muted-foreground">No paid invoices yet</p>
+              </div>
+            ) : (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -505,7 +523,7 @@ export function FinancialReports({ userRole, userId }: FinancialReportsProps) {
                   <TableRow key={client.client}>
                     <TableCell className="font-medium">{client.client}</TableCell>
                     <TableCell>
-                      <Badge variant="outline">{client.events} events</Badge>
+                      <Badge variant="outline">{client.events} event{client.events !== 1 ? 's' : ''}</Badge>
                     </TableCell>
                     <TableCell className="font-semibold text-green-600">
                       ${client.revenue.toLocaleString()}
@@ -514,6 +532,7 @@ export function FinancialReports({ userRole, userId }: FinancialReportsProps) {
                 ))}
               </TableBody>
             </Table>
+            )}
           </CardContent>
         </Card>
       </div>

@@ -42,17 +42,26 @@ enum ShiftStatus {
 // ─── Core Identity ───────────────────────────────────────────────────────────
 
 model User {
-  id        String    @id @default(uuid())
-  name      String
-  email     String    @unique
-  phone     String?
-  password  String
-  role      Role
-  avatar    String?
-  isActive  Boolean   @default(true)
-  lastLogin DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id             String    @id @default(uuid())
+  name           String
+  email          String    @unique
+  phone          String?
+  password       String
+  role           Role
+  avatar         String?
+  bio            String?
+  dob            DateTime?
+  gender         String?
+  address        String?
+  city           String?
+  state          String?
+  zipCode        String?
+  country        String?
+  isActive       Boolean   @default(true)
+  lastLogin      DateTime?
+  loggedOutAllAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   // Profiles
   staffProfile  StaffProfile?
@@ -68,6 +77,7 @@ model User {
   interviews          Interview[]
   interviewsConducted Interview[]     @relation("Interviewer")
   documents           Document[]
+  assessments         Assessment[]    @relation("CandidateAssessments")
 
   // Finance
   approvedTimesheets Timesheet[]  @relation("TimesheetApprover")
@@ -85,6 +95,17 @@ model User {
   // Favorites
   favoriteStaffEntries FavoriteStaff[] @relation("ClientFavorites")
   favoritedByClients   FavoriteStaff[] @relation("StaffFavorited")
+
+  // Settings
+  preferences UserPreferences?
+  loginLogs   LoginLog[]
+
+  // Support Tickets
+  supportTickets  SupportTicket[] @relation("UserTickets")
+  resolvedTickets SupportTicket[] @relation("ResolvedTickets")
+
+  // Reviews
+  staffReviews    ClientReview[]  @relation("StaffReviews")
 }
 
 // ─── Staff & Client Profiles ─────────────────────────────────────────────────
@@ -125,6 +146,22 @@ model ClientProfile {
 
   events   Event[]   @relation("ClientEvents")
   invoices Invoice[]
+  reviews  ClientReview[]
+}
+
+// ─── Client Reviews ─────────────────────────────────────────────────────────
+
+model ClientReview {
+  id        String   @id @default(uuid())
+  clientId  String
+  client    ClientProfile @relation(fields: [clientId], references: [id])
+  staffId   String
+  staff     User     @relation("StaffReviews", fields: [staffId], references: [id])
+  eventId   String?
+  event     Event?   @relation(fields: [eventId], references: [id])
+  rating    Int      // 1 to 5 stars
+  feedback  String?
+  createdAt DateTime @default(now())
 }
 
 // ─── Favorite Staff (Client → Staff bookmark list) ──────────────────────────
@@ -177,6 +214,7 @@ model Event {
   invoices      Invoice[]
   incidents     IncidentReport[]
   conversations Conversation[]
+  clientReviews ClientReview[]
 }
 
 model Shift {
@@ -200,6 +238,9 @@ model Shift {
   location   String?
   totalHours Float?
   totalPay   Float?
+
+  // Travel permission (Admin must enable per shift)
+  travelEnabled     Boolean   @default(false)
 
   // Travel tracking (Uber-like flow per MoM)
   travelStartTime   DateTime? // Staff tapped "Start Travel"
@@ -274,6 +315,44 @@ model Interview {
   notes         String?
   rating        Int?
   createdAt     DateTime @default(now())
+}
+
+model JobPosting {
+  id                String   @id @default(uuid())
+  title             String
+  department        String
+  type              String // full-time, part-time, contractor, seasonal
+  location          String
+  salaryRange       String
+  status            String   @default("active") // active, paused, closed
+  description       String
+  requirements      String[]
+  responsibilities  String[]
+  benefits          String[]
+  applicationsCount Int      @default(0)
+  viewsCount        Int      @default(0)
+  postedDate        DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Assessment {
+  id             String    @id @default(uuid())
+  candidateId    String
+  candidate      User      @relation("CandidateAssessments", fields: [candidateId], references: [id])
+  candidateName  String // cached
+  position       String
+  type           String // personality, skills, both
+  status         String    @default("pending") // pending, scheduled, completed
+  overallScore   Float     @default(0)
+  communication  Float     @default(0)
+  teamwork       Float     @default(0)
+  problemSolving Float     @default(0)
+  leadership     Float     @default(0)
+  technical      Float     @default(0)
+  completedDate  DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 }
 
 // ─── Document Management (Onboarding & Compliance) ──────────────────────────
@@ -451,14 +530,151 @@ model Message {
 // ─── Notifications ───────────────────────────────────────────────────────────
 
 model Notification {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title          String
+  message        String
+  type           String // 'shift', 'payment', 'reminder', 'schedule', 'review', 'training', 'profile', 'system', 'message', 'ticket'
+  unread         Boolean  @default(true)
+  priority       String   @default("medium") // 'high', 'medium', 'low'
+  actionRequired Boolean  @default(false)
+  category       String?
+  data           Json? // For storing related IDs or additional context
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// ─── Pricing Configuration ───────────────────────────────────────────────────
+
+model PricingConfig {
+  id                    String   @id @default(uuid())
+  platformFeePercentage Float    @default(15)
+  minimumHours          Float    @default(5)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  tierRates       TierRate[]
+  multiplierRules MultiplierRule[]
+  travelFeeRules  TravelFeeRule[]
+}
+
+model TierRate {
+  id              String        @id @default(uuid())
+  pricingConfigId String
+  pricingConfig   PricingConfig @relation(fields: [pricingConfigId], references: [id], onDelete: Cascade)
+  role            String
+  junior          Float         @default(0)
+  standard        Float         @default(0)
+  premium         Float         @default(0)
+  elite           Float         @default(0)
+
+  @@unique([pricingConfigId, role])
+}
+
+model MultiplierRule {
+  id              String        @id @default(uuid())
+  pricingConfigId String
+  pricingConfig   PricingConfig @relation(fields: [pricingConfigId], references: [id], onDelete: Cascade)
+  name            String
+  type            String
+  percentage      Float
+  enabled         Boolean       @default(true)
+  description     String
+}
+
+model TravelFeeRule {
+  id              String        @id @default(uuid())
+  pricingConfigId String
+  pricingConfig   PricingConfig @relation(fields: [pricingConfigId], references: [id], onDelete: Cascade)
+  minMiles        Float
+  maxMiles        Float
+  fee             Float
+}
+
+// ─── Integrations ─────────────────────────────────────────────────────────────
+
+model Integration {
+  id          String    @id @default(uuid())
+  key         String    @unique // e.g. "quickbooks", "slack"
+  name        String
+  category    String // accounting | payroll | calendar | communication | storage | documents | automation
+  description String
+  isActive    Boolean   @default(false)
+  config      String? // JSON: api keys, tokens, settings (encrypted at app layer)
+  lastSyncAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+// ─── User Preferences ─────────────────────────────────────────────────────────
+model UserPreferences {
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notificationPrefs Json     @default("{}") // email/sms/push/marketing + type toggles
+  systemPrefs       Json     @default("{}") // language/timezone/currency/autoClockOut/geoLocation/twoFactor
+  updatedAt         DateTime @updatedAt
+}
+
+// ─── Company Settings ──────────────────────────────────────────────────────────
+model CompanySettings {
+  id        String   @id @default(uuid())
+  key       String   @unique @default("default")
+  data      Json     @default("{}") // company info + billing prefs
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Role Permission Configuration ────────────────────────────────────────────
+model RolePermissionConfig {
+  id          String   @id @default(uuid())
+  role        Role     @unique
+  permissions String[]
+  updatedAt   DateTime @updatedAt
+}
+
+// ─── Database Backup Logs ──────────────────────────────────────────────────────
+model BackupLog {
+  id          String   @id @default(uuid())
+  type        String // "FULL" | "INCREMENTAL"
+  status      String // "COMPLETED" | "FAILED" | "IN_PROGRESS"
+  sizeBytes   BigInt?
+  filePath    String?
+  errorMsg    String?
+  initiatedBy String? // userId of admin who triggered it, or "SYSTEM"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ─── Login Activity Log ───────────────────────────────────────────────────────
+model LoginLog {
   id        String   @id @default(uuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title     String
-  body      String
-  type      String   @default("INFO") // INFO, ALERT, MESSAGE, SHIFT, EVENT, PAYROLL, SYSTEM
-  isRead    Boolean  @default(false)
-  linkUrl   String?
-  metadata  String? // JSON string for extra context
+  success   Boolean
+  ipAddress String?
+  userAgent String?
   createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// ─── Help & Support ───────────────────────────────────────────────────────────
+
+model SupportTicket {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation("UserTickets", fields: [userId], references: [id], onDelete: Cascade)
+  subject         String
+  category        String
+  message         String
+  status          String   @default("OPEN") // OPEN, IN_PROGRESS, RESOLVED, CLOSED
+  resolutionNotes String?
+  resolvedById    String?
+  resolvedBy      User?    @relation("ResolvedTickets", fields: [resolvedById], references: [id])
+  updatedAt       DateTime @updatedAt
 }

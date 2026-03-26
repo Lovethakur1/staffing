@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useRef } from "react";
 import { io, Socket } from "socket.io-client";
 import { toast } from "sonner";
+import { useNavigation } from "./NavigationContext";
 export interface Notification {
   id: number;
   title: string;
@@ -143,6 +144,7 @@ const initialNotifications: Notification[] = [
 ];
 
 export function NotificationsProvider({ children }: { children: ReactNode }) {
+  const { setCurrentPage } = useNavigation();
   const [notifications, setNotifications] = useState<Notification[]>(initialNotifications);
   const socketRef = useRef<Socket | null>(null);
 
@@ -174,8 +176,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
           action: {
             label: "Reply",
             onClick: () => {
-              // Navigation would ideally go here, but context depends on routing logic
-              // Since this is a global context, we just show the message
+              setCurrentPage('messages', { conversationId: data.conversationId });
             }
           }
         });

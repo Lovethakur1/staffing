@@ -37,7 +37,10 @@ export const listStaff = asyncHandler(async (req: Request, res: Response) => {
       orderBy: { rating: 'desc' },
       include: {
         user: {
-          select: { id: true, name: true, email: true, phone: true, avatar: true, isActive: true },
+          select: {
+            id: true, name: true, email: true, phone: true, avatar: true, isActive: true,
+            dob: true, gender: true, address: true, city: true, state: true, zipCode: true, country: true,
+          },
         },
       },
     }),
@@ -60,6 +63,8 @@ export const getStaffProfile = asyncHandler(async (req: Request, res: Response) 
       user: {
         select: {
           id: true, name: true, email: true, phone: true, avatar: true,
+          bio: true, dob: true, gender: true,
+          address: true, city: true, state: true, zipCode: true, country: true,
           certifications: true,
           documents: true,
           shifts: { take: 10, orderBy: { date: 'desc' }, include: { event: { select: { title: true } } } },
@@ -83,6 +88,15 @@ export const updateStaffProfile = asyncHandler(async (req: AuthRequest, res: Res
   const { skills, hourlyRate, availabilityStatus, location, locationLat, locationLng,
     emergencyContact, emergencyPhone, bankAccountInfo, taxId } = req.body;
 
+  // Authorization check
+  if (!['ADMIN', 'SUB_ADMIN', 'MANAGER'].includes(req.user?.role || '')) {
+    const profile = await prisma.staffProfile.findUnique({ where: { id: req.params.id }, select: { userId: true } });
+    if (profile?.userId !== req.user?.userId) {
+      res.status(403).json({ error: 'Forbidden: Cannot update another staff member\'s profile.' });
+      return;
+    }
+  }
+
   const updated = await prisma.staffProfile.update({
     where: { id: req.params.id },
     data: {
@@ -103,6 +117,185 @@ export const updateStaffProfile = asyncHandler(async (req: AuthRequest, res: Res
   });
 
   res.json(updated);
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// Job Postings (Hiring Pipeline)
+// ═══════════════════════════════════════════════════════════════════
+
+export const listJobPostings = asyncHandler(async (req: Request, res: Response) => {
+  const { skip, take, page } = parsePagination(req.query);
+  const status = req.query.status as string | undefined;
+
+  const where: any = {};
+  if (status) where.status = status;
+
+  const [postings, total] = await Promise.all([
+    prisma.jobPosting.findMany({
+      where,
+      skip,
+      take,
+      orderBy: { postedDate: 'desc' },
+    }),
+    prisma.jobPosting.count({ where }),
+  ]);
+
+  res.json({
+    data: postings,
+    pagination: { page, limit: take, total, totalPages: Math.ceil(total / take) },
+  });
+});
+
+export const getJobPosting = asyncHandler(async (req: Request, res: Response) => {
+  const posting = await prisma.jobPosting.findUnique({
+    where: { id: req.params.id },
+  });
+
+  if (!posting) {
+    res.status(404).json({ error: 'Job Posting not found.' });
+    return;
+  }
+
+  res.json(posting);
+});
+
+export const createJobPosting = asyncHandler(async (req: Request, res: Response) => {
+  const { title, department, type, location, salaryRange, description, requirements, responsibilities, benefits } = req.body;
+
+  const posting = await prisma.jobPosting.create({
+    data: {
+      title,
+      department,
+      type,
+      location,
+      salaryRange,
+      description,
+      requirements: requirements || [],
+      responsibilities: responsibilities || [],
+      benefits: benefits || [],
+    },
+  });
+
+  res.status(201).json(posting);
+});
+
+export const updateJobPosting = asyncHandler(async (req: Request, res: Response) => {
+  const { status, title, department, type, location, salaryRange, description, requirements, responsibilities, benefits } = req.body;
+
+  const posting = await prisma.jobPosting.update({
+    where: { id: req.params.id },
+    data: {
+      ...(status && { status }),
+      ...(title && { title }),
+      ...(department && { department }),
+      ...(type && { type }),
+      ...(location && { location }),
+      ...(salaryRange && { salaryRange }),
+      ...(description && { description }),
+      ...(requirements && { requirements }),
+      ...(responsibilities && { responsibilities }),
+      ...(benefits && { benefits }),
+    },
+  });
+
+  res.json(posting);
+});
+
+export const deleteJobPosting = asyncHandler(async (req: Request, res: Response) => {
+  await prisma.jobPosting.delete({
+    where: { id: req.params.id },
+  });
+
+  res.status(204).send();
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// Assessments (Hiring Pipeline)
+// ═══════════════════════════════════════════════════════════════════
+
+export const listAssessments = asyncHandler(async (req: Request, res: Response) => {
+  const { skip, take, page } = parsePagination(req.query);
+  const status = req.query.status as string | undefined;
+
+  const where: any = {};
+  if (status) where.status = status;
+
+  const [assessments, total] = await Promise.all([
+    prisma.assessment.findMany({
+      where,
+      skip,
+      take,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        candidate: { select: { id: true, name: true, email: true } },
+      },
+    }),
+    prisma.assessment.count({ where }),
+  ]);
+
+  res.json({
+    data: assessments,
+    pagination: { page, limit: take, total, totalPages: Math.ceil(total / take) },
+  });
+});
+
+export const getAssessment = asyncHandler(async (req: Request, res: Response) => {
+  const assessment = await prisma.assessment.findUnique({
+    where: { id: req.params.id },
+    include: {
+      candidate: { select: { id: true, name: true, email: true } },
+    },
+  });
+
+  if (!assessment) {
+    res.status(404).json({ error: 'Assessment not found.' });
+    return;
+  }
+
+  res.json(assessment);
+});
+
+export const createAssessment = asyncHandler(async (req: Request, res: Response) => {
+  const { candidateId, position, type } = req.body;
+
+  const candidateInfo = await prisma.user.findUnique({ where: { id: candidateId }, select: { name: true }});
+
+  const assessment = await prisma.assessment.create({
+    data: {
+      candidateId,
+      candidateName: candidateInfo?.name || "Unknown",
+      position,
+      type,
+    },
+    include: {
+      candidate: { select: { id: true, name: true, email: true } },
+    },
+  });
+
+  res.status(201).json(assessment);
+});
+
+export const updateAssessment = asyncHandler(async (req: Request, res: Response) => {
+  const { status, overallScore, communication, teamwork, problemSolving, leadership, technical } = req.body;
+
+  const assessment = await prisma.assessment.update({
+    where: { id: req.params.id },
+    data: {
+      ...(status && { status }),
+      ...(overallScore !== undefined && { overallScore }),
+      ...(communication !== undefined && { communication }),
+      ...(teamwork !== undefined && { teamwork }),
+      ...(problemSolving !== undefined && { problemSolving }),
+      ...(leadership !== undefined && { leadership }),
+      ...(technical !== undefined && { technical }),
+      ...(status === 'completed' && { completedDate: new Date() }),
+    },
+    include: {
+      candidate: { select: { id: true, name: true, email: true } },
+    },
+  });
+
+  res.json(assessment);
 });
 
 // ═══════════════════════════════════════════════════════════════════
@@ -203,9 +396,17 @@ export const listCertifications = asyncHandler(async (req: Request, res: Respons
 export const createCertification = asyncHandler(async (req: AuthRequest, res: Response) => {
   const { staffId, name, issuer, issueDate, expiryDate, documentUrl } = req.body;
 
+  const targetStaffId = staffId || req.user!.userId;
+
+  // Authorization check
+  if (targetStaffId !== req.user!.userId && !['ADMIN', 'SUB_ADMIN', 'MANAGER'].includes(req.user?.role || '')) {
+      res.status(403).json({ error: 'Forbidden: Cannot create certification for another user.' });
+      return;
+  }
+
   const cert = await prisma.certification.create({
     data: {
-      staffId: staffId || req.user!.userId,
+      staffId: targetStaffId,
       name,
       issuer,
       issueDate: issueDate ? new Date(issueDate) : undefined,
@@ -313,6 +514,36 @@ export const updateInterview = asyncHandler(async (req: Request, res: Response) 
 // ═══════════════════════════════════════════════════════════════════
 
 /**
+ * GET /api/staff/hr/documents?category=CONTRACT
+ * Admin: list all documents, optionally filtered by category.
+ */
+export const listAllDocuments = asyncHandler(async (req: Request, res: Response) => {
+  const { skip, take, page } = parsePagination(req.query);
+  const category = req.query.category as string | undefined;
+
+  const where: any = {};
+  if (category) where.category = category;
+
+  const [docs, total] = await Promise.all([
+    prisma.document.findMany({
+      where,
+      skip,
+      take,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+      },
+    }),
+    prisma.document.count({ where }),
+  ]);
+
+  res.json({
+    data: docs,
+    pagination: { page, limit: take, total, totalPages: Math.ceil(total / take) },
+  });
+});
+
+/**
  * GET /api/staff/:userId/documents
  */
 export const listDocuments = asyncHandler(async (req: Request, res: Response) => {
@@ -380,7 +611,11 @@ export const getStaffDashboard = asyncHandler(async (req: AuthRequest, res: Resp
     where: { userId },
     include: {
       user: {
-        select: { id: true, name: true, email: true, phone: true, avatar: true },
+        select: {
+          id: true, name: true, email: true, phone: true, avatar: true,
+          bio: true, dob: true, gender: true,
+          address: true, city: true, state: true, zipCode: true, country: true,
+        },
       },
     },
   });

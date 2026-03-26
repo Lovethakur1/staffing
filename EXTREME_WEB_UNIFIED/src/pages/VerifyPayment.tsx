@@ -35,7 +35,7 @@ import {
 } from "lucide-react";
 import { useNavigation } from "../contexts/NavigationContext";
 import { DataTablePagination } from "../components/DataTablePagination";
-import api from "../services/api";
+import { invoiceService } from "../services/invoice.service";
 
 interface PageProps {
   userRole: string;
@@ -58,9 +58,26 @@ export function VerifyPayment({ userRole, userId }: PageProps) {
   useEffect(() => {
     const fetchPayments = async () => {
       try {
-        const res = await api.get("/payments/submissions");
-        setPaymentSubmissions(res.data);
-      } catch { /* endpoint may not exist yet */ }
+        const invoices = await invoiceService.getInvoices({ take: 500 });
+        const mapped = invoices.map((inv: any) => ({
+          id: inv.id,
+          reference: inv.invoiceNumber || inv.id,
+          clientName: inv.client?.name || inv.client?.user?.name || '',
+          clientEmail: inv.client?.email || inv.client?.user?.email || '',
+          eventName: inv.event?.title || '',
+          eventDate: inv.event?.date || inv.dueDate || inv.createdAt,
+          amount: inv.amount || 0,
+          paymentType: 'Invoice Payment',
+          submittedDate: inv.paidDate || inv.updatedAt || inv.createdAt,
+          submittedTime: new Date(inv.paidDate || inv.updatedAt || inv.createdAt).toLocaleTimeString(),
+          paymentMethod: inv.stripeId ? 'Credit Card' : 'Bank Transfer',
+          attachments: 0,
+          status: inv.status === 'PAID' ? 'approved'
+               : inv.status === 'CANCELLED' ? 'rejected'
+               : 'pending',
+        }));
+        setPaymentSubmissions(mapped);
+      } catch { /* failed to fetch invoices */ }
     };
     fetchPayments();
   }, []);
@@ -414,7 +431,7 @@ export function VerifyPayment({ userRole, userId }: PageProps) {
                     paginatedData.map((payment) => (
                       <TableRow key={payment.id} className="hover:bg-slate-50">
                         <TableCell>
-                          <div className="font-medium">{payment.id}</div>
+                          <div className="font-medium">{payment.reference}</div>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">

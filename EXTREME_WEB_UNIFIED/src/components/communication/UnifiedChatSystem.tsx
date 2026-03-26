@@ -91,8 +91,10 @@ export function UnifiedChatSystem({ userRole, userId, userName, initialConversat
   const [isMobileView, setIsMobileView] = useState(false);
   const [showConversationList, setShowConversationList] = useState(true);
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [searchResults, setSearchResults] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [loadingConversations, setLoadingConversations] = useState(true);
+  const [isSearching, setIsSearching] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sending, setSending] = useState(false);
 
@@ -183,6 +185,42 @@ export function UnifiedChatSystem({ userRole, userId, userName, initialConversat
     scrollToBottom();
   }, [selectedConversation, messages]);
 
+  // Handle global user search
+  useEffect(() => {
+    if (searchQuery.trim().length < 2) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+
+    setIsSearching(true);
+    const timeoutId = setTimeout(async () => {
+      try {
+        const users = await chatService.searchUsers(searchQuery);
+        const mappedResults: Conversation[] = users.map((u: any) => ({
+          id: `new_user_${u.id}`,
+          participantId: u.id,
+          participantName: u.name,
+          participantRole: u.role.toLowerCase(),
+          participantEmail: u.email,
+          lastMessage: 'Click to start chatting',
+          lastMessageTime: new Date(),
+          unreadCount: 0,
+          online: u.isActive,
+          isGroup: false,
+          participantCount: 2
+        }));
+        setSearchResults(mappedResults);
+      } catch (e) {
+        console.error('Search failed', e);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 400);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery]);
+
   // Fetch conversations on mount
   useEffect(() => {
     const fetchConversations = async () => {
@@ -266,11 +304,45 @@ export function UnifiedChatSystem({ userRole, userId, userName, initialConversat
 
     // Leave previous conversation room when switching
     return () => {
-      if (selectedConversation) {
+      if (selectedConversation && !selectedConversation.id.startsWith('new_user_')) {
         socketRef.current?.emit('leave:conversation', selectedConversation.id);
       }
     };
   }, [selectedConversation, fetchMessages, isMobileView]);
+
+  const handleConversationSelect = async (conv: Conversation) => {
+    if (conv.id.startsWith('new_user_')) {
+      try {
+        const newConv = await chatService.createConversation({
+          participantIds: [conv.participantId],
+          isGroup: false
+        });
+        
+        const mappedConv: Conversation = {
+           id: newConv.id,
+           participantId: conv.participantId,
+           participantName: conv.participantName,
+           participantRole: conv.participantRole,
+           participantEmail: conv.participantEmail,
+           lastMessage: 'No messages yet',
+           lastMessageTime: new Date(),
+           unreadCount: 0,
+           online: false,
+           isGroup: false,
+           participantCount: 2
+        };
+        
+        setConversations(prev => [mappedConv, ...prev.filter(c => c.participantId !== conv.participantId)]);
+        setSearchResults([]);
+        setSearchQuery('');
+        setSelectedConversation(mappedConv);
+      } catch (e) {
+        toast.error('Failed to start conversation');
+      }
+    } else {
+      setSelectedConversation(conv);
+    }
+  };
 
   const handleSendMessage = async () => {
     if (!messageInput.trim() || !selectedConversation || sending) return;
@@ -392,6 +464,15 @@ export function UnifiedChatSystem({ userRole, userId, userName, initialConversat
     return b.lastMessageTime.getTime() - a.lastMessageTime.getTime();
   });
 
+  const displayConversations = [...sortedConversations];
+  if (searchResults.length > 0) {
+     const existingParticipantIds = new Set(conversations.map(c => c.participantId));
+     const newResults = searchResults.filter(r => !existingParticipantIds.has(r.participantId));
+     if (newResults.length > 0) {
+       displayConversations.push(...newResults);
+     }
+  }
+
   const totalUnread = conversations.reduce((sum, conv) => sum + conv.unreadCount, 0);
 
   const handleBackToList = () => {
@@ -489,7 +570,12 @@ export function UnifiedChatSystem({ userRole, userId, userName, initialConversat
 
           {/* SCROLLABLE Conversation Items */}
           <div className="flex-1 overflow-y-auto min-h-0 scrollbar-thin">
-            {sortedConversations.length === 0 ? (
+            {isSearching ? (
+              <div className="flex flex-col items-center justify-center p-6 space-y-3">
+                 <div className="h-6 w-6 border-b-2 border-primary rounded-full animate-spin"></div>
+                 <p className="text-sm text-muted-foreground">Searching users...</p>
+              </div>
+            ) : displayConversations.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center p-6">
                 <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
                   <Search className="w-8 h-8 text-muted-foreground" />
@@ -498,10 +584,10 @@ export function UnifiedChatSystem({ userRole, userId, userName, initialConversat
                 <p className="text-xs text-muted-foreground">Try adjusting your search or filters</p>
               </div>
             ) : (
-              sortedConversations.map((conv) => (
+              displayConversations.map((conv) => (
                 <button
                   key={conv.id}
-                  onClick={() => setSelectedConversation(conv)}
+                  onClick={() => handleConversationSelect(conv)}
                   className={cn(
                     "w-full p-4 flex items-start gap-3 hover:bg-muted/70 transition-all border-b text-left relative group",
                     selectedConversation?.id === conv.id && "bg-muted/80"

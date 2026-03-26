@@ -4,8 +4,10 @@ import {
   listApplications, createApplication, updateApplication,
   listCertifications, createCertification, verifyCertification,
   listInterviews, createInterview, updateInterview,
-  listDocuments, createDocument, updateDocument,
+  listAllDocuments, listDocuments, createDocument, updateDocument,
   getStaffDashboard, getMyPayroll,
+  listJobPostings, getJobPosting, createJobPosting, updateJobPosting, deleteJobPosting,
+  listAssessments, getAssessment, createAssessment, updateAssessment
 } from '../controllers/staff.controller';
 import { authenticate } from '../middleware/auth';
 import { authorize } from '../middleware/rbac';
@@ -24,7 +26,7 @@ router.put('/:id', updateStaffProfile);
 
 // Applications
 router.get('/hr/applications', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER'), listApplications);
-router.post('/hr/applications', createApplication);
+router.post('/hr/applications', authorize('STAFF'), createApplication);
 router.put('/hr/applications/:id', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER'), updateApplication);
 
 // Certifications
@@ -38,8 +40,22 @@ router.post('/hr/interviews', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER'), create
 router.put('/hr/interviews/:id', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER'), updateInterview);
 
 // Documents
+router.get('/hr/documents', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER'), listAllDocuments);
 router.get('/:userId/documents', listDocuments);
 router.post('/documents', createDocument);
 router.put('/documents/:id', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER'), updateDocument);
+
+// Job Postings
+router.get('/hr/jobs', listJobPostings);
+router.get('/hr/jobs/:id', getJobPosting);
+router.post('/hr/jobs', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER'), createJobPosting);
+router.put('/hr/jobs/:id', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER'), updateJobPosting);
+router.delete('/hr/jobs/:id', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER'), deleteJobPosting);
+
+// Assessments
+router.get('/hr/assessments', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER'), listAssessments);
+router.get('/hr/assessments/:id', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER'), getAssessment);
+router.post('/hr/assessments', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER'), createAssessment);
+router.put('/hr/assessments/:id', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER'), updateAssessment);
 
 export default router;

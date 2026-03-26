@@ -80,6 +80,9 @@ export function StaffDashboard({ staffId }: StaffDashboardProps) {
   const [workTimer, setWorkTimer] = useState(0);
   const [showShiftDetails, setShowShiftDetails] = useState(false);
   const [showCheckOutModal, setShowCheckOutModal] = useState(false);
+  
+  // Overdue Shift Warning State
+  const [showOverdueWarning, setShowOverdueWarning] = useState(false);
 
   // Fetch dashboard data from API
   const fetchDashboard = useCallback(async (showLoading = true) => {
@@ -141,6 +144,27 @@ export function StaffDashboard({ staffId }: StaffDashboardProps) {
     }
     return () => clearInterval(interval);
   }, [shiftStatus]);
+
+  // Overdue Shift Warning Logic
+  useEffect(() => {
+    if (activeShift && shiftStatus === 'working' && activeShift.endTime && activeShift.date) {
+        const checkOverdue = () => {
+           const [h, m] = activeShift.endTime.split(':').map(Number);
+           const shiftEnd = new Date(activeShift.date);
+           shiftEnd.setHours(h, m, 0, 0);
+           const now = new Date();
+           if (now > shiftEnd) {
+              setShowOverdueWarning(true);
+           } else {
+              setShowOverdueWarning(false);
+           }
+        };
+        checkOverdue();
+        const int = setInterval(checkOverdue, 60000);
+        return () => clearInterval(int);
+    }
+    setShowOverdueWarning(false);
+  }, [activeShift, shiftStatus]);
 
   const formatTime = (seconds: number) => {
     const h = Math.floor(seconds / 3600);
@@ -280,6 +304,20 @@ export function StaffDashboard({ staffId }: StaffDashboardProps) {
           </Button>
         </div>
       </div>
+
+      {showOverdueWarning && (
+        <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-md shadow-sm flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 text-red-500 mt-0.5" />
+          <div>
+            <h3 className="text-sm font-semibold text-red-800">Shift Ended - Please Clock Out</h3>
+            <p className="text-sm text-red-700 mt-1">
+              Your scheduled shift time has ended. Please clock out now to ensure accurate timesheets. 
+              If you remain clocked in for more than 2 hours past your scheduled end time, the system will automatically 
+              clock you out at your scheduled end time.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

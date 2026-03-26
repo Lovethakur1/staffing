@@ -47,7 +47,7 @@ export function Favorites({ userRole, userId }: FavoritesProps) {
         const staffArr = Array.isArray(staffRaw) ? staffRaw : (staffRaw?.data || []);
         if (staffArr.length > 0) {
           setAllStaff(staffArr.map((s: any) => ({
-            id: s.id,
+            id: s.userId || s.user?.id || s.id,
             name: s.name || s.user?.name || 'Staff',
             email: s.email || s.user?.email || '',
             phone: s.phone || s.user?.phone || '',
@@ -84,14 +84,16 @@ export function Favorites({ userRole, userId }: FavoritesProps) {
 
   // Filter staff to show only high-rated ones (favorites are typically 4.5+ rating)
   // and those the client has worked with or marked as favorite
-  const favoriteStaff = allStaff.filter(staff =>
+  const displayedStaff = allStaff.filter(staff =>
     staff.rating >= 4.5 || workedWithStaffIds.includes(staff.id) || favoriteIds.includes(staff.id)
   );
 
+  const actualFavorites = allStaff.filter(staff => favoriteIds.includes(staff.id));
+
   // Filter staff based on search and filters
-  const filteredStaff = favoriteStaff.filter(staff => {
+  const filteredStaff = displayedStaff.filter(staff => {
     const matchesSearch = staff.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      staff.skills.some(skill => skill.toLowerCase().includes(searchTerm.toLowerCase()));
+      staff.skills.some((skill: string) => skill.toLowerCase().includes(searchTerm.toLowerCase()));
 
     const matchesSkill = skillFilter === "all" || staff.skills.includes(skillFilter);
 
@@ -104,7 +106,7 @@ export function Favorites({ userRole, userId }: FavoritesProps) {
   });
 
   // Get unique skills for filter dropdown
-  const allSkills = [...new Set(favoriteStaff.flatMap(staff => staff.skills))];
+  const allSkills = [...new Set(displayedStaff.flatMap(staff => staff.skills))];
 
   const getWorkedWithCount = (staffId: string) => {
     return clientEvents.filter(event => event.assignedStaff.includes(staffId)).length;
@@ -124,6 +126,24 @@ export function Favorites({ userRole, userId }: FavoritesProps) {
       </div>
     );
   }
+
+  const handleAddToFavorites = async (staffId: string) => {
+    try {
+      await api.post('/clients/favorites', { staffId });
+      setFavoriteIds(prev => [...prev, staffId]);
+    } catch (err) {
+      console.error('Failed to add to favorites:', err);
+    }
+  };
+
+  const handleRemoveFromFavorites = async (staffId: string) => {
+    try {
+      await api.delete(`/clients/favorites/${staffId}`);
+      setFavoriteIds(prev => prev.filter(id => id !== staffId));
+    } catch (err) {
+      console.error('Failed to remove from favorites:', err);
+    }
+  };
 
   if (error) {
     return (
@@ -172,7 +192,7 @@ export function Favorites({ userRole, userId }: FavoritesProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Favorite Staff</p>
-                <p className="text-2xl font-bold">{favoriteStaff.length}</p>
+                <p className="text-2xl font-bold">{favoriteIds.length}</p>
               </div>
               <Heart className="h-8 w-8 text-red-500" />
             </div>
@@ -197,8 +217,8 @@ export function Favorites({ userRole, userId }: FavoritesProps) {
               <div>
                 <p className="text-sm text-muted-foreground">Avg Rating</p>
                 <p className="text-2xl font-bold text-yellow-600">
-                  {favoriteStaff.length > 0 ?
-                    (favoriteStaff.reduce((sum, staff) => sum + staff.rating, 0) / favoriteStaff.length).toFixed(1)
+                  {actualFavorites.length > 0 ?
+                    (actualFavorites.reduce((sum, staff) => sum + staff.rating, 0) / actualFavorites.length).toFixed(1)
                     : '0'}
                 </p>
               </div>
@@ -213,7 +233,7 @@ export function Favorites({ userRole, userId }: FavoritesProps) {
               <div>
                 <p className="text-sm text-muted-foreground">Total Events</p>
                 <p className="text-2xl font-bold text-primary">
-                  {favoriteStaff.reduce((sum, staff) => sum + getWorkedWithCount(staff.id), 0)}
+                  {actualFavorites.reduce((sum, staff) => sum + getWorkedWithCount(staff.id), 0)}
                 </p>
               </div>
               <TrendingUp className="h-8 w-8 text-primary" />
@@ -316,7 +336,7 @@ export function Favorites({ userRole, userId }: FavoritesProps) {
                 {/* Skills */}
                 <div className="mb-4">
                   <div className="flex flex-wrap gap-1">
-                    {staff.skills.slice(0, 3).map((skill) => (
+                    {staff.skills.slice(0, 3).map((skill: string) => (
                       <Badge key={skill} variant="secondary" className="text-xs">
                         {skill}
                       </Badge>
@@ -345,35 +365,25 @@ export function Favorites({ userRole, userId }: FavoritesProps) {
 
                 {/* Contact & Actions */}
                 <div className="space-y-2">
-                  <div className="flex gap-2">
-                    <Button size="sm" className="flex-1">
-                      <Calendar className="mr-2 h-4 w-4" />
-                      Book Again
-                    </Button>
-                    <Button size="sm" variant="outline" className="flex-1">
-                      View Profile
-                    </Button>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="outline" className="flex-1">
-                      <MessageSquare className="mr-2 h-4 w-4" />
-                      Message
-                    </Button>
-                    <Button size="sm" variant="outline" className="flex-1">
-                      <Phone className="mr-2 h-4 w-4" />
-                      Call
-                    </Button>
-                  </div>
-
-                  {!isStaffWorkedWith(staff.id) && (
+                  {!favoriteIds.includes(staff.id) ? (
                     <Button
                       size="sm"
                       variant="outline"
                       className="w-full text-red-500 border-red-200 hover:bg-red-50"
+                      onClick={() => handleAddToFavorites(staff.id)}
                     >
                       <Heart className="mr-2 h-4 w-4" />
                       Add to Favorites
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full text-gray-500 border-gray-200 hover:bg-gray-50"
+                      onClick={() => handleRemoveFromFavorites(staff.id)}
+                    >
+                      <Heart className="mr-2 h-4 w-4 fill-red-500 text-red-500" />
+                      Remove from Favorites
                     </Button>
                   )}
                 </div>

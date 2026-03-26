@@ -87,7 +87,7 @@ interface WorkforceProps {
 }
 
 export function Workforce({ userRole = 'admin', userId }: WorkforceProps) {
-  const { setCurrentPage } = useNavigation();
+  const { setCurrentPage, pageParams } = useNavigation();
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
   
   // Sub-Admin can't see financial data
@@ -98,7 +98,8 @@ export function Workforce({ userRole = 'admin', userId }: WorkforceProps) {
     const fetchStaff = async () => {
       try {
         const res = await staffService.getStaffList();
-        const mapped: StaffMember[] = res.map((s: any) => ({
+        const staffData = Array.isArray(res) ? res : (res?.data || []);
+        const mapped: StaffMember[] = staffData.map((s: any) => ({
           id: s.id,
           name: s.user?.name || s.name || 'Staff',
           email: s.user?.email || s.email || '',
@@ -133,12 +134,20 @@ export function Workforce({ userRole = 'admin', userId }: WorkforceProps) {
   const [showRatingDialog, setShowRatingDialog] = useState(false);
   const [selectedStaff, setSelectedStaff] = useState<StaffMember | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Auto-open Add Staff Dialog if passed in params
+  useEffect(() => {
+    if (pageParams?.showAddDialog) {
+      setShowAddStaffDialog(true);
+    }
+  }, [pageParams]);
   
   // New staff form state
   const [newStaffForm, setNewStaffForm] = useState({
     name: "",
     email: "",
     phone: "",
+    password: "",
     role: "",
     location: "",
     hourlyRate: "",
@@ -213,6 +222,7 @@ export function Workforce({ userRole = 'admin', userId }: WorkforceProps) {
         name: newStaffForm.name,
         email: newStaffForm.email,
         phone: newStaffForm.phone,
+        password: newStaffForm.password || undefined,
         role: newStaffForm.role,
         location: newStaffForm.location,
         hourlyRate: newStaffForm.hourlyRate ? parseFloat(newStaffForm.hourlyRate) : undefined,
@@ -254,6 +264,7 @@ export function Workforce({ userRole = 'admin', userId }: WorkforceProps) {
         name: "",
         email: "",
         phone: "",
+        password: "",
         role: "",
         location: "",
         hourlyRate: "",
@@ -976,22 +987,31 @@ export function Workforce({ userRole = 'admin', userId }: WorkforceProps) {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Role *</Label>
-                <Select 
-                  value={newStaffForm.role}
-                  onValueChange={(value) => setNewStaffForm(prev => ({ ...prev, role: value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Event Server">Event Server</SelectItem>
-                    <SelectItem value="Bartender">Bartender</SelectItem>
-                    <SelectItem value="Event Coordinator">Event Coordinator</SelectItem>
-                    <SelectItem value="Catering Manager">Catering Manager</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label>Initial Password</Label>
+                <Input 
+                  type="text"
+                  placeholder="Defaults to TempPassword123!" 
+                  value={newStaffForm.password}
+                  onChange={(e) => setNewStaffForm(prev => ({ ...prev, password: e.target.value }))}
+                />
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Role *</Label>
+              <Select 
+                value={newStaffForm.role}
+                onValueChange={(value) => setNewStaffForm(prev => ({ ...prev, role: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select role" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Event Server">Event Server</SelectItem>
+                  <SelectItem value="Bartender">Bartender</SelectItem>
+                  <SelectItem value="Event Coordinator">Event Coordinator</SelectItem>
+                  <SelectItem value="Catering Manager">Catering Manager</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className={`grid ${canViewFinancialData ? 'grid-cols-2' : 'grid-cols-1'} gap-4`}>
               <div className="space-y-2">

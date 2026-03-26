@@ -136,7 +136,7 @@ export function SimplifiedClientDashboard({ clientId }: SimplifiedClientDashboar
 
   // Event categorization
   const today = new Date();
-  const todayDateString = today.toISOString().split('T')[0];
+  const todayDateString = format(today, 'yyyy-MM-dd');
 
   const ongoingEvents = clientEvents.filter((event: any) => {
     const status = (event.status || '').toUpperCase();

@@ -6,6 +6,7 @@ import { env } from './config/env';
 import apiRoutes from './routes';
 import { errorHandler } from './middleware/errorHandler';
 import { initializeSocket } from './services/socket.service';
+import { startCronJobs } from './jobs/cron';
 
 const app = express();
 const httpServer = createServer(app);
@@ -48,6 +49,9 @@ httpServer.listen(env.PORT, () => {
   console.log(`   Environment: ${env.NODE_ENV}`);
   console.log(`   Health: http://localhost:${env.PORT}/health`);
   console.log(`   API:    http://localhost:${env.PORT}/api\n`);
+  
+  // Start background cron jobs
+  startCronJobs();
 });
 
 export default app;

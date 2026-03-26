@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -44,7 +44,7 @@ import {
 } from "lucide-react";
 import { useNavigation } from "../contexts/NavigationContext";
 import { toast } from "sonner";
-
+import { pricingService } from "../services/pricing.service";
 interface PricingConfigurationProps {
   userRole: string;
   userId: string;
@@ -119,6 +119,7 @@ const mockTravelFeeRules: TravelFeeRule[] = [
 
 export function PricingConfiguration({ userRole, userId }: PricingConfigurationProps) {
   const { setCurrentPage } = useNavigation();
+  const [configId, setConfigId] = useState<string | null>(null);
   const [tierRates, setTierRates] = useState<TierRate[]>(mockTierRates);
   const [multiplierRules, setMultiplierRules] = useState<MultiplierRule[]>(mockMultiplierRules);
   const [travelFeeRules, setTravelFeeRules] = useState<TravelFeeRule[]>(mockTravelFeeRules);
@@ -128,6 +129,7 @@ export function PricingConfiguration({ userRole, userId }: PricingConfigurationP
   // Edit mode state - SINGLE BUTTON CONTROL
   const [isEditMode, setIsEditMode] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Store original values for cancel functionality
   const [originalValues, setOriginalValues] = useState({
@@ -137,6 +139,44 @@ export function PricingConfiguration({ userRole, userId }: PricingConfigurationP
     platformFeePercentage: 15,
     minimumHours: 5
   });
+
+  useEffect(() => {
+    fetchPricingConfig();
+  }, []);
+
+  const fetchPricingConfig = async () => {
+    try {
+      setIsLoading(true);
+      const data = await pricingService.getPricingConfig();
+      if (data) {
+        setConfigId(data.id);
+        
+        // Use database values if available, otherwise fallback to defaults
+        const fetchedTierRates = data.tierRates?.length > 0 ? data.tierRates : mockTierRates;
+        const fetchedMultiplierRules = data.multiplierRules?.length > 0 ? data.multiplierRules : mockMultiplierRules;
+        const fetchedTravelFeeRules = data.travelFeeRules?.length > 0 ? data.travelFeeRules : mockTravelFeeRules;
+
+        setTierRates(fetchedTierRates);
+        setMultiplierRules(fetchedMultiplierRules);
+        setTravelFeeRules(fetchedTravelFeeRules);
+        setPlatformFeePercentage(data.platformFeePercentage ?? 15);
+        setMinimumHours(data.minimumHours ?? 5);
+
+        setOriginalValues({
+          tierRates: fetchedTierRates,
+          multiplierRules: fetchedMultiplierRules,
+          travelFeeRules: fetchedTravelFeeRules,
+          platformFeePercentage: data.platformFeePercentage ?? 15,
+          minimumHours: data.minimumHours ?? 5
+        });
+      }
+    } catch (error) {
+      console.error("Failed to fetch pricing config:", error);
+      toast.error("Failed to load pricing configuration");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleEnterEditMode = () => {
     // Save current state before editing
@@ -196,19 +236,36 @@ export function PricingConfiguration({ userRole, userId }: PricingConfigurationP
     setHasUnsavedChanges(true);
   };
 
-  const handleSaveConfiguration = () => {
-    // Simulate API call to save configuration
-    setOriginalValues({
-      tierRates: [...tierRates],
-      multiplierRules: [...multiplierRules],
-      travelFeeRules: [...travelFeeRules],
-      platformFeePercentage,
-      minimumHours
-    });
+  const handleSaveConfiguration = async () => {
+    if (!configId) {
+      toast.error("Configuration ID missing. Cannot save.");
+      return;
+    }
     
-    setIsEditMode(false);
-    setHasUnsavedChanges(false);
-    toast.success("Pricing configuration saved successfully!");
+    try {
+      await pricingService.updatePricingConfig(configId, {
+        platformFeePercentage,
+        minimumHours,
+        tierRates,
+        multiplierRules,
+        travelFeeRules
+      });
+      
+      setOriginalValues({
+        tierRates: [...tierRates],
+        multiplierRules: [...multiplierRules],
+        travelFeeRules: [...travelFeeRules],
+        platformFeePercentage,
+        minimumHours
+      });
+      
+      setIsEditMode(false);
+      setHasUnsavedChanges(false);
+      toast.success("Pricing configuration saved successfully!");
+    } catch (error) {
+      console.error("Error saving pricing config:", error);
+      toast.error("Failed to save pricing configuration");
+    }
   };
 
   const handleResetToDefaults = () => {
@@ -244,6 +301,14 @@ export function PricingConfiguration({ userRole, userId }: PricingConfigurationP
   };
 
   const sampleCost = calculateSampleCost();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#5E1916]"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

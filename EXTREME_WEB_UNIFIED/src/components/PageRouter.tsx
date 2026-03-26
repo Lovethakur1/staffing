@@ -90,8 +90,16 @@ import { EventManagementGuide } from "../pages/docs/EventManagementGuide";
 import { PayrollProcessingGuide } from "../pages/docs/PayrollProcessingGuide";
 import { PrivacyPolicy } from "../pages/docs/PrivacyPolicy";
 import { TermsOfService } from "../pages/docs/TermsOfService";
+import { StaffWorkforceGuide } from "../pages/docs/StaffWorkforceGuide";
+import { SchedulingDispatchGuide } from "../pages/docs/SchedulingDispatchGuide";
+import { FinancialManagementGuide } from "../pages/docs/FinancialManagementGuide";
+import { SystemSettingsGuide } from "../pages/docs/SystemSettingsGuide";
+import { SecurityPermissionsGuide } from "../pages/docs/SecurityPermissionsGuide";
+import { SecurityPolicy } from "../pages/docs/SecurityPolicy";
+import { DataProcessingAgreement } from "../pages/docs/DataProcessingAgreement";
 import { RolesPermissions } from "../pages/RolesPermissions";
 import { SchedulingDispatch } from "../pages/SchedulingDispatch";
+import { StaffTracker } from "../pages/StaffTracker";
 
 interface PageRouterProps {
   userRole: string;
@@ -216,6 +224,8 @@ export function PageRouter({ userRole, userId }: PageRouterProps) {
       case 'live-ops':
       case 'live-operations':
         return <LiveOperations />;
+      case 'staff-tracker':
+        return <StaffTracker />;
       case 'manager-event-detail':
         return <ManagerEventDetail userRole={userRole} userId={userId} eventId={pageParams?.eventId} />;
       case 'manager-event-attendance-detail':
@@ -305,6 +315,20 @@ export function PageRouter({ userRole, userId }: PageRouterProps) {
         return <PrivacyPolicy onNavigate={setCurrentPage} userRole={userRole} />;
       case 'terms-of-service':
         return <TermsOfService onNavigate={setCurrentPage} userRole={userRole} />;
+      case 'staff-workforce-guide':
+        return <StaffWorkforceGuide onNavigate={setCurrentPage} userRole={userRole} />;
+      case 'scheduling-dispatch-guide':
+        return <SchedulingDispatchGuide onNavigate={setCurrentPage} userRole={userRole} />;
+      case 'financial-management-guide':
+        return <FinancialManagementGuide onNavigate={setCurrentPage} userRole={userRole} />;
+      case 'system-settings-guide':
+        return <SystemSettingsGuide onNavigate={setCurrentPage} userRole={userRole} />;
+      case 'security-permissions-guide':
+        return <SecurityPermissionsGuide onNavigate={setCurrentPage} userRole={userRole} />;
+      case 'security-policy':
+        return <SecurityPolicy onNavigate={setCurrentPage} userRole={userRole} />;
+      case 'data-processing-agreement':
+        return <DataProcessingAgreement onNavigate={setCurrentPage} userRole={userRole} />;
       case 'roles-permissions':
         return <RolesPermissions userRole={userRole} userId={userId} />;
       case 'sub-admin':

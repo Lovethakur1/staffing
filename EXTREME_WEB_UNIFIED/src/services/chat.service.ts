@@ -8,6 +8,12 @@ export const chatService = {
         return Array.isArray(data) ? data : (data?.data || data?.conversations || []);
     },
 
+    // Search users for new conversations
+    searchUsers: async (query: string) => {
+        const response = await api.get(`/chat/users/search`, { params: { q: query } });
+        return response.data || [];
+    },
+
     // Get messages for a specific conversation
     getMessages: async (conversationId: string, params?: { skip?: number; take?: number }) => {
         const response = await api.get(`/chat/conversations/${conversationId}/messages`, { params });

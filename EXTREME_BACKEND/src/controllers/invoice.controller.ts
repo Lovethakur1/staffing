@@ -19,7 +19,11 @@ export const listInvoices = asyncHandler(async (req: AuthRequest, res: Response)
       where: { userId: req.user.userId },
       select: { id: true },
     });
-    if (clientProfile) where.clientId = clientProfile.id;
+    if (clientProfile) {
+      where.clientId = clientProfile.id;
+    } else {
+      where.clientId = 'NO_PROFILE'; // Prevent leaking all invoices
+    }
   } else if (clientId) {
     where.clientId = clientId;
   }

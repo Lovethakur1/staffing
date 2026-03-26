@@ -94,6 +94,13 @@ interface StaffMember {
     filingStatus: string;
     allowances: number;
   };
+  // Demographic fields
+  dob: string;
+  gender: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  country: string;
   recentEvents: Array<{
     id: string;
     name: string;
@@ -162,7 +169,14 @@ export function StaffDetail({ userRole, userId, staffId }: StaffDetailProps) {
           } : { name: '', relationship: '', phone: '' },
           bankInfo: s.bankAccountInfo || { accountHolder: '', lastFourDigits: '', routingNumber: '' },
           taxInfo: s.taxId ? { ssn: s.taxId, filingStatus: 'Single', allowances: 0 } : { ssn: '', filingStatus: 'Single', allowances: 0 },
-          recentEvents: [], // Would normally come from API expanded relations
+          // Demographic fields from user object
+          dob: s.user?.dob ? s.user.dob.split('T')[0] : '',
+          gender: s.user?.gender || '',
+          city: s.user?.city || '',
+          state: s.user?.state || '',
+          zipCode: s.user?.zipCode || '',
+          country: s.user?.country || '',
+          recentEvents: [],
           payHistory: [],
           notes: s.notes || ''
         };
@@ -193,6 +207,7 @@ export function StaffDetail({ userRole, userId, staffId }: StaffDetailProps) {
   const handleSaveProfile = async () => {
     if (!staff || !formData) return;
     try {
+      // Update staff profile fields
       await staffService.updateStaffProfile(staff.id, {
         hourlyRate: formData.hourlyRate,
         availabilityStatus: formData.status,
@@ -200,6 +215,24 @@ export function StaffDetail({ userRole, userId, staffId }: StaffDetailProps) {
         emergencyContact: formData.emergencyContact?.name,
         emergencyPhone: formData.emergencyContact?.phone,
       });
+
+      // Also update user-level fields (name, phone, dob, gender, city, state, zipCode, country)
+      const userRes = await staffService.getStaffProfile(staff.id);
+      if (userRes?.user?.id) {
+        await import('../services/api').then(({ default: api }) =>
+          api.put(`/users/${userRes.user.id}`, {
+            name: formData.name,
+            phone: formData.phone,
+            dob: formData.dob || null,
+            gender: formData.gender || null,
+            city: formData.city || null,
+            state: formData.state || null,
+            zipCode: formData.zipCode || null,
+            country: formData.country || null,
+          })
+        );
+      }
+
       setStaff(formData);
       setIsEditing(false);
       toast.success("Profile updated successfully!");
@@ -207,6 +240,7 @@ export function StaffDetail({ userRole, userId, staffId }: StaffDetailProps) {
       toast.error("Failed to update profile");
     }
   };
+
 
   const handleCancelEdit = () => {
     setFormData(staff);
@@ -522,6 +556,83 @@ export function StaffDetail({ userRole, userId, staffId }: StaffDetailProps) {
                       <span>{staff.location}</span>
                     </div>
                   )}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label className="text-sm text-muted-foreground">Date of Birth</Label>
+                    {isEditing ? (
+                      <Input
+                        type="date"
+                        value={formData.dob}
+                        onChange={(e) => updateField('dob', e.target.value)}
+                      />
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        <span>{staff.dob ? new Date(staff.dob).toLocaleDateString() : '—'}</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm text-muted-foreground">Gender</Label>
+                    {isEditing ? (
+                      <Input
+                        value={formData.gender}
+                        onChange={(e) => updateField('gender', e.target.value)}
+                        placeholder="e.g. Male, Female"
+                      />
+                    ) : (
+                      <span className="text-sm">{staff.gender || '—'}</span>
+                    )}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label className="text-sm text-muted-foreground">City</Label>
+                    {isEditing ? (
+                      <Input
+                        value={formData.city}
+                        onChange={(e) => updateField('city', e.target.value)}
+                      />
+                    ) : (
+                      <span className="text-sm">{staff.city || '—'}</span>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm text-muted-foreground">State</Label>
+                    {isEditing ? (
+                      <Input
+                        value={formData.state}
+                        onChange={(e) => updateField('state', e.target.value)}
+                      />
+                    ) : (
+                      <span className="text-sm">{staff.state || '—'}</span>
+                    )}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label className="text-sm text-muted-foreground">Zip Code</Label>
+                    {isEditing ? (
+                      <Input
+                        value={formData.zipCode}
+                        onChange={(e) => updateField('zipCode', e.target.value)}
+                      />
+                    ) : (
+                      <span className="text-sm">{staff.zipCode || '—'}</span>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm text-muted-foreground">Country</Label>
+                    {isEditing ? (
+                      <Input
+                        value={formData.country}
+                        onChange={(e) => updateField('country', e.target.value)}
+                      />
+                    ) : (
+                      <span className="text-sm">{staff.country || '—'}</span>
+                    )}
+                  </div>
                 </div>
               </CardContent>
             </Card>

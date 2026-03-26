@@ -28,6 +28,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigation } from "../contexts/NavigationContext";
+import { staffService } from "../services/staff.service";
+import { useEffect } from "react";
 
 interface PageProps {
   userRole: string;
@@ -53,160 +55,30 @@ interface JobPosting {
 
 export function Careers({ userRole, userId }: PageProps) {
   const { setCurrentPage } = useNavigation();
-  const [activeTab, setActiveTab] = useState('postings');
+  const isStaff = userRole === 'staff';
+  const [activeTab, setActiveTab] = useState(isStaff ? 'preview' : 'postings');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isApplyDialogOpen, setIsApplyDialogOpen] = useState(false);
+  const [applyingTo, setApplyingTo] = useState<JobPosting | null>(null);
+  const [isSubmittingApp, setIsSubmittingApp] = useState(false);
+  const [jobPostings, setJobPostings] = useState<JobPosting[]>([]);
   const [selectedPosting, setSelectedPosting] = useState<JobPosting | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const [jobPostings] = useState<JobPosting[]>([
-    {
-      id: "job-001",
-      title: "Event Coordinator",
-      department: "Operations",
-      type: "full-time",
-      status: "active",
-      location: "Los Angeles, CA",
-      salaryRange: "$50,000 - $65,000/year",
-      description: "We're seeking an experienced Event Coordinator to join our dynamic team. You'll be responsible for planning and executing high-profile events for our premium clients, managing vendor relationships, and ensuring exceptional client satisfaction.",
-      requirements: [
-        "3+ years of event planning experience",
-        "Bachelor's degree in Hospitality Management or related field",
-        "Strong organizational and multitasking skills",
-        "Excellent communication and client relations abilities",
-        "Proficiency in event management software",
-        "Ability to work flexible hours including evenings and weekends"
-      ],
-      responsibilities: [
-        "Plan and coordinate corporate events, weddings, and special occasions",
-        "Manage vendor relationships and negotiate contracts",
-        "Develop event timelines and ensure seamless execution",
-        "Oversee event budgets and maintain cost controls",
-        "Lead on-site event teams and troubleshoot issues",
-        "Build and maintain strong client relationships"
-      ],
-      benefits: [
-        "Competitive salary with performance bonuses",
-        "Health, dental, and vision insurance",
-        "401(k) with company match",
-        "Paid time off and holidays",
-        "Professional development opportunities",
-        "Employee wellness programs"
-      ],
-      postedDate: "2025-09-25",
-      applicationsCount: 12,
-      viewsCount: 234
-    },
-    {
-      id: "job-002",
-      title: "Bartender",
-      department: "Service",
-      type: "part-time",
-      status: "active",
-      location: "Los Angeles, CA",
-      salaryRange: "$26 - $35/hour + tips",
-      description: "Join our team of professional bartenders servicing high-end events and corporate functions. We're looking for skilled mixologists who can deliver exceptional service while maintaining professionalism in fast-paced environments.",
-      requirements: [
-        "Minimum 3 years bartending experience",
-        "Valid bartending license/certification",
-        "Knowledge of craft cocktails and mixology",
-        "Strong customer service skills",
-        "Ability to work nights and weekends",
-        "Reliable transportation"
-      ],
-      responsibilities: [
-        "Prepare and serve alcoholic and non-alcoholic beverages",
-        "Maintain bar cleanliness and organization",
-        "Interact professionally with event guests",
-        "Manage bar inventory and supplies",
-        "Follow all safety and alcohol service regulations",
-        "Collaborate with event teams for smooth service"
-      ],
-      benefits: [
-        "Competitive hourly rate plus tips",
-        "Flexible scheduling",
-        "Training and certification opportunities",
-        "Access to premium events",
-        "Team environment",
-        "Growth opportunities"
-      ],
-      postedDate: "2025-09-28",
-      applicationsCount: 8,
-      viewsCount: 189
-    },
-    {
-      id: "job-003",
-      title: "Server",
-      department: "Service",
-      type: "part-time",
-      status: "active",
-      location: "Los Angeles, CA",
-      salaryRange: "$24 - $30/hour + tips",
-      description: "We're hiring experienced servers for upscale events and functions. The ideal candidate has fine dining experience and excels at providing white-glove service to discerning clientele.",
-      requirements: [
-        "2+ years serving experience, preferably fine dining",
-        "Knowledge of formal service techniques",
-        "Professional appearance and demeanor",
-        "Strong communication skills",
-        "Ability to stand for extended periods",
-        "Weekend and evening availability"
-      ],
-      responsibilities: [
-        "Provide exceptional table service at events",
-        "Take orders and serve food and beverages",
-        "Maintain professional presentation",
-        "Ensure guest satisfaction throughout events",
-        "Assist with event setup and breakdown",
-        "Work collaboratively with event teams"
-      ],
-      benefits: [
-        "Competitive hourly wages plus tips",
-        "Flexible scheduling options",
-        "Work at prestigious venues",
-        "Professional development",
-        "Supportive team culture",
-        "Advancement opportunities"
-      ],
-      postedDate: "2025-09-30",
-      applicationsCount: 15,
-      viewsCount: 312
-    },
-    {
-      id: "job-004",
-      title: "Setup Crew",
-      department: "Operations",
-      type: "part-time",
-      status: "active",
-      location: "Los Angeles, CA",
-      salaryRange: "$20 - $26/hour",
-      description: "Looking for reliable, hardworking individuals to join our event setup crew. You'll be responsible for transforming venues through setup and breakdown of event equipment, staging, and decor.",
-      requirements: [
-        "Ability to lift 50+ pounds regularly",
-        "Previous event or construction experience preferred",
-        "Strong work ethic and reliability",
-        "Team player mentality",
-        "Valid driver's license",
-        "Flexibility with scheduling"
-      ],
-      responsibilities: [
-        "Load and unload event equipment and materials",
-        "Set up tables, chairs, staging, and decor",
-        "Follow setup diagrams and instructions",
-        "Ensure safe handling of all equipment",
-        "Complete event breakdown efficiently",
-        "Maintain equipment and report damages"
-      ],
-      benefits: [
-        "Competitive hourly pay",
-        "Consistent work opportunities",
-        "Physical fitness",
-        "Variety of event types",
-        "Team environment",
-        "Skill development"
-      ],
-      postedDate: "2025-10-02",
-      applicationsCount: 6,
-      viewsCount: 156
-    }
-  ]);
+  useEffect(() => {
+    const fetchJobs = async () => {
+      try {
+        setIsLoading(true);
+        const res = await staffService.getJobPostings();
+        setJobPostings(Array.isArray(res) ? res : (res?.data || []));
+      } catch {
+        toast.error("Failed to load job postings");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchJobs();
+  }, []);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -227,13 +99,67 @@ export function Careers({ userRole, userId }: PageProps) {
     return labels[type as keyof typeof labels] || type;
   };
 
-  const handleCreatePosting = () => {
-    toast.success("Job posting created successfully!");
-    setIsCreateDialogOpen(false);
+  const handleCreatePosting = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const jobData = {
+      title: formData.get("title") as string,
+      department: formData.get("department") as string,
+      type: formData.get("type") as string,
+      location: formData.get("location") as string,
+      salaryRange: formData.get("salary") as string,
+      description: formData.get("description") as string,
+      requirements: (formData.get("requirements") as string)?.split('\n').filter(Boolean) || [],
+      responsibilities: (formData.get("responsibilities") as string)?.split('\n').filter(Boolean) || [],
+      benefits: (formData.get("benefits") as string)?.split('\n').filter(Boolean) || [],
+    };
+
+    try {
+      await staffService.createJobPosting(jobData);
+      toast.success("Job posting created successfully!");
+      setIsCreateDialogOpen(false);
+      
+      const res = await staffService.getJobPostings();
+      setJobPostings(Array.isArray(res) ? res : (res?.data || []));
+    } catch {
+      toast.error("Failed to post job");
+    }
   };
 
-  const handleToggleStatus = (postingId: string) => {
-    toast.success("Job posting status updated!");
+  const handleToggleStatus = async (postingId: string, currentStatus: string) => {
+    try {
+      const newStatus = currentStatus === 'active' ? 'paused' : 'active';
+      await staffService.updateJobPosting(postingId, { status: newStatus });
+      toast.success("Job posting status updated!");
+      
+      const res = await staffService.getJobPostings();
+      setJobPostings(Array.isArray(res) ? res : (res?.data || []));
+    } catch {
+      toast.error("Failed to update status");
+    }
+  };
+
+  const handleApplySubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!applyingTo) return;
+    setIsSubmittingApp(true);
+    const formData = new FormData(e.currentTarget);
+    try {
+      await staffService.createApplication({
+        position: applyingTo.title,
+        coverLetter: formData.get('coverLetter') as string,
+        resumeUrl: formData.get('resumeUrl') as string || undefined,
+        source: 'company_website',
+        notes: formData.get('notes') as string || undefined,
+      });
+      toast.success(`Application for "${applyingTo.title}" submitted successfully!`);
+      setIsApplyDialogOpen(false);
+      setApplyingTo(null);
+    } catch {
+      toast.error('Failed to submit application. Please try again.');
+    } finally {
+      setIsSubmittingApp(false);
+    }
   };
 
   const totalApplications = jobPostings.reduce((sum, job) => sum + job.applicationsCount, 0);
@@ -248,24 +174,31 @@ export function Careers({ userRole, userId }: PageProps) {
           <Button 
             variant="outline" 
             size="icon"
-            onClick={() => setCurrentPage('hiring')}
+            onClick={() => setCurrentPage(isStaff ? 'dashboard' : 'hiring')}
             className="shrink-0"
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-3xl font-semibold text-foreground">Career Site & Job Postings</h1>
-              <Badge variant="outline" className="flex items-center gap-1">
-                <Globe className="h-3 w-3" />
-                Admin
-              </Badge>
+              <h1 className="text-3xl font-semibold text-foreground">
+                {isStaff ? 'Job Openings' : 'Career Site & Job Postings'}
+              </h1>
+              {!isStaff && (
+                <Badge variant="outline" className="flex items-center gap-1">
+                  <Globe className="h-3 w-3" />
+                  Admin
+                </Badge>
+              )}
             </div>
             <p className="text-muted-foreground">
-              Manage job postings and preview your company careers page
+              {isStaff
+                ? 'Browse open positions and apply for a role at Extreme Staffing'
+                : 'Manage job postings and preview your company careers page'}
             </p>
           </div>
         </div>
+        {!isStaff && (
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogTrigger asChild>
             <Button>
@@ -280,15 +213,15 @@ export function Careers({ userRole, userId }: PageProps) {
                 Fill out the details for your new job opening
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-6 py-4">
+            <form onSubmit={handleCreatePosting} className="space-y-6 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Job Title *</Label>
-                  <Input placeholder="e.g., Event Coordinator" />
+                  <Input name="title" placeholder="e.g., Event Coordinator" required />
                 </div>
                 <div className="space-y-2">
                   <Label>Department *</Label>
-                  <Select>
+                  <Select name="department" defaultValue="operations">
                     <SelectTrigger>
                       <SelectValue placeholder="Select department" />
                     </SelectTrigger>
@@ -304,7 +237,7 @@ export function Careers({ userRole, userId }: PageProps) {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Employment Type *</Label>
-                  <Select>
+                  <Select name="type" defaultValue="full-time">
                     <SelectTrigger>
                       <SelectValue placeholder="Select type" />
                     </SelectTrigger>
@@ -318,26 +251,29 @@ export function Careers({ userRole, userId }: PageProps) {
                 </div>
                 <div className="space-y-2">
                   <Label>Location *</Label>
-                  <Input placeholder="e.g., Los Angeles, CA" />
+                  <Input name="location" placeholder="e.g., Los Angeles, CA" required />
                 </div>
               </div>
 
               <div className="space-y-2">
                 <Label>Salary Range *</Label>
-                <Input placeholder="e.g., $50,000 - $65,000/year or $25 - $35/hour" />
+                <Input name="salary" placeholder="e.g., $50,000 - $65,000/year or $25 - $35/hour" required />
               </div>
 
               <div className="space-y-2">
                 <Label>Job Description *</Label>
                 <Textarea 
+                  name="description"
                   placeholder="Describe the role, responsibilities, and what makes it exciting..."
                   className="min-h-[120px]"
+                  required
                 />
               </div>
 
               <div className="space-y-2">
                 <Label>Requirements</Label>
                 <Textarea 
+                  name="requirements"
                   placeholder="List required qualifications (one per line)..."
                   className="min-h-[100px]"
                 />
@@ -346,6 +282,7 @@ export function Careers({ userRole, userId }: PageProps) {
               <div className="space-y-2">
                 <Label>Responsibilities</Label>
                 <Textarea 
+                  name="responsibilities"
                   placeholder="List key responsibilities (one per line)..."
                   className="min-h-[100px]"
                 />
@@ -354,26 +291,29 @@ export function Careers({ userRole, userId }: PageProps) {
               <div className="space-y-2">
                 <Label>Benefits</Label>
                 <Textarea 
+                  name="benefits"
                   placeholder="List benefits and perks (one per line)..."
                   className="min-h-[100px]"
                 />
               </div>
 
               <div className="flex justify-end gap-3 pt-4">
-                <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+                <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
                   Cancel
                 </Button>
-                <Button onClick={handleCreatePosting}>
+                <Button type="submit">
                   <Send className="h-4 w-4 mr-2" />
                   Publish Job Posting
                 </Button>
               </div>
-            </div>
+            </form>
           </DialogContent>
         </Dialog>
+        )}
       </div>
 
-      {/* Statistics */}
+      {/* Statistics — admin only */}
+      {!isStaff && (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-6">
@@ -423,13 +363,20 @@ export function Careers({ userRole, userId }: PageProps) {
           </CardContent>
         </Card>
       </div>
+      )}
 
       {/* Main Content */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="postings">Job Postings Management</TabsTrigger>
-          <TabsTrigger value="preview">Career Site Preview</TabsTrigger>
-        </TabsList>
+        {isStaff ? (
+          <TabsList className="grid w-full grid-cols-1">
+            <TabsTrigger value="preview">Available Positions</TabsTrigger>
+          </TabsList>
+        ) : (
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="postings">Job Postings Management</TabsTrigger>
+            <TabsTrigger value="preview">Career Site Preview</TabsTrigger>
+          </TabsList>
+        )}
 
         {/* Job Postings Management */}
         <TabsContent value="postings" className="space-y-4 mt-6">
@@ -468,7 +415,7 @@ export function Careers({ userRole, userId }: PageProps) {
                     <Button 
                       variant="outline" 
                       size="sm"
-                      onClick={() => handleToggleStatus(posting.id)}
+                      onClick={() => handleToggleStatus(posting.id, posting.status)}
                     >
                       {posting.status === 'active' ? 'Pause' : 'Activate'}
                     </Button>
@@ -483,7 +430,7 @@ export function Careers({ userRole, userId }: PageProps) {
                     <div>
                       <h4 className="font-medium mb-2">Requirements</h4>
                       <ul className="text-sm space-y-1">
-                        {posting.requirements.slice(0, 3).map((req, idx) => (
+                        {posting.requirements?.slice(0, 3).map((req: string, idx: number) => (
                           <li key={idx} className="flex items-start gap-2">
                             <CheckCircle className="h-3 w-3 text-emerald-600 mt-0.5 flex-shrink-0" />
                             <span className="text-muted-foreground">{req}</span>
@@ -500,7 +447,7 @@ export function Careers({ userRole, userId }: PageProps) {
                     <div>
                       <h4 className="font-medium mb-2">Responsibilities</h4>
                       <ul className="text-sm space-y-1">
-                        {posting.responsibilities.slice(0, 3).map((resp, idx) => (
+                        {posting.responsibilities?.slice(0, 3).map((resp: string, idx: number) => (
                           <li key={idx} className="flex items-start gap-2">
                             <CheckCircle className="h-3 w-3 text-blue-600 mt-0.5 flex-shrink-0" />
                             <span className="text-muted-foreground">{resp}</span>
@@ -629,10 +576,13 @@ export function Careers({ userRole, userId }: PageProps) {
                           {posting.description.substring(0, 150)}...
                         </p>
                         <div className="flex items-center gap-2">
-                          <Button className="w-full">
+                          <Button
+                            className="w-full"
+                            onClick={() => { setApplyingTo(posting); setIsApplyDialogOpen(true); }}
+                          >
                             Apply Now
                           </Button>
-                          <Button variant="outline">
+                          <Button variant="outline" onClick={() => setSelectedPosting(posting)}>
                             <Eye className="h-4 w-4" />
                           </Button>
                         </div>
@@ -644,6 +594,55 @@ export function Careers({ userRole, userId }: PageProps) {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Apply Now Dialog */}
+      <Dialog open={isApplyDialogOpen} onOpenChange={setIsApplyDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Apply for {applyingTo?.title}</DialogTitle>
+            <DialogDescription>
+              {applyingTo?.department} · {applyingTo?.location} · {getTypeLabel(applyingTo?.type || '')}
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleApplySubmit} className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Cover Letter *</Label>
+              <Textarea
+                name="coverLetter"
+                placeholder="Tell us why you're a great fit for this role..."
+                className="min-h-[140px]"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Resume URL</Label>
+              <Input
+                name="resumeUrl"
+                type="url"
+                placeholder="https://drive.google.com/your-resume.pdf"
+              />
+              <p className="text-xs text-muted-foreground">Paste a link to your resume (Google Drive, Dropbox, etc.)</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Additional Notes</Label>
+              <Textarea
+                name="notes"
+                placeholder="Any additional information (availability, certifications, referrals...)"
+                className="min-h-[80px]"
+              />
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <Button type="button" variant="outline" onClick={() => setIsApplyDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isSubmittingApp}>
+                <Send className="h-4 w-4 mr-2" />
+                {isSubmittingApp ? 'Submitting...' : 'Submit Application'}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

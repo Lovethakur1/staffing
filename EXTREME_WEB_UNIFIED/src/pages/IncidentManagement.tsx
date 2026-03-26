@@ -1,17 +1,15 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect, useMemo } from "react";
 import { useNavigation } from "../contexts/NavigationContext";
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Input } from "../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "../components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../components/ui/dialog";
 import { Label } from "../components/ui/label";
 import { Textarea } from "../components/ui/textarea";
-import { TooltipWrapper, IconTooltip, InfoTooltip } from "../components/ui/tooltip-wrapper";
-import { 
+import {
   AlertTriangle,
   Shield,
   FileText,
@@ -19,17 +17,18 @@ import {
   Clock,
   XCircle,
   Eye,
-  Camera,
   Users,
   Calendar,
   MapPin,
-  Phone,
   Plus,
   Search,
   Filter,
   ChevronLeft,
   ChevronRight,
-  Download
+  Download,
+  RefreshCw,
+  AlertCircle,
+  Flame,
 } from "lucide-react";
 import { toast } from "sonner";
 import { eventService } from "../services/event.service";
@@ -39,146 +38,235 @@ interface IncidentManagementProps {
   userId: string;
 }
 
+type IncidentType = 'injury' | 'property-damage' | 'complaint' | 'safety' | 'theft' | 'other';
+type Severity = 'critical' | 'high' | 'medium' | 'low';
+type IncidentStatus = 'open' | 'investigating' | 'resolved' | 'closed';
+
+interface Note {
+  id: string;
+  author: string;
+  content: string;
+  timestamp: string;
+}
+
+interface TimelineEntry {
+  id: string;
+  action: string;
+  by: string;
+  timestamp: string;
+  details: string;
+}
+
 interface Incident {
   id: string;
   title: string;
-  type: 'injury' | 'property-damage' | 'complaint' | 'safety' | 'theft' | 'other';
-  severity: 'critical' | 'high' | 'medium' | 'low';
-  status: 'open' | 'investigating' | 'resolved' | 'closed';
-  eventId: string;
-  eventName: string;
+  type: IncidentType;
+  severity: Severity;
+  status: IncidentStatus;
+  eventId?: string;
+  eventName?: string;
   reportedBy: string;
   reportedDate: string;
   location: string;
   description: string;
   involvedParties: string[];
-  witnesses?: string[];
+  witnesses: string[];
   actionsTaken: string;
   resolution?: string;
-  photoEvidence?: number;
   followUpRequired: boolean;
-  insuranceClaim?: string;
+  notes: Note[];
+  timeline: TimelineEntry[];
 }
+
+const LS_KEY = 'incidents_store';
+
+function loadIncidents(): Incident[] {
+  try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]'); } catch { return []; }
+}
+function saveIncidents(list: Incident[]) {
+  localStorage.setItem(LS_KEY, JSON.stringify(list));
+}
+function genId() { return `INC-${Date.now().toString().slice(-6)}`; }
+
+const BLANK_FORM = {
+  title: '',
+  type: 'other' as IncidentType,
+  severity: 'medium' as Severity,
+  eventId: '',
+  location: '',
+  description: '',
+  involvedParties: '',
+  witnesses: '',
+  actionsTaken: '',
+  followUpRequired: false as boolean,
+};
 
 export function IncidentManagement({ userRole, userId }: IncidentManagementProps) {
   const { setCurrentPage } = useNavigation();
+
   const [selectedTab, setSelectedTab] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [severityFilter, setSeverityFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
-  const [currentPage, setCurrentPageNum] = useState(1);
+  const [page, setPage] = useState(1);
+  const itemsPerPage = 8;
+
+  const [incidents, setIncidents] = useState<Incident[]>(loadIncidents);
+  const [events, setEvents] = useState<{ id: string; title: string; venue?: string }[]>([]);
+  const [loadingEvents, setLoadingEvents] = useState(true);
+
   const [showReportDialog, setShowReportDialog] = useState(false);
-  const itemsPerPage = 10;
-  const [incidents, setIncidents] = useState<Incident[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [showStatusDialog, setShowStatusDialog] = useState(false);
+  const [form, setForm] = useState(BLANK_FORM);
+  const [submitting, setSubmitting] = useState(false);
+  const [updatingIncident, setUpdatingIncident] = useState<Incident | null>(null);
+  const [newStatus, setNewStatus] = useState<IncidentStatus>('open');
 
   useEffect(() => {
-    const fetchIncidents = async () => {
-      try {
-        const res = await eventService.getIncidents();
-        const data = Array.isArray(res) ? res : (res?.data || []);
-        setIncidents(data.map((inc: any) => ({
-          id: inc.id,
-          title: inc.title || '',
-          type: (inc.type || 'other').toLowerCase() as Incident['type'],
-          severity: (inc.severity || 'low').toLowerCase() as Incident['severity'],
-          status: (inc.status || 'open').toLowerCase() as Incident['status'],
-          eventId: inc.eventId || '',
-          eventName: inc.event?.title || '',
-          reportedBy: inc.reportedBy || '',
-          reportedDate: inc.reportedDate || inc.createdAt || '',
-          location: inc.location || '',
-          description: inc.description || '',
-          involvedParties: inc.involvedParties || [],
-          witnesses: inc.witnesses || [],
-          actionsTaken: inc.actionsTaken || '',
-          resolution: inc.resolution || undefined,
-          photoEvidence: inc.photoEvidence || 0,
-          followUpRequired: inc.followUpRequired ?? false,
-          insuranceClaim: inc.insuranceClaim || undefined,
-        })));
-      } catch {
-        // Failed to load incidents
-      }
-      setLoading(false);
-    };
-    fetchIncidents();
+    eventService.getEvents({ take: 200 }).then((res: any) => {
+      const data = Array.isArray(res) ? res : (res?.data || []);
+      setEvents(data.map((e: any) => ({ id: e.id, title: e.title, venue: e.venue })));
+    }).catch(() => {}).finally(() => setLoadingEvents(false));
   }, []);
 
-  // Summary stats
-  const stats = {
+  useEffect(() => { saveIncidents(incidents); }, [incidents]);
+
+  const stats = useMemo(() => ({
     total: incidents.length,
     open: incidents.filter(i => i.status === 'open' || i.status === 'investigating').length,
     critical: incidents.filter(i => i.severity === 'critical').length,
     resolved: incidents.filter(i => i.status === 'resolved' || i.status === 'closed').length,
-    requireFollowUp: incidents.filter(i => i.followUpRequired).length
-  };
+    followUp: incidents.filter(i => i.followUpRequired && i.status !== 'resolved' && i.status !== 'closed').length,
+  }), [incidents]);
 
-  const getSeverityBadge = (severity: string) => {
-    switch (severity) {
-      case "critical":
-        return <Badge className="bg-red-100 text-red-700 hover:bg-red-100">Critical</Badge>;
-      case "high":
-        return <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100">High</Badge>;
-      case "medium":
-        return <Badge className="bg-yellow-100 text-yellow-700 hover:bg-yellow-100">Medium</Badge>;
-      case "low":
-        return <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100">Low</Badge>;
-      default:
-        return <Badge variant="secondary">{severity}</Badge>;
+  const filtered = useMemo(() => {
+    const q = searchQuery.toLowerCase();
+    return incidents.filter(i => {
+      const matchQ = !q || i.title.toLowerCase().includes(q) || i.description.toLowerCase().includes(q) || i.id.toLowerCase().includes(q) || (i.eventName || '').toLowerCase().includes(q);
+      const matchSev = severityFilter === 'all' || i.severity === severityFilter;
+      const matchType = typeFilter === 'all' || i.type === typeFilter;
+      const matchTab =
+        selectedTab === 'all' ||
+        (selectedTab === 'active' && (i.status === 'open' || i.status === 'investigating')) ||
+        (selectedTab === 'critical' && i.severity === 'critical') ||
+        (selectedTab === 'resolved' && (i.status === 'resolved' || i.status === 'closed'));
+      return matchQ && matchSev && matchType && matchTab;
+    });
+  }, [incidents, searchQuery, severityFilter, typeFilter, selectedTab]);
+
+  const totalPages = Math.ceil(filtered.length / itemsPerPage);
+  const paginated = filtered.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+
+  const getSeverityBadge = (s: Severity) => {
+    switch (s) {
+      case 'critical': return <Badge className="bg-red-100 text-red-700 hover:bg-red-100 gap-1"><Flame className="h-3 w-3" />Critical</Badge>;
+      case 'high':     return <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100">High</Badge>;
+      case 'medium':   return <Badge className="bg-yellow-100 text-yellow-700 hover:bg-yellow-100">Medium</Badge>;
+      case 'low':      return <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100">Low</Badge>;
     }
   };
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "open":
-        return <Badge className="bg-red-100 text-red-700 hover:bg-red-100"><AlertTriangle className="h-3 w-3 mr-1" />Open</Badge>;
-      case "investigating":
-        return <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100"><Clock className="h-3 w-3 mr-1" />Investigating</Badge>;
-      case "resolved":
-        return <Badge className="bg-green-100 text-green-700 hover:bg-green-100"><CheckCircle className="h-3 w-3 mr-1" />Resolved</Badge>;
-      case "closed":
-        return <Badge className="bg-gray-100 text-gray-700 hover:bg-gray-100"><XCircle className="h-3 w-3 mr-1" />Closed</Badge>;
-      default:
-        return <Badge variant="secondary">{status}</Badge>;
+  const getStatusBadge = (s: IncidentStatus) => {
+    switch (s) {
+      case 'open':          return <Badge className="bg-red-100 text-red-700 hover:bg-red-100 gap-1"><AlertTriangle className="h-3 w-3" />Open</Badge>;
+      case 'investigating': return <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100 gap-1"><Clock className="h-3 w-3" />Investigating</Badge>;
+      case 'resolved':      return <Badge className="bg-green-100 text-green-700 hover:bg-green-100 gap-1"><CheckCircle className="h-3 w-3" />Resolved</Badge>;
+      case 'closed':        return <Badge className="bg-gray-100 text-gray-700 hover:bg-gray-100 gap-1"><XCircle className="h-3 w-3" />Closed</Badge>;
     }
   };
 
-  const getTypeBadge = (type: string) => {
-    const types = {
-      'injury': { label: 'Injury', className: 'bg-red-50 text-red-700 border-red-200' },
-      'property-damage': { label: 'Property Damage', className: 'bg-orange-50 text-orange-700 border-orange-200' },
-      'complaint': { label: 'Complaint', className: 'bg-yellow-50 text-yellow-700 border-yellow-200' },
-      'safety': { label: 'Safety', className: 'bg-purple-50 text-purple-700 border-purple-200' },
-      'theft': { label: 'Theft', className: 'bg-pink-50 text-pink-700 border-pink-200' },
-      'other': { label: 'Other', className: 'bg-gray-50 text-gray-700 border-gray-200' }
+  const getTypeBadge = (t: IncidentType) => {
+    const map: Record<IncidentType, string> = {
+      'injury': 'bg-red-50 text-red-700 border-red-200',
+      'property-damage': 'bg-orange-50 text-orange-700 border-orange-200',
+      'complaint': 'bg-yellow-50 text-yellow-700 border-yellow-200',
+      'safety': 'bg-purple-50 text-purple-700 border-purple-200',
+      'theft': 'bg-pink-50 text-pink-700 border-pink-200',
+      'other': 'bg-gray-50 text-gray-700 border-gray-200',
     };
-    const typeInfo = types[type as keyof typeof types] || types.other;
-    return <Badge variant="outline" className={typeInfo.className}>{typeInfo.label}</Badge>;
+    const labels: Record<IncidentType, string> = {
+      'injury': 'Injury', 'property-damage': 'Property Damage',
+      'complaint': 'Complaint', 'safety': 'Safety', 'theft': 'Theft', 'other': 'Other',
+    };
+    return <Badge variant="outline" className={map[t]}>{labels[t]}</Badge>;
   };
 
-  // Filter incidents
-  const filteredIncidents = incidents.filter(incident => {
-    const matchesSearch = incident.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         incident.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         incident.id.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesSeverity = severityFilter === "all" || incident.severity === severityFilter;
-    const matchesType = typeFilter === "all" || incident.type === typeFilter;
-    const matchesTab = selectedTab === "all" || 
-                      (selectedTab === "active" && (incident.status === 'open' || incident.status === 'investigating')) ||
-                      (selectedTab === "critical" && incident.severity === 'critical') ||
-                      (selectedTab === "resolved" && (incident.status === 'resolved' || incident.status === 'closed'));
-    return matchesSearch && matchesSeverity && matchesType && matchesTab;
-  });
+  const handleSubmitReport = async () => {
+    if (!form.title.trim()) { toast.error('Incident title is required'); return; }
+    if (!form.description.trim()) { toast.error('Description is required'); return; }
+    if (!form.location.trim()) { toast.error('Location is required'); return; }
 
-  // Pagination
-  const totalPages = Math.ceil(filteredIncidents.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedIncidents = filteredIncidents.slice(startIndex, startIndex + itemsPerPage);
+    setSubmitting(true);
+    const chosenEvent = events.find(e => e.id === form.eventId);
+    let incidentId = genId();
 
-  const handleNewReport = () => {
-    toast.success("Incident report created successfully");
+    if (form.eventId) {
+      try {
+        const res = await eventService.createIncident(form.eventId, {
+          severity: form.severity.toUpperCase(),
+          description: `[${form.title}] ${form.description}`,
+        });
+        if (res?.id) incidentId = res.id;
+      } catch { /* localStorage only */ }
+    }
+
+    const now = new Date().toISOString();
+    const newIncident: Incident = {
+      id: incidentId,
+      title: form.title,
+      type: form.type,
+      severity: form.severity,
+      status: 'open',
+      eventId: form.eventId || undefined,
+      eventName: chosenEvent?.title,
+      reportedBy: userId,
+      reportedDate: now,
+      location: form.location,
+      description: form.description,
+      involvedParties: form.involvedParties.split(',').map(s => s.trim()).filter(Boolean),
+      witnesses: form.witnesses.split(',').map(s => s.trim()).filter(Boolean),
+      actionsTaken: form.actionsTaken,
+      followUpRequired: form.followUpRequired,
+      notes: [],
+      timeline: [{ id: '1', action: 'Incident Reported', by: userRole, timestamp: now, details: 'Initial incident report submitted' }],
+    };
+
+    setIncidents(prev => [newIncident, ...prev]);
+    toast.success('Incident report submitted');
     setShowReportDialog(false);
+    setForm(BLANK_FORM);
+    setSubmitting(false);
+  };
+
+  const openStatusDialog = (incident: Incident) => {
+    setUpdatingIncident(incident);
+    setNewStatus(incident.status);
+    setShowStatusDialog(true);
+  };
+
+  const handleStatusUpdate = async () => {
+    if (!updatingIncident) return;
+    const now = new Date().toISOString();
+    try { await eventService.updateIncident(updatingIncident.id, { status: newStatus.toUpperCase() }); } catch { /* localStorage */ }
+    setIncidents(prev => prev.map(i => i.id === updatingIncident.id
+      ? { ...i, status: newStatus, timeline: [...i.timeline, { id: String(i.timeline.length + 1), action: 'Status Updated', by: userRole, timestamp: now, details: `Status changed to ${newStatus}` }] }
+      : i
+    ));
+    toast.success('Status updated');
+    setShowStatusDialog(false);
+    setUpdatingIncident(null);
+  };
+
+  const handleExport = () => {
+    const csv = [
+      ['ID','Title','Type','Severity','Status','Event','Location','Date'].join(','),
+      ...incidents.map(i => [i.id, `"${i.title}"`, i.type, i.severity, i.status, `"${i.eventName || ''}"`, `"${i.location}"`, new Date(i.reportedDate).toLocaleDateString()].join(','))
+    ].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'incidents.csv'; a.click();
+    URL.revokeObjectURL(url);
+    toast.success('Incidents exported');
   };
 
   return (
@@ -187,7 +275,7 @@ export function IncidentManagement({ userRole, userId }: IncidentManagementProps
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">
+            <h1 className="text-2xl lg:text-3xl font-semibold">
               {userRole === 'manager' ? 'Incident Reports' : 'Incident Management'}
             </h1>
             <Badge variant="outline" className="flex items-center gap-1">
@@ -196,205 +284,108 @@ export function IncidentManagement({ userRole, userId }: IncidentManagementProps
             </Badge>
           </div>
           <p className="text-sm lg:text-base text-muted-foreground mt-1">
-            {userRole === 'manager' ? 'View and report event incidents' : 'Track and manage event incidents and safety concerns'}
+            Track and manage event incidents and safety concerns
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="outline" size="sm">
-            <Download className="h-4 w-4 mr-2" />
-            Export
+          <Button variant="outline" size="sm" onClick={handleExport} disabled={incidents.length === 0}>
+            <Download className="h-4 w-4 mr-2" />Export
           </Button>
-          <Dialog open={showReportDialog} onOpenChange={setShowReportDialog}>
-            <DialogTrigger asChild>
-              <Button className="bg-sangria hover:bg-merlot">
-                <Plus className="h-4 w-4 mr-2" />
-                Report Incident
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>Report New Incident</DialogTitle>
-                <DialogDescription>Document incident details for investigation and follow-up</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="col-span-2 space-y-2">
-                    <Label>Incident Title *</Label>
-                    <Input placeholder="Brief description of incident" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Type *</Label>
-                    <Select>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="injury">Injury</SelectItem>
-                        <SelectItem value="property-damage">Property Damage</SelectItem>
-                        <SelectItem value="complaint">Complaint</SelectItem>
-                        <SelectItem value="safety">Safety Concern</SelectItem>
-                        <SelectItem value="theft">Theft</SelectItem>
-                        <SelectItem value="other">Other</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Severity *</Label>
-                    <Select>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select severity" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="critical">Critical</SelectItem>
-                        <SelectItem value="high">High</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="low">Low</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="col-span-2 space-y-2">
-                    <Label>Event</Label>
-                    <Select>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select event" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="evt1">Corporate Gala 2024</SelectItem>
-                        <SelectItem value="evt2">Wedding Reception</SelectItem>
-                        <SelectItem value="evt3">Product Launch</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="col-span-2 space-y-2">
-                    <Label>Location *</Label>
-                    <Input placeholder="Specific location where incident occurred" />
-                  </div>
-                  <div className="col-span-2 space-y-2">
-                    <Label>Description *</Label>
-                    <Textarea 
-                      placeholder="Detailed description of what happened..." 
-                      rows={4}
-                    />
-                  </div>
-                  <div className="col-span-2 space-y-2">
-                    <Label>Immediate Actions Taken *</Label>
-                    <Textarea 
-                      placeholder="What steps were taken immediately after the incident..." 
-                      rows={3}
-                    />
-                  </div>
-                </div>
-                <div className="bg-yellow-50 border border-yellow-200 p-3 rounded-lg">
-                  <p className="text-sm text-yellow-900">
-                    ⚠️ For critical incidents (injuries, safety hazards): Ensure emergency services contacted if needed, area secured, and supervisor notified immediately.
-                  </p>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setShowReportDialog(false)}>Cancel</Button>
-                <Button className="bg-sangria hover:bg-merlot" onClick={handleNewReport}>
-                  Submit Report
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <Button className="bg-sangria hover:bg-merlot" onClick={() => setShowReportDialog(true)}>
+            <Plus className="h-4 w-4 mr-2" />Report Incident
+          </Button>
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <Card className="p-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
               <FileText className="w-5 h-5 text-blue-600" />
             </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Total Incidents</p>
-              <p className="text-xl font-semibold">{stats.total}</p>
-            </div>
+            <div><p className="text-sm text-muted-foreground">Total</p><p className="text-xl font-semibold">{stats.total}</p></div>
           </div>
         </Card>
-
         <Card className="p-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+            <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center flex-shrink-0">
               <Clock className="w-5 h-5 text-orange-600" />
             </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Active</p>
-              <p className="text-xl font-semibold">{stats.open}</p>
-            </div>
+            <div><p className="text-sm text-muted-foreground">Active</p><p className="text-xl font-semibold">{stats.open}</p></div>
           </div>
         </Card>
-
         <Card className="p-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
+            <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center flex-shrink-0">
               <AlertTriangle className="w-5 h-5 text-red-600" />
             </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Critical</p>
-              <p className="text-xl font-semibold">{stats.critical}</p>
-            </div>
+            <div><p className="text-sm text-muted-foreground">Critical</p><p className="text-xl font-semibold">{stats.critical}</p></div>
           </div>
         </Card>
-
         <Card className="p-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+            <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
               <CheckCircle className="w-5 h-5 text-green-600" />
             </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Resolved</p>
-              <p className="text-xl font-semibold">{stats.resolved}</p>
+            <div><p className="text-sm text-muted-foreground">Resolved</p><p className="text-xl font-semibold">{stats.resolved}</p></div>
+          </div>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center flex-shrink-0">
+              <AlertCircle className="w-5 h-5 text-yellow-600" />
             </div>
+            <div><p className="text-sm text-muted-foreground">Follow-up</p><p className="text-xl font-semibold">{stats.followUp}</p></div>
           </div>
         </Card>
       </div>
 
+      {stats.critical > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+          <Flame className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold text-red-900">Critical Incidents Require Immediate Attention</p>
+            <p className="text-sm text-red-700 mt-0.5">
+              {stats.critical} critical incident{stats.critical !== 1 ? 's' : ''} open. Review and take action immediately.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Tabs */}
-      <Tabs value={selectedTab} onValueChange={setSelectedTab}>
+      <Tabs value={selectedTab} onValueChange={v => { setSelectedTab(v); setPage(1); }}>
         <TabsList>
           <TabsTrigger value="all">All Incidents</TabsTrigger>
           <TabsTrigger value="active">
             Active
-            {stats.open > 0 && (
-              <Badge className="ml-2 bg-orange-500 text-white h-5 w-5 p-0 flex items-center justify-center">
-                {stats.open}
-              </Badge>
-            )}
+            {stats.open > 0 && <Badge className="ml-1.5 bg-orange-500 text-white h-4 w-4 p-0 flex items-center justify-center text-xs rounded-full">{stats.open}</Badge>}
           </TabsTrigger>
           <TabsTrigger value="critical">
             Critical
-            {stats.critical > 0 && (
-              <Badge className="ml-2 bg-red-500 text-white h-5 w-5 p-0 flex items-center justify-center">
-                {stats.critical}
-              </Badge>
-            )}
+            {stats.critical > 0 && <Badge className="ml-1.5 bg-red-500 text-white h-4 w-4 p-0 flex items-center justify-center text-xs rounded-full">{stats.critical}</Badge>}
           </TabsTrigger>
           <TabsTrigger value="resolved">Resolved</TabsTrigger>
         </TabsList>
 
-        <TabsContent value={selectedTab} className="space-y-4">
+        <TabsContent value={selectedTab} className="mt-6">
           <Card>
             <CardHeader>
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <CardTitle>Incident Reports</CardTitle>
-                <div className="flex flex-col sm:flex-row gap-3">
+                <div>
+                  <CardTitle>Incident Reports</CardTitle>
+                  <CardDescription>{filtered.length} record{filtered.length !== 1 ? 's' : ''}</CardDescription>
+                </div>
+                <div className="flex flex-wrap gap-2">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Search incidents..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-9 w-full sm:w-[250px]"
-                    />
+                    <Input placeholder="Search incidentsâ€¦" value={searchQuery}
+                      onChange={e => { setSearchQuery(e.target.value); setPage(1); }} className="pl-9 w-[220px]" />
                   </div>
-
-                  <Select value={typeFilter} onValueChange={setTypeFilter}>
-                    <SelectTrigger className="w-full sm:w-[150px]">
-                      <Filter className="h-4 w-4 mr-2" />
-                      <SelectValue placeholder="Type" />
+                  <Select value={typeFilter} onValueChange={v => { setTypeFilter(v); setPage(1); }}>
+                    <SelectTrigger className="w-[150px]">
+                      <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
+                      <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Types</SelectItem>
@@ -406,11 +397,8 @@ export function IncidentManagement({ userRole, userId }: IncidentManagementProps
                       <SelectItem value="other">Other</SelectItem>
                     </SelectContent>
                   </Select>
-
-                  <Select value={severityFilter} onValueChange={setSeverityFilter}>
-                    <SelectTrigger className="w-full sm:w-[140px]">
-                      <SelectValue />
-                    </SelectTrigger>
+                  <Select value={severityFilter} onValueChange={v => { setSeverityFilter(v); setPage(1); }}>
+                    <SelectTrigger className="w-[130px]"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Severity</SelectItem>
                       <SelectItem value="critical">Critical</SelectItem>
@@ -423,95 +411,67 @@ export function IncidentManagement({ userRole, userId }: IncidentManagementProps
               </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {paginatedIncidents.length > 0 ? (
-                  paginatedIncidents.map((incident) => (
-                    <div key={incident.id} className="p-4 border rounded-lg hover:bg-muted/30 transition-colors">
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="font-mono text-sm text-muted-foreground">{incident.id}</span>
-                            {getTypeBadge(incident.type)}
-                            {getSeverityBadge(incident.severity)}
-                            {getStatusBadge(incident.status)}
-                          </div>
-                          <h4 className="font-semibold text-lg mb-2">{incident.title}</h4>
-                          <p className="text-sm text-muted-foreground mb-3">{incident.description}</p>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                            <div className="flex items-center gap-2">
-                              <Calendar className="h-4 w-4 text-muted-foreground" />
-                              <span>{new Date(incident.reportedDate).toLocaleDateString()}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <MapPin className="h-4 w-4 text-muted-foreground" />
-                              <span className="truncate">{incident.location}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <FileText className="h-4 w-4 text-muted-foreground" />
-                              <span className="truncate">{incident.eventName}</span>
-                            </div>
-                            {incident.photoEvidence && incident.photoEvidence > 0 && (
-                              <div className="flex items-center gap-2">
-                                <Camera className="h-4 w-4 text-muted-foreground" />
-                                <span>{incident.photoEvidence} photos</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 pt-3 border-t">
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => setCurrentPage('incident-detail', { incidentId: incident.id })}
-                        >
-                          <Eye className="h-4 w-4 mr-2" />
-                          View Details
-                        </Button>
-                        {incident.status !== 'closed' && (
-                          <Button variant="outline" size="sm">
-                            Update Status
-                          </Button>
-                        )}
-                        {incident.followUpRequired && (
-                          <Badge variant="outline" className="bg-orange-50 text-orange-700">
-                            <Clock className="h-3 w-3 mr-1" />
-                            Follow-up Required
+              <div className="space-y-3">
+                {incidents.length === 0 ? (
+                  <div className="text-center py-16">
+                    <Shield className="h-14 w-14 text-muted-foreground mx-auto mb-4" />
+                    <p className="font-semibold text-muted-foreground text-lg">No incidents recorded</p>
+                    <p className="text-sm text-muted-foreground mt-1 mb-4">Report an incident to start tracking safety concerns</p>
+                    <Button onClick={() => setShowReportDialog(true)}><Plus className="h-4 w-4 mr-2" />Report First Incident</Button>
+                  </div>
+                ) : paginated.length === 0 ? (
+                  <div className="text-center py-10">
+                    <Search className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+                    <p className="text-muted-foreground">No incidents match your filters</p>
+                  </div>
+                ) : paginated.map(incident => (
+                  <div key={incident.id} className={`p-4 border rounded-lg hover:bg-muted/30 transition-colors ${incident.severity === 'critical' ? 'border-red-200 bg-red-50/30' : ''}`}>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 mb-2">
+                        <span className="font-mono text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{incident.id}</span>
+                        {getTypeBadge(incident.type)}
+                        {getSeverityBadge(incident.severity)}
+                        {getStatusBadge(incident.status)}
+                        {incident.followUpRequired && incident.status !== 'resolved' && incident.status !== 'closed' && (
+                          <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
+                            <Clock className="h-3 w-3 mr-1" />Follow-up
                           </Badge>
                         )}
                       </div>
+                      <h4 className="font-semibold text-base mb-1">{incident.title}</h4>
+                      <p className="text-sm text-muted-foreground line-clamp-2 mb-3">{incident.description}</p>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                        <span className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />{new Date(incident.reportedDate).toLocaleDateString()}</span>
+                        {incident.location && <span className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" />{incident.location}</span>}
+                        {incident.eventName && <span className="flex items-center gap-1.5"><FileText className="h-3.5 w-3.5" />{incident.eventName}</span>}
+                        {incident.involvedParties.length > 0 && <span className="flex items-center gap-1.5"><Users className="h-3.5 w-3.5" />{incident.involvedParties.length} involved</span>}
+                      </div>
                     </div>
-                  ))
-                ) : (
-                  <div className="text-center py-12">
-                    <Shield className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <p className="text-muted-foreground">No incidents found</p>
-                    <p className="text-sm text-muted-foreground mt-1">Try adjusting your filters</p>
+                    <div className="flex items-center gap-2 mt-3 pt-3 border-t">
+                      <Button variant="outline" size="sm"
+                        onClick={() => setCurrentPage('incident-detail', { incidentId: incident.id })}>
+                        <Eye className="h-4 w-4 mr-2" />View Details
+                      </Button>
+                      {incident.status !== 'closed' && (
+                        <Button variant="outline" size="sm" onClick={() => openStatusDialog(incident)}>
+                          <RefreshCw className="h-4 w-4 mr-2" />Update Status
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                )}
+                ))}
               </div>
 
-              {/* Pagination */}
               {totalPages > 1 && (
-                <div className="flex items-center justify-between mt-4">
+                <div className="flex items-center justify-between mt-5 pt-4 border-t">
                   <p className="text-sm text-muted-foreground">
-                    Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, filteredIncidents.length)} of {filteredIncidents.length} incidents
+                    {(page - 1) * itemsPerPage + 1}â€“{Math.min(page * itemsPerPage, filtered.length)} of {filtered.length}
                   </p>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPageNum(prev => Math.max(1, prev - 1))}
-                      disabled={currentPage === 1}
-                    >
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
                       <ChevronLeft className="h-4 w-4" />
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPageNum(prev => Math.min(totalPages, prev + 1))}
-                      disabled={currentPage === totalPages}
-                    >
+                    <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
                       <ChevronRight className="h-4 w-4" />
                     </Button>
                   </div>
@@ -521,6 +481,130 @@ export function IncidentManagement({ userRole, userId }: IncidentManagementProps
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* â”€â”€ REPORT INCIDENT DIALOG â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      <Dialog open={showReportDialog} onOpenChange={setShowReportDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Report New Incident</DialogTitle>
+            <DialogDescription>Document incident details for investigation and follow-up</DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-4 py-2">
+            <div className="col-span-2 space-y-2">
+              <Label>Incident Title *</Label>
+              <Input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                placeholder="Brief, clear description of what happened" />
+            </div>
+            <div className="space-y-2">
+              <Label>Type *</Label>
+              <Select value={form.type} onValueChange={v => setForm(f => ({ ...f, type: v as IncidentType }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="injury">Injury</SelectItem>
+                  <SelectItem value="property-damage">Property Damage</SelectItem>
+                  <SelectItem value="complaint">Complaint</SelectItem>
+                  <SelectItem value="safety">Safety Concern</SelectItem>
+                  <SelectItem value="theft">Theft</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Severity *</Label>
+              <Select value={form.severity} onValueChange={v => setForm(f => ({ ...f, severity: v as Severity }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="critical">ðŸ”´ Critical â€” Immediate danger</SelectItem>
+                  <SelectItem value="high">ðŸŸ  High â€” Significant impact</SelectItem>
+                  <SelectItem value="medium">ðŸŸ¡ Medium â€” Moderate concern</SelectItem>
+                  <SelectItem value="low">ðŸ”µ Low â€” Minor issue</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="col-span-2 space-y-2">
+              <Label>Related Event (optional)</Label>
+              <Select value={form.eventId} onValueChange={v => setForm(f => ({ ...f, eventId: v }))}>
+                <SelectTrigger><SelectValue placeholder={loadingEvents ? 'Loading eventsâ€¦' : 'Select eventâ€¦'} /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">No specific event</SelectItem>
+                  {events.map(e => <SelectItem key={e.id} value={e.id}>{e.title}{e.venue ? ` â€” ${e.venue}` : ''}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="col-span-2 space-y-2">
+              <Label>Location *</Label>
+              <Input value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
+                placeholder="Specific location where incident occurred" />
+            </div>
+            <div className="col-span-2 space-y-2">
+              <Label>Description *</Label>
+              <Textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                placeholder="Detailed description of what happenedâ€¦" rows={4} />
+            </div>
+            <div className="col-span-2 space-y-2">
+              <Label>Immediate Actions Taken</Label>
+              <Textarea value={form.actionsTaken} onChange={e => setForm(f => ({ ...f, actionsTaken: e.target.value }))}
+                placeholder="Steps taken immediately after the incidentâ€¦" rows={2} />
+            </div>
+            <div className="space-y-2">
+              <Label>Involved Parties (comma-separated)</Label>
+              <Input value={form.involvedParties} onChange={e => setForm(f => ({ ...f, involvedParties: e.target.value }))}
+                placeholder="e.g. John Smith, Jane Doe" />
+            </div>
+            <div className="space-y-2">
+              <Label>Witnesses (comma-separated)</Label>
+              <Input value={form.witnesses} onChange={e => setForm(f => ({ ...f, witnesses: e.target.value }))}
+                placeholder="e.g. Michael Lee" />
+            </div>
+            <div className="col-span-2 flex items-center gap-3">
+              <input type="checkbox" id="followUp" checked={form.followUpRequired}
+                onChange={e => setForm(f => ({ ...f, followUpRequired: e.target.checked }))} className="h-4 w-4" />
+              <Label htmlFor="followUp" className="cursor-pointer">Follow-up action required</Label>
+            </div>
+            {(form.severity === 'critical' || form.severity === 'high') && (
+              <div className="col-span-2 bg-orange-50 border border-orange-200 p-3 rounded-lg">
+                <p className="text-sm text-orange-900">
+                  âš ï¸ For critical/high incidents: Ensure emergency services have been contacted if needed, the area secured, and a supervisor notified immediately.
+                </p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowReportDialog(false)}>Cancel</Button>
+            <Button className="bg-sangria hover:bg-merlot" onClick={handleSubmitReport} disabled={submitting}>
+              {submitting ? 'Submittingâ€¦' : 'Submit Report'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* â”€â”€ STATUS UPDATE DIALOG â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      <Dialog open={showStatusDialog} onOpenChange={setShowStatusDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Update Incident Status</DialogTitle>
+            <DialogDescription>{updatingIncident?.title}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>New Status</Label>
+              <Select value={newStatus} onValueChange={v => setNewStatus(v as IncidentStatus)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="open">Open</SelectItem>
+                  <SelectItem value="investigating">Investigating</SelectItem>
+                  <SelectItem value="resolved">Resolved</SelectItem>
+                  <SelectItem value="closed">Closed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowStatusDialog(false)}>Cancel</Button>
+            <Button onClick={handleStatusUpdate} className="bg-sangria hover:bg-merlot">Update</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
