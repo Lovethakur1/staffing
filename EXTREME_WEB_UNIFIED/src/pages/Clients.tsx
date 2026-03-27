@@ -203,6 +203,21 @@ export function Clients({ userRole }: ClientsProps) {
     fetchInvoices();
   }, []);
 
+  // Compute outstanding balance per client from invoices
+  useEffect(() => {
+    if (allInvoices.length === 0 || allClients.length === 0) return;
+    const outstandingByClient: Record<string, number> = {};
+    allInvoices.forEach((inv) => {
+      if (inv.status === 'pending' || inv.status === 'overdue') {
+        outstandingByClient[inv.clientId] = (outstandingByClient[inv.clientId] || 0) + inv.amount;
+      }
+    });
+    setAllClients(prev => prev.map(client => ({
+      ...client,
+      outstandingBalance: outstandingByClient[client.id] || 0,
+    })));
+  }, [allInvoices]);
+
   // Filter clients
   const filteredClients = allClients.filter((client) => {
     const matchesSearch =

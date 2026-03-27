@@ -16,6 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 
 import { toast } from "sonner";
 import { mockStaff, Staff } from "../../data/mockData";
+import api from "../../services/api";
 
 interface EnhancedBookingFormProps {
   isOpen: boolean;
@@ -108,7 +109,7 @@ export function EnhancedBookingForm({ isOpen, onClose, clientId }: EnhancedBooki
     }, 0);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     // Validation
     if (!eventData.title || !eventData.eventType || !eventDate || !eventData.startTime || !eventData.endTime) {
       toast.error("Please fill in all required fields");
@@ -120,9 +121,37 @@ export function EnhancedBookingForm({ isOpen, onClose, clientId }: EnhancedBooki
       return;
     }
 
-    // Submit booking
-    toast.success("Event booking submitted successfully! We'll contact you within 24 hours.");
-    onClose();
+    try {
+      const totalStaff = staffRequests.reduce((sum, r) => sum + r.quantity, 0);
+      const staffReqDescription = staffRequests
+        .map(r => `${r.quantity}x ${r.role}`)
+        .join(', ');
+
+      await api.post('/events', {
+        clientId,
+        title: eventData.title,
+        description: eventData.description || undefined,
+        eventType: eventData.eventType,
+        venue: eventData.venue || undefined,
+        date: eventDate.toISOString(),
+        startTime: eventData.startTime,
+        endTime: eventData.endTime,
+        location: eventData.address || eventData.venue || undefined,
+        staffRequired: totalStaff,
+        guestCount: eventData.guestCount ? parseInt(eventData.guestCount) : undefined,
+        budget: eventData.budget ? parseFloat(eventData.budget) : undefined,
+        specialRequirements: [
+          eventData.specialRequirements,
+          staffReqDescription ? `Staff needed: ${staffReqDescription}` : '',
+        ].filter(Boolean).join('\n') || undefined,
+      });
+
+      toast.success("Event booking submitted successfully! We'll contact you within 24 hours.");
+      onClose();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || "Failed to submit booking. Please try again.");
+      return;
+    }
     
     // Reset form
     setStep(1);

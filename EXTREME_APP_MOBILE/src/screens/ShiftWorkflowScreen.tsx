@@ -8,7 +8,9 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
-import api from '../config/api';
+import api, { API_BASE_URL } from '../config/api';
+import { getDeviceInfo } from '../utils/deviceInfo';
+import { startBackgroundLocationTracking, stopBackgroundLocationTracking } from '../services/backgroundLocation';
 import { Shift, ShiftStatus, RootStackParamList } from '../types';
 import { Colors, Spacing, FontSize, BorderRadius } from '../theme';
 
@@ -129,20 +131,56 @@ export default function ShiftWorkflowScreen() {
     setActionLoading(action);
     try {
       const location = await getLocation();
-      await api.post(`/shifts/${shiftId}/${endpoint}`, location || {});
+      const device = await getDeviceInfo();
+      await api.post(`/shifts/${shiftId}/${endpoint}`, { ...location, ...device });
       Vibration.vibrate(100);
 
       if (endpoint === 'start-travel' || endpoint === 'travel-home') {
         startLocationTracking();
+        startBackgroundLocationTracking(shiftId, API_BASE_URL).catch(() => {});
       }
       if (endpoint === 'arrive' || endpoint === 'end-travel') {
         stopLocationTracking();
+        stopBackgroundLocationTracking().catch(() => {});
       }
 
       await fetchShift();
     } catch (err: any) {
+      const code = err?.response?.data?.code;
       const msg = err?.response?.data?.error || 'Action failed.';
-      Alert.alert('Error', msg);
+      if (code === 'DEVICE_MISMATCH') {
+        Alert.alert(
+          'Device Mismatch',
+          msg + '\n\nWould you like to request a device change?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Request Change',
+              onPress: async () => {
+                try {
+                  const device = await getDeviceInfo();
+                  await api.post('/shifts/device/request-change', {
+                    reason: `Requesting from ${device.deviceName} (${device.deviceModel})`,
+                  });
+                  Alert.alert('Request Sent', 'Your device change request has been sent to admin for approval.');
+                } catch (e: any) {
+                  Alert.alert('Error', e?.response?.data?.error || 'Failed to send request.');
+                }
+              },
+            },
+          ]
+        );
+      } else if (code === 'TOO_FAR_FROM_VENUE') {
+        const distance = err?.response?.data?.distance;
+        Alert.alert(
+          'Too Far From Venue',
+          `You are ${distance ? distance + 'm' : 'too far'} from the event venue. You must be within 50m to check in.`,
+        );
+      } else if (code === 'LOCATION_REQUIRED') {
+        Alert.alert('Location Required', 'Please enable GPS and allow location access to check in.');
+      } else {
+        Alert.alert('Error', msg);
+      }
     } finally {
       setActionLoading(null);
     }
@@ -323,7 +361,16 @@ export default function ShiftWorkflowScreen() {
             icon="car"
             color={Colors.statusTravel}
             loading={actionLoading === 'start-travel'}
-            onPress={() => performAction('start-travel', 'start-travel')}
+            onPress={async () => {
+              await performAction('start-travel', 'start-travel');
+              nav.navigate('LiveMap', {
+                shiftId: shift!.id,
+                eventLat: shift!.event?.locationLat,
+                eventLng: shift!.event?.locationLng,
+                eventTitle: shift!.event?.title,
+                eventAddress: shift!.event?.location || shift!.event?.venue,
+              });
+            }}
           />
         );
       }
@@ -426,7 +473,16 @@ export default function ShiftWorkflowScreen() {
           icon="car"
           color={Colors.statusTravel}
           loading={actionLoading === 'travel-home'}
-          onPress={() => performAction('travel-home', 'travel-home')}
+          onPress={async () => {
+            await performAction('travel-home', 'travel-home');
+            nav.navigate('LiveMap', {
+              shiftId: shift!.id,
+              eventLat: shift!.event?.locationLat,
+              eventLng: shift!.event?.locationLng,
+              eventTitle: shift!.event?.title,
+              eventAddress: shift!.event?.location || shift!.event?.venue,
+            });
+          }}
         />
       );
     }
@@ -627,7 +683,7 @@ const s = StyleSheet.create({
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   infoText: { fontSize: FontSize.md, color: Colors.textPrimary, flex: 1 },
   travelEnabledBadge: {
-    backgroundColor: '#F3E8FF',
+    backgroundColor: '#FDE8E4',
     paddingHorizontal: Spacing.sm,
     paddingVertical: Spacing.xs,
     borderRadius: BorderRadius.sm,

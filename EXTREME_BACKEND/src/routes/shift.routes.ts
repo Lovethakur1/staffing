@@ -5,6 +5,7 @@ import {
   startTravel, arriveAtVenue, clockIn, clockOut,
   startBreak, endBreak,
   startTravelHome, endTravelHome, updateLocation,
+  requestDeviceChange, approveDeviceChange, getDeviceInfo,
 } from '../controllers/shift.controller';
 import { authenticate } from '../middleware/auth';
 import { authorize } from '../middleware/rbac';
@@ -14,6 +15,12 @@ router.use(authenticate);
 
 // CRUD
 router.get('/', listShifts);
+
+// Device management (MUST be before /:id routes)
+router.get('/device/info', authorize('STAFF'), getDeviceInfo);
+router.post('/device/request-change', authorize('STAFF'), requestDeviceChange);
+router.post('/device/approve-change/:staffProfileId', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER'), approveDeviceChange);
+
 router.get('/:id', getShift);
 router.post('/', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER', 'SCHEDULER'), createShift);
 router.put('/:id', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER', 'SCHEDULER'), updateShift);

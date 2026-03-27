@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { asyncHandler, parsePagination } from '../utils/helpers';
+import { geocodeAddress } from '../utils/geocode';
 
 /**
  * GET /api/events
@@ -57,6 +58,7 @@ export const listEvents = asyncHandler(async (req: AuthRequest, res: Response) =
         shifts: {
           select: { id: true, status: true, staffId: true, staff: { select: { id: true, name: true } } }
         },
+        clientReviews: { select: { id: true, rating: true, createdAt: true } },
         _count: { select: { shifts: true } },
       },
     }),
@@ -113,7 +115,7 @@ export const createEvent = asyncHandler(async (req: AuthRequest, res: Response) 
   const {
     clientId, title, description, eventType, venue, date,
     startTime, endTime, location, locationLat, locationLng,
-    staffRequired, budget, deposit, tips, specialRequirements,
+    staffRequired, guestCount, budget, deposit, tips, specialRequirements,
     dressCode, contactOnSite, contactOnSitePhone,
   } = req.body;
 
@@ -132,6 +134,18 @@ export const createEvent = asyncHandler(async (req: AuthRequest, res: Response) 
     finalClientId = clientProfile.id; // Override payload with actual client ID
   }
 
+  // Auto-geocode if coordinates not provided
+  let finalLat = locationLat;
+  let finalLng = locationLng;
+  if (!finalLat || !finalLng) {
+    const addressStr = [location, venue].filter(Boolean).join(', ');
+    const geo = await geocodeAddress(addressStr);
+    if (geo) {
+      finalLat = geo.lat;
+      finalLng = geo.lng;
+    }
+  }
+
   const event = await prisma.event.create({
     data: {
       clientId: finalClientId,
@@ -144,9 +158,10 @@ export const createEvent = asyncHandler(async (req: AuthRequest, res: Response) 
       startTime,
       endTime,
       location,
-      locationLat,
-      locationLng,
+      locationLat: finalLat,
+      locationLng: finalLng,
       staffRequired,
+      guestCount: guestCount != null ? Number(guestCount) : undefined,
       budget,
       deposit,
       tips,
@@ -176,15 +191,31 @@ export const createEvent = asyncHandler(async (req: AuthRequest, res: Response) 
 export const updateEvent = asyncHandler(async (req: Request, res: Response) => {
   const {
     title, description, eventType, venue, date, startTime, endTime,
-    location, locationLat, locationLng, status, staffRequired,
+    location, locationLat, locationLng, status, staffRequired, guestCount,
     budget, deposit, tips, specialRequirements, managerId,
     dressCode, contactOnSite, contactOnSitePhone,
   } = req.body;
 
   const existingEvent = await prisma.event.findUnique({
     where: { id: req.params.id },
-    select: { status: true, clientId: true, title: true }
+    select: { status: true, clientId: true, title: true, location: true, venue: true, locationLat: true, locationLng: true }
   });
+
+  // Auto-geocode if coordinates not provided and address changed or coords missing
+  let geoLat = locationLat;
+  let geoLng = locationLng;
+  if (geoLat === undefined && geoLng === undefined) {
+    const addrChanged = (location && location !== existingEvent?.location) || (venue && venue !== existingEvent?.venue);
+    const hasNoCoords = !existingEvent?.locationLat || !existingEvent?.locationLng;
+    if (addrChanged || hasNoCoords) {
+      const addressStr = [location || existingEvent?.location, venue || existingEvent?.venue].filter(Boolean).join(', ');
+      const geo = await geocodeAddress(addressStr);
+      if (geo) {
+        geoLat = geo.lat;
+        geoLng = geo.lng;
+      }
+    }
+  }
 
   const event = await prisma.event.update({
     where: { id: req.params.id },
@@ -197,10 +228,11 @@ export const updateEvent = asyncHandler(async (req: Request, res: Response) => {
       ...(startTime && { startTime }),
       ...(endTime && { endTime }),
       ...(location && { location }),
-      ...(locationLat !== undefined && { locationLat }),
-      ...(locationLng !== undefined && { locationLng }),
+      ...(geoLat !== undefined && { locationLat: geoLat }),
+      ...(geoLng !== undefined && { locationLng: geoLng }),
       ...(status && { status }),
       ...(staffRequired !== undefined && { staffRequired }),
+      ...(guestCount !== undefined && { guestCount: Number(guestCount) }),
       ...(budget !== undefined && { budget }),
       ...(deposit !== undefined && { deposit }),
       ...(tips !== undefined && { tips }),
@@ -241,6 +273,58 @@ export const updateEvent = asyncHandler(async (req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/events/:id/geocode
+ * Geocode an event's address to get coordinates
+ */
+export const geocodeEvent = asyncHandler(async (req: Request, res: Response) => {
+  const ev = await prisma.event.findUnique({
+    where: { id: req.params.id },
+    select: { id: true, location: true, venue: true, locationLat: true, locationLng: true },
+  });
+  if (!ev) { res.status(404).json({ error: 'Event not found' }); return; }
+
+  const addressStr = [ev.location, ev.venue].filter(Boolean).join(', ');
+  if (!addressStr) { res.status(400).json({ error: 'No address to geocode' }); return; }
+
+  const geo = await geocodeAddress(addressStr);
+  if (!geo) { res.status(422).json({ error: 'Could not geocode address: ' + addressStr }); return; }
+
+  const updated = await prisma.event.update({
+    where: { id: ev.id },
+    data: { locationLat: geo.lat, locationLng: geo.lng },
+  });
+  res.json({ locationLat: updated.locationLat, locationLng: updated.locationLng });
+});
+
+/**
+ * POST /api/events/geocode-all
+ * Backfill coordinates for all events missing them
+ */
+export const geocodeAllEvents = asyncHandler(async (_req: Request, res: Response) => {
+  const events = await prisma.event.findMany({
+    where: { locationLat: null },
+    select: { id: true, location: true, venue: true },
+  });
+
+  let updated = 0;
+  for (const ev of events) {
+    const addressStr = [ev.location, ev.venue].filter(Boolean).join(', ');
+    if (!addressStr) continue;
+    const geo = await geocodeAddress(addressStr);
+    if (geo) {
+      await prisma.event.update({
+        where: { id: ev.id },
+        data: { locationLat: geo.lat, locationLng: geo.lng },
+      });
+      updated++;
+    }
+    // Nominatim rate limit: 1 req/sec
+    await new Promise(r => setTimeout(r, 1100));
+  }
+  res.json({ total: events.length, updated });
+});
+
+/**
  * DELETE /api/events/:id
  */
 export const deleteEvent = asyncHandler(async (req: Request, res: Response) => {
@@ -250,6 +334,57 @@ export const deleteEvent = asyncHandler(async (req: Request, res: Response) => {
   });
 
   res.json({ message: 'Event cancelled.' });
+});
+
+/**
+ * GET /api/events/:id/staff-locations
+ * Returns live location data for all staff assigned to an event.
+ */
+export const getEventStaffLocations = asyncHandler(async (req: Request, res: Response) => {
+  const event = await prisma.event.findUnique({
+    where: { id: req.params.id },
+    select: {
+      id: true, title: true, locationLat: true, locationLng: true, venue: true, location: true,
+      shifts: {
+        select: {
+          id: true, status: true, travelLat: true, travelLng: true,
+          travelEnabled: true, travelStartTime: true, travelArrivalTime: true,
+          clockIn: true, clockOut: true, travelHomeStart: true, travelHomeEnd: true,
+          staff: { select: { id: true, name: true, avatar: true, phone: true } },
+        },
+      },
+    },
+  });
+
+  if (!event) { res.status(404).json({ error: 'Event not found.' }); return; }
+
+  const staffLocations = event.shifts.map(shift => ({
+    shiftId: shift.id,
+    staffId: shift.staff?.id,
+    staffName: shift.staff?.name,
+    staffAvatar: shift.staff?.avatar,
+    staffPhone: shift.staff?.phone,
+    status: shift.status,
+    lat: shift.travelLat,
+    lng: shift.travelLng,
+    travelEnabled: shift.travelEnabled,
+    travelStartTime: shift.travelStartTime,
+    travelArrivalTime: shift.travelArrivalTime,
+    clockIn: shift.clockIn,
+    clockOut: shift.clockOut,
+    travelHomeStart: shift.travelHomeStart,
+    travelHomeEnd: shift.travelHomeEnd,
+  }));
+
+  res.json({
+    eventId: event.id,
+    eventTitle: event.title,
+    venueLat: event.locationLat,
+    venueLng: event.locationLng,
+    venue: event.venue,
+    location: event.location,
+    staff: staffLocations,
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════

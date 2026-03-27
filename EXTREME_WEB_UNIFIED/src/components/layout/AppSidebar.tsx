@@ -94,7 +94,6 @@ export function AppSidebar({ currentUser, onLogout }: AppSidebarProps) {
       items: [
         { title: "Command Center", icon: LayoutDashboard, id: "dashboard" },
         { title: "Live Operations", icon: Radio, id: "live-ops", badge: "LIVE" },
-        { title: "Staff Tracker", icon: Target, id: "staff-tracker" },
         { title: "Event Requests Queue", icon: FileText, id: "event-requests-queue", badge: "5" },
       ]
     },
@@ -200,7 +199,6 @@ export function AppSidebar({ currentUser, onLogout }: AppSidebarProps) {
       label: "Operations",
       items: [
         { title: "Scheduling", icon: Clock, id: "shifts-schedule" },
-        { title: "Staff Tracker", icon: Target, id: "staff-tracker" },
         { title: "Timesheets", icon: ClipboardCheck, id: "timesheets" },
         { title: "Incident Management", icon: AlertTriangle, id: "incident-management" },
       ]
@@ -283,7 +281,6 @@ export function AppSidebar({ currentUser, onLogout }: AppSidebarProps) {
         { title: "Manager Dashboard", icon: LayoutDashboard, id: "manager" },
         { title: "Event Overview", icon: Calendar, id: "events" },
         { title: "Attendance Tracking", icon: CheckCircle2, id: "attendance" },
-        { title: "Staff Tracker", icon: Target, id: "staff-tracker" },
       ]
     },
     {

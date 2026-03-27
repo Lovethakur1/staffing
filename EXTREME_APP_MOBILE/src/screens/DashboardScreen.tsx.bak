@@ -1,0 +1,414 @@
+import React, { useState, useCallback } from 'react';
+import {
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  RefreshControl, ActivityIndicator, Image,
+} from 'react-native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import api from '../config/api';
+import { useAuth } from '../context/AuthContext';
+import { Shift, RootStackParamList } from '../types';
+import { Colors, Spacing, FontSize, BorderRadius } from '../theme';
+
+type Nav = NativeStackNavigationProp<RootStackParamList>;
+
+export default function DashboardScreen() {
+  const { user } = useAuth();
+  const nav = useNavigation<Nav>();
+  const insets = useSafeAreaInsets();
+  const [shifts, setShifts] = useState<Shift[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState<'overview' | 'pending' | 'today'>('overview');
+
+  const fetchShifts = useCallback(async () => {
+    try {
+      const res = await api.get('/shifts', { params: { status: undefined } });
+      const data: Shift[] = res.data?.data || [];
+      data.sort((a, b) => {
+        const activeStatuses = ['TRAVEL_TO_VENUE', 'ARRIVED', 'IN_PROGRESS', 'BREAK', 'TRAVEL_HOME'];
+        const aActive = activeStatuses.includes(a.status) ? 0 : 1;
+        const bActive = activeStatuses.includes(b.status) ? 0 : 1;
+        if (aActive !== bActive) return aActive - bActive;
+        return new Date(b.date).getTime() - new Date(a.date).getTime();
+      });
+      setShifts(data);
+    } catch (err) {
+      console.error('Failed to fetch shifts:', err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      setLoading(true);
+      fetchShifts();
+    }, [fetchShifts])
+  );
+
+  const todayShifts = shifts.filter(s => new Date(s.date).toDateString() === new Date().toDateString());
+  const pendingShifts = shifts.filter(s => s.status === 'PENDING');
+  const completedShifts = shifts.filter(s => s.status === 'COMPLETED');
+  const activeShift = shifts.find(s =>
+    ['TRAVEL_TO_VENUE', 'ARRIVED', 'IN_PROGRESS', 'BREAK', 'TRAVEL_HOME', 'CONFIRMED', 'YET_TO_START'].includes(s.status)
+  );
+
+  const totalHours = completedShifts.reduce((sum, s) => sum + (s.totalHours || 0), 0);
+  const totalEarnings = completedShifts.reduce((sum, s) => sum + (s.totalPay || 0), 0);
+
+  const initials = (user?.name || 'S').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  const today = new Date();
+  const dateStr = today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
+  if (loading) {
+    return <View style={s.center}><ActivityIndicator size="large" color={Colors.primary} /></View>;
+  }
+
+  return (
+    <View style={s.container}>
+      {/* Header */}
+      <View style={[s.header, { paddingTop: insets.top + 8 }]}>
+        <TouchableOpacity style={s.menuBtn}>
+          <Ionicons name="menu" size={24} color={Colors.textPrimary} />
+        </TouchableOpacity>
+
+        <View style={s.logoBg}>
+          <Text style={s.logoTextBig}>E</Text>
+          <Text style={s.logoTextSmall}>XTREME{'\n'}STAFFING</Text>
+        </View>
+
+        <View style={s.headerRight}>
+          <TouchableOpacity style={s.bellBtn}>
+            <Ionicons name="notifications-outline" size={22} color={Colors.textPrimary} />
+            <View style={s.notifBadge}><Text style={s.notifCount}>2</Text></View>
+          </TouchableOpacity>
+          <View style={s.avatarSmall}>
+            <Text style={s.avatarSmallText}>{initials}</Text>
+          </View>
+        </View>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={s.scroll}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchShifts(); }} colors={[Colors.primary]} />
+        }
+      >
+        {/* Welcome */}
+        <Text style={s.welcomeText}>Welcome back, {user?.name || 'Staff'}!</Text>
+        <Text style={s.dateText}>Here's your dashboard overview for {dateStr}</Text>
+
+        {/* Stat Cards */}
+        <View style={s.statsSection}>
+          <StatCard icon="calendar-outline" label="Today's Shifts" value={String(todayShifts.length)} sub={activeShift ? 'Active shift in progress' : 'No active shifts'} />
+          <StatCard icon="star-outline" label="Rating" value={user?.staffProfile?.rating?.toFixed(1) || '0.0'} sub={`From ${user?.staffProfile?.totalEvents || 0} reviews`} />
+          <StatCard icon="time-outline" label="Pending Requests" value={String(pendingShifts.length)} sub="Needs your response" />
+        </View>
+
+        {/* Tabs */}
+        <View style={s.tabBar}>
+          {(['overview', 'pending', 'today'] as const).map(t => (
+            <TouchableOpacity
+              key={t}
+              style={[s.tab, activeTab === t && s.tabActive]}
+              onPress={() => setActiveTab(t)}
+            >
+              <Text style={[s.tabText, activeTab === t && s.tabTextActive]}>
+                {t === 'overview' ? 'Overview' : t === 'pending' ? 'Pending Requests' : "Today's Shifts"}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {activeTab === 'overview' && (
+          <>
+            {/* Shift Status Card */}
+            <View style={s.card}>
+              <View style={s.cardHeader}>
+                <Text style={s.cardLabel}>Shift Status</Text>
+                <View style={s.statusPill}>
+                  <Text style={s.statusPillText}>{activeShift?.status?.replace(/_/g, ' ') || 'Scheduled'}</Text>
+                </View>
+              </View>
+              {activeShift ? (
+                <TouchableOpacity
+                  style={s.travelBtn}
+                  onPress={() => nav.navigate('ShiftWorkflow', { shiftId: activeShift.id })}
+                >
+                  <Text style={s.travelBtnIcon}>🔗</Text>
+                  <Text style={s.travelBtnText}>Start Travel Flow</Text>
+                </TouchableOpacity>
+              ) : todayShifts.length > 0 ? (
+                <TouchableOpacity
+                  style={s.travelBtn}
+                  onPress={() => nav.navigate('ShiftWorkflow', { shiftId: todayShifts[0].id })}
+                >
+                  <Text style={s.travelBtnIcon}>🔗</Text>
+                  <Text style={s.travelBtnText}>Start Travel Flow</Text>
+                </TouchableOpacity>
+              ) : (
+                <Text style={s.noShiftText}>No shifts scheduled for today</Text>
+              )}
+            </View>
+
+            {/* Performance Overview */}
+            <View style={s.card}>
+              <View style={s.perfHeader}>
+                <Ionicons name="trending-up" size={20} color={Colors.textPrimary} />
+                <Text style={s.perfTitle}>Performance Overview</Text>
+              </View>
+              <Text style={s.perfSubtitle}>Your work performance and achievement metrics</Text>
+
+              <View style={s.perfGrid}>
+                <View style={s.perfItem}>
+                  <Text style={s.perfNumber}>{Math.round(totalHours)}</Text>
+                  <Text style={s.perfLabel}>Total Hours</Text>
+                  <Text style={s.perfSub}>⏱ This month</Text>
+                </View>
+                <View style={s.perfItem}>
+                  <Text style={[s.perfNumber, { color: Colors.success }]}>${Math.round(totalEarnings)}</Text>
+                  <Text style={s.perfLabel}>Total Earnings</Text>
+                  <Text style={s.perfSub}>💰 This month</Text>
+                </View>
+              </View>
+
+              <View style={s.perfGrid}>
+                <View style={s.perfItem}>
+                  <Text style={[s.perfNumber, { color: Colors.success }]}>{user?.staffProfile?.rating?.toFixed(1) || '0.0'}</Text>
+                  <Text style={s.perfLabel}>Average Rating</Text>
+                  <Text style={s.perfSub}>⭐ {user?.staffProfile?.totalEvents || 0} reviews</Text>
+                </View>
+                <View style={s.perfItem}>
+                  <Text style={[s.perfNumber, { color: Colors.success }]}>98%</Text>
+                  <Text style={s.perfLabel}>On-Time Rate</Text>
+                  <Text style={s.perfSub}>⏰ Punctuality</Text>
+                </View>
+              </View>
+
+              {/* Progress bars */}
+              <View style={s.progressRow}>
+                <Text style={s.progressLabel}>Client Satisfaction</Text>
+                <Text style={s.progressValue}>96%</Text>
+              </View>
+              <View style={s.progressTrack}><View style={[s.progressFill, { width: '96%', backgroundColor: Colors.info }]} /></View>
+
+              <View style={[s.progressRow, { marginTop: 12 }]}>
+                <Text style={s.progressLabel}>Monthly Goal Progress</Text>
+                <Text style={s.progressValue}>9%</Text>
+              </View>
+              <View style={s.progressTrack}><View style={[s.progressFill, { width: '9%', backgroundColor: Colors.primary }]} /></View>
+            </View>
+
+            {/* Recent Activity */}
+            <View style={s.card}>
+              <View style={s.perfHeader}>
+                <Ionicons name="pulse" size={20} color={Colors.textPrimary} />
+                <Text style={s.perfTitle}>Recent Activity</Text>
+              </View>
+              <Text style={s.perfSubtitle}>Your latest completed shifts and achievements</Text>
+
+              {completedShifts.slice(0, 3).map(shift => (
+                <View key={shift.id} style={s.activityItem}>
+                  <View style={s.activityDot} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.activityTitle}>{shift.event?.title || 'Shift'}</Text>
+                    <Text style={s.activitySub}>
+                      {new Date(shift.date).toLocaleDateString('en-GB')} • Client
+                    </Text>
+                  </View>
+                  <View style={s.activityRight}>
+                    <Text style={s.activityPay}>${shift.totalPay?.toFixed(0) || '0'}</Text>
+                    <Text style={s.activityRating}>⭐ 4.9</Text>
+                  </View>
+                </View>
+              ))}
+              {completedShifts.length === 0 && <Text style={s.emptyText}>No recent activity</Text>}
+            </View>
+          </>
+        )}
+
+        {activeTab === 'pending' && (
+          <View style={s.card}>
+            {pendingShifts.length === 0 ? (
+              <Text style={s.emptyText}>No pending requests</Text>
+            ) : (
+              pendingShifts.map(shift => (
+                <TouchableOpacity
+                  key={shift.id}
+                  style={s.shiftItem}
+                  onPress={() => nav.navigate('ShiftWorkflow', { shiftId: shift.id })}
+                >
+                  <Text style={s.shiftItemTitle}>{shift.event?.title || 'Shift'}</Text>
+                  <Text style={s.shiftItemSub}>
+                    {new Date(shift.date).toLocaleDateString()} • {shift.startTime} – {shift.endTime}
+                  </Text>
+                  <Text style={s.shiftItemVenue}>{shift.event?.venue || shift.event?.location}</Text>
+                </TouchableOpacity>
+              ))
+            )}
+          </View>
+        )}
+
+        {activeTab === 'today' && (
+          <View style={s.card}>
+            {todayShifts.length === 0 ? (
+              <Text style={s.emptyText}>No shifts today</Text>
+            ) : (
+              todayShifts.map(shift => (
+                <TouchableOpacity
+                  key={shift.id}
+                  style={s.shiftItem}
+                  onPress={() => nav.navigate('ShiftWorkflow', { shiftId: shift.id })}
+                >
+                  <Text style={s.shiftItemTitle}>{shift.event?.title || 'Shift'}</Text>
+                  <Text style={s.shiftItemSub}>{shift.startTime} – {shift.endTime}</Text>
+                  <View style={s.shiftStatusRow}>
+                    <View style={[s.shiftDot, { backgroundColor: Colors.statusInProgress }]} />
+                    <Text style={s.shiftStatusLabel}>{shift.status.replace(/_/g, ' ')}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))
+            )}
+          </View>
+        )}
+      </ScrollView>
+    </View>
+  );
+}
+
+function StatCard({ icon, label, value, sub }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string; sub: string }) {
+  return (
+    <View style={s.statCard}>
+      <View style={s.statIconRow}>
+        <Ionicons name={icon} size={18} color={Colors.textSecondary} />
+        <Text style={s.statLabel}>{label}</Text>
+      </View>
+      <Text style={s.statValue}>{value}</Text>
+      <Text style={s.statSub}>{sub}</Text>
+    </View>
+  );
+}
+
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  scroll: { paddingHorizontal: 16, paddingBottom: 100 },
+
+  // Header
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingBottom: 10, backgroundColor: '#fff',
+    borderBottomWidth: 1, borderBottomColor: '#E2E8F0',
+  },
+  menuBtn: { padding: 4 },
+  logoBg: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.primary,
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6,
+  },
+  logoTextBig: { color: '#fff', fontSize: 18, fontWeight: '900' },
+  logoTextSmall: { color: '#fff', fontSize: 7, fontWeight: '700', marginLeft: 2, lineHeight: 9 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  bellBtn: { position: 'relative' },
+  notifBadge: {
+    position: 'absolute', top: -4, right: -6, backgroundColor: Colors.primary,
+    borderRadius: 10, width: 18, height: 18, justifyContent: 'center', alignItems: 'center',
+  },
+  notifCount: { color: '#fff', fontSize: 10, fontWeight: '700' },
+  avatarSmall: {
+    width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.primary,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  avatarSmallText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+
+  // Welcome
+  welcomeText: { fontSize: 20, fontWeight: '700', color: Colors.textPrimary, marginTop: 16 },
+  dateText: { fontSize: 13, color: Colors.textSecondary, marginTop: 2, marginBottom: 16 },
+
+  // Stat Cards
+  statsSection: { gap: 10 },
+  statCard: {
+    backgroundColor: '#fff', borderRadius: 12, padding: 16,
+    borderWidth: 1, borderColor: '#E2E8F0',
+  },
+  statIconRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  statLabel: { fontSize: 13, color: Colors.textSecondary, fontWeight: '500' },
+  statValue: { fontSize: 28, fontWeight: '700', color: Colors.textPrimary },
+  statSub: { fontSize: 12, color: Colors.info, marginTop: 2 },
+
+  // Tabs
+  tabBar: {
+    backgroundColor: '#fff', borderRadius: 12, padding: 4, marginTop: 16, marginBottom: 12,
+    borderWidth: 1, borderColor: '#E2E8F0',
+  },
+  tab: { paddingVertical: 10, alignItems: 'center', borderRadius: 8 },
+  tabActive: { backgroundColor: '#F1F5F9' },
+  tabText: { fontSize: 13, fontWeight: '600', color: Colors.textSecondary },
+  tabTextActive: { color: Colors.textPrimary },
+
+  // Card
+  card: {
+    backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 12,
+    borderWidth: 1, borderColor: '#E2E8F0',
+  },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  cardLabel: { fontSize: 16, fontWeight: '600', color: Colors.textPrimary },
+  statusPill: {
+    backgroundColor: '#F1F5F9', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4,
+  },
+  statusPillText: { fontSize: 11, fontWeight: '600', color: Colors.textSecondary, textTransform: 'capitalize' },
+
+  travelBtn: {
+    flexDirection: 'row', backgroundColor: Colors.primary, borderRadius: 10,
+    paddingVertical: 14, alignItems: 'center', justifyContent: 'center', gap: 8,
+  },
+  travelBtnIcon: { fontSize: 18 },
+  travelBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  noShiftText: { fontSize: 13, color: Colors.textMuted, textAlign: 'center', paddingVertical: 12 },
+
+  // Performance
+  perfHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  perfTitle: { fontSize: 16, fontWeight: '700', color: Colors.textPrimary },
+  perfSubtitle: { fontSize: 12, color: Colors.textSecondary, marginBottom: 16 },
+  perfGrid: { flexDirection: 'row', gap: 10, marginBottom: 10 },
+  perfItem: {
+    flex: 1, backgroundColor: '#F8FAFC', borderRadius: 10, padding: 14,
+    alignItems: 'center', borderWidth: 1, borderColor: '#E2E8F0',
+  },
+  perfNumber: { fontSize: 24, fontWeight: '700', color: Colors.textPrimary },
+  perfLabel: { fontSize: 12, color: Colors.textSecondary, marginTop: 4, textAlign: 'center' },
+  perfSub: { fontSize: 10, color: Colors.textMuted, marginTop: 2 },
+
+  progressRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4, marginTop: 4 },
+  progressLabel: { fontSize: 13, fontWeight: '600', color: Colors.textPrimary },
+  progressValue: { fontSize: 13, fontWeight: '600', color: Colors.textPrimary },
+  progressTrack: { height: 6, backgroundColor: '#E2E8F0', borderRadius: 3, overflow: 'hidden' },
+  progressFill: { height: '100%', borderRadius: 3 },
+
+  // Activity
+  activityItem: {
+    flexDirection: 'row', alignItems: 'center', paddingVertical: 12,
+    borderBottomWidth: 1, borderBottomColor: '#F1F5F9',
+  },
+  activityDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.success, marginRight: 12 },
+  activityTitle: { fontSize: 14, fontWeight: '600', color: Colors.textPrimary },
+  activitySub: { fontSize: 11, color: Colors.textSecondary, marginTop: 2 },
+  activityRight: { alignItems: 'flex-end' },
+  activityPay: { fontSize: 14, fontWeight: '700', color: Colors.success },
+  activityRating: { fontSize: 11, color: Colors.textSecondary, marginTop: 2 },
+
+  // Shift items
+  shiftItem: {
+    paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9',
+  },
+  shiftItemTitle: { fontSize: 15, fontWeight: '600', color: Colors.textPrimary },
+  shiftItemSub: { fontSize: 12, color: Colors.textSecondary, marginTop: 2 },
+  shiftItemVenue: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
+  shiftStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
+  shiftDot: { width: 6, height: 6, borderRadius: 3 },
+  shiftStatusLabel: { fontSize: 11, color: Colors.textSecondary, textTransform: 'capitalize' },
+  emptyText: { fontSize: 13, color: Colors.textMuted, textAlign: 'center', paddingVertical: 20 },
+});

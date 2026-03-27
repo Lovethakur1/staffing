@@ -128,6 +128,31 @@ model StaffProfile {
   emergencyPhone     String?
   bankAccountInfo    String? // Encrypted
   taxId              String? // SSN/EIN (Encrypted)
+
+  // Device lock – one staff = one device
+  registeredDeviceId    String?  // unique device fingerprint
+  registeredDeviceName  String?  // e.g. "Pixel 7 Pro"
+  registeredDeviceModel String?  // e.g. "Pixel 7 Pro"
+  registeredDeviceBrand String?  // e.g. "Google"
+  registeredDeviceOS    String?  // e.g. "Android 14"
+  deviceLockedAt        DateTime? // when device was registered
+  deviceChangeRequested Boolean  @default(false)
+  deviceChangeReason    String?
+
+  unavailabilities StaffUnavailability[]
+}
+
+model StaffUnavailability {
+  id             String       @id @default(uuid())
+  staffProfileId String
+  staffProfile   StaffProfile @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
+  startDate      DateTime
+  endDate        DateTime
+  startTime      String?      // e.g. "09:00"
+  endTime        String?      // e.g. "17:00"
+  reason         String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 }
 
 model ClientProfile {
@@ -199,6 +224,7 @@ model Event {
   locationLng         Float?
   status              EventStatus @default(PENDING)
   staffRequired       Int
+  guestCount          Int?
   budget              Float       @default(0)
   deposit             Float       @default(0)
   tips                Float       @default(0)
@@ -257,6 +283,14 @@ model Shift {
 
   // Tips
   tipsReceived Float @default(0)
+
+  // Device info captured during shift actions
+  deviceId    String? // unique device fingerprint
+  deviceName  String? // e.g. "Pixel 7 Pro"
+  deviceModel String? // e.g. "Pixel 7 Pro"
+  deviceBrand String? // e.g. "Google"
+  deviceOS    String? // e.g. "Android 14"
+  deviceIP    String? // IP address at time of action
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

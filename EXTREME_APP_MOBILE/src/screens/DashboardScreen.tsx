@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
   RefreshControl, ActivityIndicator,
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -9,47 +9,47 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../config/api';
 import { useAuth } from '../context/AuthContext';
-import { Shift, RootStackParamList } from '../types';
-import { Colors, Spacing, FontSize, BorderRadius } from '../theme';
+import { RootStackParamList } from '../types';
+import { Colors } from '../theme';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: keyof typeof Ionicons.glyphMap }> = {
-  PENDING:         { label: 'Pending',     color: Colors.statusPending,    bg: Colors.warningLight,  icon: 'time-outline' },
-  CONFIRMED:       { label: 'Confirmed',   color: Colors.statusConfirmed,  bg: Colors.infoLight,     icon: 'checkmark-circle-outline' },
-  YET_TO_START:    { label: 'Yet to Start',color: Colors.textSecondary,    bg: '#F1F5F9',            icon: 'hourglass-outline' },
-  TRAVEL_TO_VENUE: { label: 'Traveling',   color: Colors.statusTravel,     bg: '#F3E8FF',            icon: 'car-outline' },
-  ARRIVED:         { label: 'Arrived',     color: Colors.statusArrived,    bg: '#ECFEFF',            icon: 'location-outline' },
-  IN_PROGRESS:     { label: 'Working',     color: Colors.statusInProgress, bg: Colors.successLight,  icon: 'play-circle-outline' },
-  BREAK:           { label: 'On Break',    color: Colors.statusBreak,      bg: '#FFF7ED',            icon: 'cafe-outline' },
-  COMPLETED:       { label: 'Completed',   color: Colors.statusCompleted,  bg: '#EEF2FF',            icon: 'checkmark-done-circle-outline' },
-  TRAVEL_HOME:     { label: 'Going Home',  color: Colors.statusTravel,     bg: '#F3E8FF',            icon: 'home-outline' },
-  REJECTED:        { label: 'Rejected',    color: Colors.danger,           bg: Colors.dangerLight,   icon: 'close-circle-outline' },
-};
+interface DashboardData {
+  profile: any;
+  stats: {
+    todaysShifts: number;
+    upcomingShifts: number;
+    pendingRequests: number;
+    completedShifts: number;
+    rating: number;
+    totalEvents: number;
+    totalEarnings: number;
+    thisMonthEarnings: number;
+  };
+  shifts: {
+    today: any[];
+    upcoming: any[];
+    pending: any[];
+    recent: any[];
+  };
+  certifications: any[];
+}
 
 export default function DashboardScreen() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const nav = useNavigation<Nav>();
   const insets = useSafeAreaInsets();
-  const [shifts, setShifts] = useState<Shift[]>([]);
+  const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState<'overview' | 'pending' | 'today'>('overview');
 
-  const fetchShifts = useCallback(async () => {
+  const fetchDashboard = useCallback(async () => {
     try {
-      const res = await api.get('/shifts', { params: { status: undefined } });
-      const data: Shift[] = res.data?.data || [];
-      // Sort: active shifts first, then by date
-      data.sort((a, b) => {
-        const activeStatuses = ['TRAVEL_TO_VENUE', 'ARRIVED', 'IN_PROGRESS', 'BREAK', 'TRAVEL_HOME'];
-        const aActive = activeStatuses.includes(a.status) ? 0 : 1;
-        const bActive = activeStatuses.includes(b.status) ? 0 : 1;
-        if (aActive !== bActive) return aActive - bActive;
-        return new Date(b.date).getTime() - new Date(a.date).getTime();
-      });
-      setShifts(data);
+      const res = await api.get('/staff/me/dashboard');
+      setData(res.data);
     } catch (err) {
-      console.error('Failed to fetch shifts:', err);
+      console.error('Failed to fetch dashboard:', err);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -59,302 +59,290 @@ export default function DashboardScreen() {
   useFocusEffect(
     useCallback(() => {
       setLoading(true);
-      fetchShifts();
-    }, [fetchShifts])
+      fetchDashboard();
+    }, [fetchDashboard])
   );
 
-  const todayShifts = shifts.filter(s => {
-    const shiftDate = new Date(s.date).toDateString();
-    return shiftDate === new Date().toDateString();
-  });
+  const initials = (user?.name || 'S').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  const today = new Date();
+  const dateStr = today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
-  const upcomingShifts = shifts.filter(s => {
-    const shiftDate = new Date(s.date);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return shiftDate > today && !['COMPLETED', 'REJECTED'].includes(s.status);
-  });
+  if (loading || !data) {
+    return <View style={st.center}><ActivityIndicator size="large" color={Colors.primary} /></View>;
+  }
 
-  const activeShift = shifts.find(s =>
-    ['TRAVEL_TO_VENUE', 'ARRIVED', 'IN_PROGRESS', 'BREAK', 'TRAVEL_HOME'].includes(s.status)
+  const { stats, shifts } = data;
+  const activeShift = shifts.today.find((sh: any) =>
+    ['TRAVEL_TO_VENUE', 'ARRIVED', 'IN_PROGRESS', 'BREAK', 'TRAVEL_HOME', 'CONFIRMED', 'YET_TO_START'].includes(sh.status)
   );
-
-  function formatDate(dateStr: string) {
-    const d = new Date(dateStr);
-    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-  }
-
-  function renderActiveShiftBanner() {
-    if (!activeShift) return null;
-    const cfg = STATUS_CONFIG[activeShift.status] || STATUS_CONFIG.PENDING;
-
-    return (
-      <TouchableOpacity
-        style={styles.activeBanner}
-        onPress={() => nav.navigate('ShiftWorkflow', { shiftId: activeShift.id })}
-      >
-        <View style={styles.activeBannerPulse} />
-        <View style={styles.activeBannerContent}>
-          <View style={styles.activeBannerTop}>
-            <Ionicons name={cfg.icon} size={20} color={Colors.white} />
-            <Text style={styles.activeBannerStatus}>{cfg.label}</Text>
-          </View>
-          <Text style={styles.activeBannerTitle}>
-            {activeShift.event?.title || 'Active Shift'}
-          </Text>
-          <Text style={styles.activeBannerTime}>
-            {activeShift.startTime} – {activeShift.endTime} • {activeShift.event?.venue || activeShift.event?.location}
-          </Text>
-          <View style={styles.activeBannerAction}>
-            <Text style={styles.activeBannerActionText}>Tap to continue →</Text>
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
-  }
-
-  function renderShiftCard({ item }: { item: Shift }) {
-    const cfg = STATUS_CONFIG[item.status] || STATUS_CONFIG.PENDING;
-
-    return (
-      <TouchableOpacity
-        style={styles.shiftCard}
-        onPress={() => nav.navigate('ShiftWorkflow', { shiftId: item.id })}
-      >
-        <View style={styles.shiftCardHeader}>
-          <View style={[styles.statusBadge, { backgroundColor: cfg.bg }]}>
-            <Ionicons name={cfg.icon} size={14} color={cfg.color} />
-            <Text style={[styles.statusText, { color: cfg.color }]}>{cfg.label}</Text>
-          </View>
-          {item.travelEnabled && (
-            <View style={styles.travelBadge}>
-              <Ionicons name="car" size={12} color={Colors.statusTravel} />
-            </View>
-          )}
-        </View>
-
-        <Text style={styles.shiftTitle}>{item.event?.title || 'Shift'}</Text>
-
-        <View style={styles.shiftMeta}>
-          <View style={styles.metaItem}>
-            <Ionicons name="calendar-outline" size={14} color={Colors.textSecondary} />
-            <Text style={styles.metaText}>{formatDate(item.date)}</Text>
-          </View>
-          <View style={styles.metaItem}>
-            <Ionicons name="time-outline" size={14} color={Colors.textSecondary} />
-            <Text style={styles.metaText}>{item.startTime} – {item.endTime}</Text>
-          </View>
-        </View>
-
-        {item.event?.venue && (
-          <View style={styles.metaItem}>
-            <Ionicons name="location-outline" size={14} color={Colors.textSecondary} />
-            <Text style={styles.metaText} numberOfLines={1}>{item.event.venue}</Text>
-          </View>
-        )}
-
-        {item.role && (
-          <View style={[styles.roleBadge]}>
-            <Text style={styles.roleText}>{item.role}</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-    );
-  }
-
-  if (loading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={Colors.primary} />
-      </View>
-    );
-  }
+  const completedRecent = shifts.recent.filter((sh: any) => sh.status === 'COMPLETED');
+  const totalHours = completedRecent.reduce((sum: number, sh: any) => sum + (sh.totalHours || 0), 0);
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + Spacing.md }]}>
-        <View>
-          <Text style={styles.greeting}>Hello,</Text>
-          <Text style={styles.userName}>{user?.name || 'Staff'}</Text>
-        </View>
-        <TouchableOpacity onPress={logout} style={styles.logoutBtn}>
-          <Ionicons name="log-out-outline" size={24} color={Colors.textSecondary} />
+    <View style={st.container}>
+      <View style={[st.header, { paddingTop: insets.top + 8 }]}>
+        <TouchableOpacity style={st.menuBtn}>
+          <Ionicons name="menu" size={24} color={Colors.textPrimary} />
         </TouchableOpacity>
+        <View style={st.logoBg}>
+          <Text style={st.logoTextBig}>E</Text>
+          <Text style={st.logoTextSmall}>XTREME{'\n'}STAFFING</Text>
+        </View>
+        <View style={st.headerRight}>
+          <TouchableOpacity style={st.bellBtn}>
+            <Ionicons name="notifications-outline" size={22} color={Colors.textPrimary} />
+            <View style={st.notifBadge}><Text style={st.notifCount}>{stats.pendingRequests}</Text></View>
+          </TouchableOpacity>
+          <View style={st.avatarSmall}><Text style={st.avatarSmallText}>{initials}</Text></View>
+        </View>
       </View>
 
-      <FlatList
-        data={[]}
-        renderItem={() => null}
-        ListHeaderComponent={
-          <>
-            {renderActiveShiftBanner()}
+      <ScrollView
+        contentContainerStyle={st.scroll}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchDashboard(); }} colors={[Colors.primary]} />}
+      >
+        <Text style={st.welcomeText}>Welcome back, {user?.name || 'Staff'}!</Text>
+        <Text style={st.dateText}>Here's your dashboard overview for {dateStr}</Text>
 
-            {/* Stats */}
-            <View style={styles.statsRow}>
-              <View style={[styles.statCard, { backgroundColor: Colors.infoLight }]}>
-                <Text style={[styles.statNumber, { color: Colors.info }]}>{todayShifts.length}</Text>
-                <Text style={styles.statLabel}>Today</Text>
+        <View style={st.statsSection}>
+          <StatCard icon="calendar-outline" label="Today's Shifts" value={String(stats.todaysShifts)} sub={activeShift ? 'Active shift in progress' : 'No active shifts'} />
+          <StatCard icon="star-outline" label="Rating" value={stats.rating?.toFixed(1) || '0.0'} sub={`From ${stats.totalEvents} reviews`} />
+          <StatCard icon="time-outline" label="Pending Requests" value={String(stats.pendingRequests)} sub="Needs your response" />
+        </View>
+
+        <View style={st.tabBar}>
+          {(['overview', 'pending', 'today'] as const).map(t => (
+            <TouchableOpacity key={t} style={[st.tab, activeTab === t && st.tabActive]} onPress={() => setActiveTab(t)}>
+              <Text style={[st.tabText, activeTab === t && st.tabTextActive]}>
+                {t === 'overview' ? 'Overview' : t === 'pending' ? 'Pending Requests' : "Today's Shifts"}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {activeTab === 'overview' && (
+          <>
+            {/* Shift Status - only show Start Travel Flow if travelEnabled */}
+            <View style={st.card}>
+              <View style={st.cardHeader}>
+                <Text style={st.cardLabel}>Shift Status</Text>
+                <View style={st.statusPill}>
+                  <Text style={st.statusPillText}>{activeShift?.status?.replace(/_/g, ' ') || 'Scheduled'}</Text>
+                </View>
               </View>
-              <View style={[styles.statCard, { backgroundColor: Colors.warningLight }]}>
-                <Text style={[styles.statNumber, { color: Colors.warning }]}>{upcomingShifts.length}</Text>
-                <Text style={styles.statLabel}>Upcoming</Text>
+              {activeShift ? (
+                <TouchableOpacity
+                  style={st.travelBtn}
+                  onPress={() => nav.navigate('ShiftWorkflow', { shiftId: activeShift.id })}
+                >
+                  <Text style={st.travelBtnIcon}>{activeShift.travelEnabled ? '🔗' : '📋'}</Text>
+                  <Text style={st.travelBtnText}>{activeShift.travelEnabled ? 'Start Travel Flow' : 'View Shift Details'}</Text>
+                </TouchableOpacity>
+              ) : shifts.today.length > 0 ? (
+                <TouchableOpacity
+                  style={st.travelBtn}
+                  onPress={() => nav.navigate('ShiftWorkflow', { shiftId: shifts.today[0].id })}
+                >
+                  <Text style={st.travelBtnIcon}>{shifts.today[0].travelEnabled ? '🔗' : '📋'}</Text>
+                  <Text style={st.travelBtnText}>{shifts.today[0].travelEnabled ? 'Start Travel Flow' : 'View Shift Details'}</Text>
+                </TouchableOpacity>
+              ) : (
+                <Text style={st.noShiftText}>No shifts scheduled for today</Text>
+              )}
+            </View>
+
+            {/* Performance */}
+            <View style={st.card}>
+              <View style={st.perfHeader}>
+                <Ionicons name="trending-up" size={20} color={Colors.textPrimary} />
+                <Text style={st.perfTitle}>Performance Overview</Text>
               </View>
-              <View style={[styles.statCard, { backgroundColor: Colors.successLight }]}>
-                <Text style={[styles.statNumber, { color: Colors.success }]}>
-                  {shifts.filter(s => s.status === 'COMPLETED').length}
-                </Text>
-                <Text style={styles.statLabel}>Done</Text>
+              <Text style={st.perfSubtitle}>Your work performance and achievement metrics</Text>
+
+              <View style={st.perfGrid}>
+                <View style={st.perfItem}>
+                  <Text style={st.perfNumber}>{Math.round(totalHours)}</Text>
+                  <Text style={st.perfLabel}>Total Hours</Text>
+                  <Text style={st.perfSub}>⏱ This month</Text>
+                </View>
+                <View style={st.perfItem}>
+                  <Text style={[st.perfNumber, { color: Colors.success }]}>${Math.round(stats.thisMonthEarnings)}</Text>
+                  <Text style={st.perfLabel}>Total Earnings</Text>
+                  <Text style={st.perfSub}>💰 This month</Text>
+                </View>
+              </View>
+
+              <View style={st.perfGrid}>
+                <View style={st.perfItem}>
+                  <Text style={[st.perfNumber, { color: Colors.success }]}>{stats.rating?.toFixed(1) || '0.0'}</Text>
+                  <Text style={st.perfLabel}>Average Rating</Text>
+                  <Text style={st.perfSub}>⭐ {stats.totalEvents} reviews</Text>
+                </View>
+                <View style={st.perfItem}>
+                  <Text style={[st.perfNumber, { color: Colors.success }]}>
+                    {stats.completedShifts > 0 ? Math.round((stats.completedShifts / Math.max(stats.completedShifts + stats.pendingRequests, 1)) * 100) : 0}%
+                  </Text>
+                  <Text style={st.perfLabel}>On-Time Rate</Text>
+                  <Text style={st.perfSub}>⏰ Punctuality</Text>
+                </View>
+              </View>
+
+              <View style={st.progressRow}>
+                <Text style={st.progressLabel}>Client Satisfaction</Text>
+                <Text style={st.progressValue}>{stats.rating > 0 ? Math.round((stats.rating / 5) * 100) : 0}%</Text>
+              </View>
+              <View style={st.progressTrack}>
+                <View style={[st.progressFill, { width: `${stats.rating > 0 ? Math.round((stats.rating / 5) * 100) : 0}%`, backgroundColor: Colors.info }]} />
+              </View>
+
+              <View style={[st.progressRow, { marginTop: 12 }]}>
+                <Text style={st.progressLabel}>Monthly Goal Progress</Text>
+                <Text style={st.progressValue}>{Math.min(Math.round((stats.completedShifts / 20) * 100), 100)}%</Text>
+              </View>
+              <View style={st.progressTrack}>
+                <View style={[st.progressFill, { width: `${Math.min(Math.round((stats.completedShifts / 20) * 100), 100)}%`, backgroundColor: Colors.primary }]} />
               </View>
             </View>
 
-            {/* Today's Shifts */}
-            {todayShifts.length > 0 && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Today's Shifts</Text>
-                {todayShifts.map(s => (
-                  <View key={s.id}>{renderShiftCard({ item: s })}</View>
-                ))}
+            {/* Recent Activity */}
+            <View style={st.card}>
+              <View style={st.perfHeader}>
+                <Ionicons name="pulse" size={20} color={Colors.textPrimary} />
+                <Text style={st.perfTitle}>Recent Activity</Text>
               </View>
-            )}
+              <Text style={st.perfSubtitle}>Your latest completed shifts</Text>
 
-            {/* Upcoming */}
-            {upcomingShifts.length > 0 && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Upcoming Shifts</Text>
-                {upcomingShifts.map(s => (
-                  <View key={s.id}>{renderShiftCard({ item: s })}</View>
-                ))}
-              </View>
-            )}
-
-            {shifts.length === 0 && (
-              <View style={styles.emptyState}>
-                <Ionicons name="calendar-outline" size={64} color={Colors.textMuted} />
-                <Text style={styles.emptyTitle}>No Shifts Yet</Text>
-                <Text style={styles.emptySubtitle}>Your assigned shifts will appear here</Text>
-              </View>
-            )}
+              {completedRecent.slice(0, 5).map((shift: any) => (
+                <View key={shift.id} style={st.activityItem}>
+                  <View style={st.activityDot} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={st.activityTitle}>{shift.event?.title || 'Shift'}</Text>
+                    <Text style={st.activitySub}>{new Date(shift.date).toLocaleDateString('en-GB')} • {shift.event?.venue || ''}</Text>
+                  </View>
+                  <View style={st.activityRight}>
+                    <Text style={st.activityPay}>${shift.totalPay?.toFixed(0) || '0'}</Text>
+                  </View>
+                </View>
+              ))}
+              {completedRecent.length === 0 && <Text style={st.emptyText}>No recent activity</Text>}
+            </View>
           </>
-        }
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => { setRefreshing(true); fetchShifts(); }}
-            colors={[Colors.primary]}
-          />
-        }
-        contentContainerStyle={styles.listContent}
-      />
+        )}
+
+        {activeTab === 'pending' && (
+          <View style={st.card}>
+            {shifts.pending.length === 0 ? (
+              <Text style={st.emptyText}>No pending requests</Text>
+            ) : (
+              shifts.pending.map((shift: any) => (
+                <TouchableOpacity key={shift.id} style={st.shiftItem} onPress={() => nav.navigate('ShiftWorkflow', { shiftId: shift.id })}>
+                  <Text style={st.shiftItemTitle}>{shift.event?.title || 'Shift'}</Text>
+                  <Text style={st.shiftItemSub}>{new Date(shift.date).toLocaleDateString()} • {shift.startTime} – {shift.endTime}</Text>
+                  <Text style={st.shiftItemVenue}>{shift.event?.venue}</Text>
+                </TouchableOpacity>
+              ))
+            )}
+          </View>
+        )}
+
+        {activeTab === 'today' && (
+          <View style={st.card}>
+            {shifts.today.length === 0 ? (
+              <Text style={st.emptyText}>No shifts today</Text>
+            ) : (
+              shifts.today.map((shift: any) => (
+                <TouchableOpacity key={shift.id} style={st.shiftItem} onPress={() => nav.navigate('ShiftWorkflow', { shiftId: shift.id })}>
+                  <Text style={st.shiftItemTitle}>{shift.event?.title || 'Shift'}</Text>
+                  <Text style={st.shiftItemSub}>{shift.startTime} – {shift.endTime}</Text>
+                  <View style={st.shiftStatusRow}>
+                    <View style={[st.shiftDot, { backgroundColor: Colors.statusInProgress }]} />
+                    <Text style={st.shiftStatusLabel}>{shift.status.replace(/_/g, ' ')}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))
+            )}
+          </View>
+        )}
+      </ScrollView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
+function StatCard({ icon, label, value, sub }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string; sub: string }) {
+  return (
+    <View style={st.statCard}>
+      <View style={st.statIconRow}>
+        <Ionicons name={icon} size={18} color={Colors.textSecondary} />
+        <Text style={st.statLabel}>{label}</Text>
+      </View>
+      <Text style={st.statValue}>{value}</Text>
+      <Text style={st.statSub}>{sub}</Text>
+    </View>
+  );
+}
+
+const st = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  listContent: { paddingBottom: 100 },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.md,
-    backgroundColor: Colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  greeting: { fontSize: FontSize.md, color: Colors.textSecondary },
-  userName: { fontSize: FontSize.xxl, fontWeight: '700', color: Colors.textPrimary },
-  logoutBtn: { padding: Spacing.sm },
-  // Active Banner
-  activeBanner: {
-    margin: Spacing.lg,
-    borderRadius: BorderRadius.lg,
-    backgroundColor: Colors.primary,
-    overflow: 'hidden',
-  },
-  activeBannerPulse: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 4,
-    backgroundColor: Colors.success,
-  },
-  activeBannerContent: { padding: Spacing.lg },
-  activeBannerTop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.sm },
-  activeBannerStatus: { color: Colors.white, fontSize: FontSize.sm, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1 },
-  activeBannerTitle: { color: Colors.white, fontSize: FontSize.xl, fontWeight: '700', marginBottom: Spacing.xs },
-  activeBannerTime: { color: 'rgba(255,255,255,0.7)', fontSize: FontSize.md },
-  activeBannerAction: {
-    marginTop: Spacing.md,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderRadius: BorderRadius.sm,
-    paddingVertical: Spacing.sm,
-    alignItems: 'center',
-  },
-  activeBannerActionText: { color: Colors.white, fontWeight: '600', fontSize: FontSize.md },
-  // Stats
-  statsRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-    paddingHorizontal: Spacing.lg,
-    marginTop: Spacing.md,
-  },
-  statCard: {
-    flex: 1,
-    borderRadius: BorderRadius.md,
-    padding: Spacing.md,
-    alignItems: 'center',
-  },
-  statNumber: { fontSize: FontSize.xxxl, fontWeight: '700' },
-  statLabel: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: Spacing.xs },
-  // Section
-  section: { marginTop: Spacing.lg, paddingHorizontal: Spacing.lg },
-  sectionTitle: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.textPrimary, marginBottom: Spacing.sm },
-  // Shift Card
-  shiftCard: {
-    backgroundColor: Colors.white,
-    borderRadius: BorderRadius.md,
-    padding: Spacing.md,
-    marginBottom: Spacing.sm,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  shiftCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.sm },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 4,
-    borderRadius: BorderRadius.full,
-  },
-  statusText: { fontSize: FontSize.xs, fontWeight: '700', textTransform: 'uppercase' },
-  travelBadge: {
-    backgroundColor: '#F3E8FF',
-    borderRadius: BorderRadius.full,
-    width: 28,
-    height: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  shiftTitle: { fontSize: FontSize.lg, fontWeight: '600', color: Colors.textPrimary, marginBottom: Spacing.sm },
-  shiftMeta: { flexDirection: 'row', gap: Spacing.lg, marginBottom: Spacing.xs },
-  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  metaText: { fontSize: FontSize.sm, color: Colors.textSecondary },
-  roleBadge: {
-    alignSelf: 'flex-start',
-    marginTop: Spacing.sm,
-    backgroundColor: Colors.background,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 2,
-    borderRadius: BorderRadius.sm,
-  },
-  roleText: { fontSize: FontSize.xs, color: Colors.textSecondary, fontWeight: '600' },
-  // Empty
-  emptyState: { alignItems: 'center', marginTop: Spacing.xxl * 2, padding: Spacing.xl },
-  emptyTitle: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.textPrimary, marginTop: Spacing.md },
-  emptySubtitle: { fontSize: FontSize.md, color: Colors.textSecondary, marginTop: Spacing.xs },
+  scroll: { paddingHorizontal: 16, paddingBottom: 100 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 10, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
+  menuBtn: { padding: 4 },
+  logoBg: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.primary, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
+  logoTextBig: { color: '#fff', fontSize: 18, fontWeight: '900' },
+  logoTextSmall: { color: '#fff', fontSize: 7, fontWeight: '700', marginLeft: 2, lineHeight: 9 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  bellBtn: { position: 'relative' },
+  notifBadge: { position: 'absolute', top: -4, right: -6, backgroundColor: Colors.primary, borderRadius: 10, width: 18, height: 18, justifyContent: 'center', alignItems: 'center' },
+  notifCount: { color: '#fff', fontSize: 10, fontWeight: '700' },
+  avatarSmall: { width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center' },
+  avatarSmallText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  welcomeText: { fontSize: 20, fontWeight: '700', color: Colors.textPrimary, marginTop: 16 },
+  dateText: { fontSize: 13, color: Colors.textSecondary, marginTop: 2, marginBottom: 16 },
+  statsSection: { gap: 10 },
+  statCard: { backgroundColor: '#fff', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#E2E8F0' },
+  statIconRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  statLabel: { fontSize: 13, color: Colors.textSecondary, fontWeight: '500' },
+  statValue: { fontSize: 28, fontWeight: '700', color: Colors.textPrimary },
+  statSub: { fontSize: 12, color: Colors.info, marginTop: 2 },
+  tabBar: { backgroundColor: '#fff', borderRadius: 12, padding: 4, marginTop: 16, marginBottom: 12, borderWidth: 1, borderColor: '#E2E8F0' },
+  tab: { paddingVertical: 10, alignItems: 'center', borderRadius: 8 },
+  tabActive: { backgroundColor: '#F1F5F9' },
+  tabText: { fontSize: 13, fontWeight: '600', color: Colors.textSecondary },
+  tabTextActive: { color: Colors.textPrimary },
+  card: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#E2E8F0' },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  cardLabel: { fontSize: 16, fontWeight: '600', color: Colors.textPrimary },
+  statusPill: { backgroundColor: '#F1F5F9', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
+  statusPillText: { fontSize: 11, fontWeight: '600', color: Colors.textSecondary, textTransform: 'capitalize' },
+  travelBtn: { flexDirection: 'row', backgroundColor: Colors.primary, borderRadius: 10, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  travelBtnIcon: { fontSize: 18 },
+  travelBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  noShiftText: { fontSize: 13, color: Colors.textMuted, textAlign: 'center', paddingVertical: 12 },
+  perfHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  perfTitle: { fontSize: 16, fontWeight: '700', color: Colors.textPrimary },
+  perfSubtitle: { fontSize: 12, color: Colors.textSecondary, marginBottom: 16 },
+  perfGrid: { flexDirection: 'row', gap: 10, marginBottom: 10 },
+  perfItem: { flex: 1, backgroundColor: '#F8FAFC', borderRadius: 10, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: '#E2E8F0' },
+  perfNumber: { fontSize: 24, fontWeight: '700', color: Colors.textPrimary },
+  perfLabel: { fontSize: 12, color: Colors.textSecondary, marginTop: 4, textAlign: 'center' },
+  perfSub: { fontSize: 10, color: Colors.textMuted, marginTop: 2 },
+  progressRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4, marginTop: 4 },
+  progressLabel: { fontSize: 13, fontWeight: '600', color: Colors.textPrimary },
+  progressValue: { fontSize: 13, fontWeight: '600', color: Colors.textPrimary },
+  progressTrack: { height: 6, backgroundColor: '#E2E8F0', borderRadius: 3, overflow: 'hidden' },
+  progressFill: { height: '100%', borderRadius: 3 },
+  activityItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  activityDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.success, marginRight: 12 },
+  activityTitle: { fontSize: 14, fontWeight: '600', color: Colors.textPrimary },
+  activitySub: { fontSize: 11, color: Colors.textSecondary, marginTop: 2 },
+  activityRight: { alignItems: 'flex-end' },
+  activityPay: { fontSize: 14, fontWeight: '700', color: Colors.success },
+  shiftItem: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  shiftItemTitle: { fontSize: 15, fontWeight: '600', color: Colors.textPrimary },
+  shiftItemSub: { fontSize: 12, color: Colors.textSecondary, marginTop: 2 },
+  shiftItemVenue: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
+  shiftStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
+  shiftDot: { width: 6, height: 6, borderRadius: 3 },
+  shiftStatusLabel: { fontSize: 11, color: Colors.textSecondary, textTransform: 'capitalize' },
+  emptyText: { fontSize: 13, color: Colors.textMuted, textAlign: 'center', paddingVertical: 20 },
 });

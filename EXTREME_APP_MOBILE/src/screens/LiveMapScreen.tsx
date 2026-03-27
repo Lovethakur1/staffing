@@ -1,22 +1,38 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator,
-  Alert, Linking, Platform,
+  Alert, Linking, Platform, Vibration,
 } from 'react-native';
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
-import api from '../config/api';
+import api, { API_BASE_URL } from '../config/api';
+import { getDeviceInfo } from '../utils/deviceInfo';
+import { startBackgroundLocationTracking } from '../services/backgroundLocation';
 import { RootStackParamList } from '../types';
 import { Colors, Spacing, FontSize, BorderRadius } from '../theme';
 
 type RouteType = RouteProp<RootStackParamList, 'LiveMap'>;
 
+const ARRIVAL_THRESHOLD_METERS = 100; // Auto-arrive when within 100m
+
 interface Coords {
   latitude: number;
   longitude: number;
+}
+
+/** Haversine formula — returns distance in meters between two lat/lng points */
+function getDistanceMeters(a: Coords, b: Coords): number {
+  const R = 6371000; // Earth radius in meters
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(b.latitude - a.latitude);
+  const dLng = toRad(b.longitude - a.longitude);
+  const sinLat = Math.sin(dLat / 2);
+  const sinLng = Math.sin(dLng / 2);
+  const h = sinLat * sinLat + Math.cos(toRad(a.latitude)) * Math.cos(toRad(b.latitude)) * sinLng * sinLng;
+  return R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
 
 export default function LiveMapScreen() {
@@ -27,9 +43,12 @@ export default function LiveMapScreen() {
   
   const mapRef = useRef<MapView>(null);
   const locationSub = useRef<Location.LocationSubscription | null>(null);
+  const arrivedRef = useRef(false); // prevent duplicate arrive calls
 
   const [userLocation, setUserLocation] = useState<Coords | null>(null);
   const [loading, setLoading] = useState(true);
+  const [distanceToEvent, setDistanceToEvent] = useState<number | null>(null);
+  const [arrived, setArrived] = useState(false);
 
   const destination: Coords | null = eventLat && eventLng
     ? { latitude: eventLat, longitude: eventLng }
@@ -49,6 +68,9 @@ export default function LiveMapScreen() {
       setLoading(false);
       return;
     }
+
+    // Start background location tracking (works even when app is minimized)
+    startBackgroundLocationTracking(shiftId, API_BASE_URL).catch(() => {});
 
     // Get initial position
     const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
@@ -74,11 +96,43 @@ export default function LiveMapScreen() {
         };
         setUserLocation(newCoords);
 
-        // Update backend
+        // Update backend with live location
         api.post(`/shifts/${shiftId}/update-location`, {
           lat: position.coords.latitude,
           lng: position.coords.longitude,
         }).catch(() => {});
+
+        // Check distance to event and auto-arrive if close enough
+        if (destination && !arrivedRef.current) {
+          const dist = getDistanceMeters(newCoords, destination);
+          setDistanceToEvent(dist);
+
+          if (dist <= ARRIVAL_THRESHOLD_METERS) {
+            arrivedRef.current = true;
+            setArrived(true);
+            Vibration.vibrate([0, 200, 100, 200]); // double buzz
+
+            // Auto-mark arrived on backend
+            getDeviceInfo().then(device =>
+              api.post(`/shifts/${shiftId}/arrive`, {
+                lat: position.coords.latitude,
+                lng: position.coords.longitude,
+                ...device,
+              })
+            ).then(() => {
+              Alert.alert(
+                'Arrived!',
+                `You are within ${Math.round(dist)}m of the event location. You have been marked as arrived.`,
+                [{ text: 'OK', onPress: () => nav.goBack() }]
+              );
+            }).catch(() => {
+              // Even if backend fails, show arrived locally
+              Alert.alert('Arrived!', 'You have reached the event location.', [
+                { text: 'OK', onPress: () => nav.goBack() },
+              ]);
+            });
+          }
+        }
       }
     );
   }
@@ -182,11 +236,34 @@ export default function LiveMapScreen() {
 
       {/* Bottom card */}
       <View style={[s.bottomCard, { paddingBottom: insets.bottom || Spacing.lg }]}>
-        {destination ? (
-          <TouchableOpacity style={s.directionsBtn} onPress={openDirections}>
-            <Ionicons name="navigate" size={22} color={Colors.white} />
-            <Text style={s.directionsBtnText}>Get Directions</Text>
-          </TouchableOpacity>
+        {arrived ? (
+          <View style={s.arrivedBanner}>
+            <Ionicons name="checkmark-circle" size={28} color={Colors.success} />
+            <Text style={s.arrivedText}>You have arrived!</Text>
+          </View>
+        ) : destination ? (
+          <View>
+            {/* Distance indicator */}
+            {distanceToEvent !== null && (
+              <View style={s.distanceRow}>
+                <Ionicons name="navigate-circle" size={20} color={Colors.primary} />
+                <Text style={s.distanceText}>
+                  {distanceToEvent >= 1000
+                    ? `${(distanceToEvent / 1000).toFixed(1)} km away`
+                    : `${Math.round(distanceToEvent)} m away`}
+                </Text>
+                {distanceToEvent <= 300 && (
+                  <View style={s.nearbyBadge}>
+                    <Text style={s.nearbyText}>Almost there!</Text>
+                  </View>
+                )}
+              </View>
+            )}
+            <TouchableOpacity style={s.directionsBtn} onPress={openDirections}>
+              <Ionicons name="navigate" size={22} color={Colors.white} />
+              <Text style={s.directionsBtnText}>Get Directions</Text>
+            </TouchableOpacity>
+          </View>
         ) : (
           <View style={s.noDestination}>
             <Ionicons name="warning" size={20} color={Colors.warning} />
@@ -308,4 +385,35 @@ const s = StyleSheet.create({
     padding: Spacing.sm,
   },
   noDestText: { flex: 1, fontSize: FontSize.md, color: Colors.textSecondary },
+
+  // Distance & arrival
+  distanceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    backgroundColor: Colors.infoLight,
+    borderRadius: BorderRadius.md,
+  },
+  distanceText: { fontSize: FontSize.md, fontWeight: '600', color: Colors.info },
+  nearbyBadge: {
+    marginLeft: 'auto' as any,
+    backgroundColor: Colors.successLight,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  nearbyText: { fontSize: 11, fontWeight: '700', color: Colors.success },
+  arrivedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.md,
+    backgroundColor: Colors.successLight,
+    borderRadius: BorderRadius.md,
+  },
+  arrivedText: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.success },
 });

@@ -1,34 +1,38 @@
 export const Colors = {
-  primary: '#1E3A5F',
-  primaryLight: '#2D5F8A',
-  primaryDark: '#0F1F33',
-  accent: '#FF6B35',
-  accentLight: '#FF8A5C',
-  success: '#22C55E',
+  // Brand — red wine palette (matches website)
+  primary: '#5e1916',
+  primaryLight: '#7a1712',
+  primaryDark: '#4e0707',
+  accent: '#bc544b',
+  accentLight: '#d4817a',
+
+  // Status
+  success: '#059669',
   successLight: '#DCFCE7',
-  warning: '#F59E0B',
+  warning: '#d97706',
   warningLight: '#FEF3C7',
-  danger: '#EF4444',
+  danger: '#7a1712',
   dangerLight: '#FEE2E2',
-  info: '#3B82F6',
+  info: '#0369a1',
   infoLight: '#DBEAFE',
 
+  // Neutrals
   white: '#FFFFFF',
   black: '#000000',
   background: '#F8FAFC',
   surface: '#FFFFFF',
   border: '#E2E8F0',
-  textPrimary: '#1E293B',
+  textPrimary: '#1a1a1a',
   textSecondary: '#64748B',
   textMuted: '#94A3B8',
   overlay: 'rgba(0,0,0,0.5)',
 
-  // Status colors
-  statusPending: '#F59E0B',
-  statusConfirmed: '#3B82F6',
-  statusInProgress: '#22C55E',
+  // Shift status colors
+  statusPending: '#d97706',
+  statusConfirmed: '#0369a1',
+  statusInProgress: '#059669',
   statusCompleted: '#6366F1',
-  statusTravel: '#8B5CF6',
+  statusTravel: '#7e2811',
   statusBreak: '#F97316',
   statusArrived: '#06B6D4',
 };

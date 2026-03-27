@@ -103,6 +103,10 @@ export function Favorites({ userRole, userId }: FavoritesProps) {
       (ratingFilter === "4" && staff.rating >= 4 && staff.rating < 4.5);
 
     return matchesSearch && matchesSkill && matchesRating;
+  }).sort((a, b) => {
+    const aFav = favoriteIds.includes(a.id) ? 0 : 1;
+    const bFav = favoriteIds.includes(b.id) ? 0 : 1;
+    return aFav - bFav;
   });
 
   // Get unique skills for filter dropdown
@@ -300,8 +304,16 @@ export function Favorites({ userRole, userId }: FavoritesProps) {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredStaff.map((staff) => (
+        <>
+          {/* Favorites Section */}
+          {filteredStaff.some(s => favoriteIds.includes(s.id)) && (
+            <div className="mb-2">
+              <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
+                <Heart className="h-5 w-5 fill-red-500 text-red-500" />
+                Favorites
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredStaff.filter(s => favoriteIds.includes(s.id)).map((staff) => (
             <Card key={staff.id} className="border-0 shadow-lg hover:shadow-xl transition-all duration-300">
               <CardContent className="pt-6">
                 <div className="flex justify-between items-start mb-4">
@@ -390,7 +402,111 @@ export function Favorites({ userRole, userId }: FavoritesProps) {
               </CardContent>
             </Card>
           ))}
-        </div>
+              </div>
+            </div>
+          )}
+
+          {/* Other Staff Section */}
+          {filteredStaff.some(s => !favoriteIds.includes(s.id)) && (
+            <div className="mb-2">
+              <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
+                <Users className="h-5 w-5 text-muted-foreground" />
+                Other Staff
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredStaff.filter(s => !favoriteIds.includes(s.id)).map((staff) => (
+            <Card key={staff.id} className="border-0 shadow-lg hover:shadow-xl transition-all duration-300">
+              <CardContent className="pt-6">
+                <div className="flex justify-between items-start mb-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-lg font-semibold">{staff.name}</h4>
+                      {isStaffWorkedWith(staff.id) ? (
+                        <Heart className="h-4 w-4 fill-red-500 text-red-500" />
+                      ) : (
+                        <Heart className="h-4 w-4 text-gray-300" />
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                      <span className="font-medium">{staff.rating}</span>
+                      <span className="text-sm text-muted-foreground">
+                        ({staff.totalEvents} events)
+                      </span>
+                    </div>
+                    {isStaffWorkedWith(staff.id) && (
+                      <Badge variant="secondary" className="text-xs">
+                        Worked together {getWorkedWithCount(staff.id)} times
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    <p className="text-lg font-semibold text-primary">${staff.hourlyRate}/hr</p>
+                    <p className="text-xs text-muted-foreground">hourly rate</p>
+                  </div>
+                </div>
+
+                {/* Skills */}
+                <div className="mb-4">
+                  <div className="flex flex-wrap gap-1">
+                    {staff.skills.slice(0, 3).map((skill: string) => (
+                      <Badge key={skill} variant="secondary" className="text-xs">
+                        {skill}
+                      </Badge>
+                    ))}
+                    {staff.skills.length > 3 && (
+                      <Badge variant="secondary" className="text-xs">
+                        +{staff.skills.length - 3} more
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+
+                {/* Experience Highlights */}
+                <div className="mb-4 p-3 bg-muted/30 rounded-lg">
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div className="flex items-center gap-1">
+                      <Calendar className="h-3 w-3 text-muted-foreground" />
+                      <span>{staff.experience} years</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <TrendingUp className="h-3 w-3 text-muted-foreground" />
+                      <span>{staff.totalEvents} events</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Contact & Actions */}
+                <div className="space-y-2">
+                  {!favoriteIds.includes(staff.id) ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full text-red-500 border-red-200 hover:bg-red-50"
+                      onClick={() => handleAddToFavorites(staff.id)}
+                    >
+                      <Heart className="mr-2 h-4 w-4" />
+                      Add to Favorites
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full text-gray-500 border-gray-200 hover:bg-gray-50"
+                      onClick={() => handleRemoveFromFavorites(staff.id)}
+                    >
+                      <Heart className="mr-2 h-4 w-4 fill-red-500 text-red-500" />
+                      Remove from Favorites
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* Quick Actions */}

@@ -10,6 +10,7 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 import LoginScreen from './src/screens/LoginScreen';
 import DashboardScreen from './src/screens/DashboardScreen';
 import MyShiftsScreen from './src/screens/MyShiftsScreen';
+import InboxScreen from './src/screens/InboxScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import ShiftWorkflowScreen from './src/screens/ShiftWorkflowScreen';
 import LiveMapScreen from './src/screens/LiveMapScreen';
@@ -37,15 +38,17 @@ function MainTabs() {
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
         tabBarIcon: ({ color, size }) => {
           let iconName: keyof typeof Ionicons.glyphMap = 'home';
-          if (route.name === 'Dashboard') iconName = 'grid';
+          if (route.name === 'Dashboard') iconName = 'home';
           else if (route.name === 'MyShifts') iconName = 'calendar';
-          else if (route.name === 'Profile') iconName = 'person-circle';
+          else if (route.name === 'Inbox') iconName = 'chatbubble-outline';
+          else if (route.name === 'Profile') iconName = 'person-outline';
           return <Ionicons name={iconName} size={size} color={color} />;
         },
       })}
     >
       <Tab.Screen name="Dashboard" component={DashboardScreen} options={{ tabBarLabel: 'Home' }} />
       <Tab.Screen name="MyShifts" component={MyShiftsScreen} options={{ tabBarLabel: 'Shifts' }} />
+      <Tab.Screen name="Inbox" component={InboxScreen} options={{ tabBarLabel: 'Inbox' }} />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ tabBarLabel: 'Profile' }} />
     </Tab.Navigator>
   );

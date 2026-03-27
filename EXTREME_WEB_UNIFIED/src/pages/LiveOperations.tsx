@@ -66,6 +66,7 @@ interface LiveEvent {
   checkedInCount: number;
   issues: LiveIssue[];
   issueCount: number;
+  tasks?: { id: string; task: string; assignedTo: string; completed: boolean }[];
   budget: number;
   actualSpend: number;
   revenue: number;
@@ -373,7 +374,7 @@ export function LiveOperations() {
                     Staff ({selectedEventData.staff.length})
                   </TabsTrigger>
                   <TabsTrigger value="tasks">
-                    Tasks ({selectedEventData.tasks.filter((t: any) => t.completed).length}/{selectedEventData.tasks.length})
+                    Tasks ({(selectedEventData.tasks || []).filter((t: any) => t.completed).length}/{(selectedEventData.tasks || []).length})
                   </TabsTrigger>
                   <TabsTrigger value="budget">Budget</TabsTrigger>
                 </TabsList>
@@ -462,7 +463,7 @@ export function LiveOperations() {
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-3">
-                        {selectedEventData.tasks.map((task: any) => (
+                        {(selectedEventData.tasks || []).map((task: any) => (
                           <div
                             key={task.id}
                             className={`flex items-center justify-between p-3 border rounded-lg ${task.completed ? "bg-muted/50" : ""

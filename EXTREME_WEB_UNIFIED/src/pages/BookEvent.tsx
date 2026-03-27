@@ -97,6 +97,43 @@ export function BookEvent({
   const [isStaffDropdownOpen, setIsStaffDropdownOpen] = useState(false);
   const [staffSearchQuery, setStaffSearchQuery] = useState("");
   const [selectedStaffTypes, setSelectedStaffTypes] = useState<string[]>([]);
+  const editEventId = pageParams?.editEventId as string | undefined;
+  const isEditMode = !!editEventId;
+
+  // Load existing event data for edit mode
+  useEffect(() => {
+    if (!editEventId) return;
+    const loadEvent = async () => {
+      try {
+        const res = await api.get(`/events/${editEventId}`);
+        const ev = res.data;
+        const locationParts = (ev.location || '').split(', ');
+        setFormData(prev => ({
+          ...prev,
+          eventTitle: ev.title || '',
+          eventType: eventTypes.includes(ev.eventType) ? ev.eventType : (ev.eventType ? 'Other' : ''),
+          customEventType: !eventTypes.includes(ev.eventType) ? (ev.eventType || '') : '',
+          eventDate: ev.date ? new Date(ev.date) : undefined,
+          startTime: ev.startTime || '',
+          endTime: ev.endTime || '',
+          location: ev.venue || '',
+          address: locationParts[0] || '',
+          city: locationParts[1] || '',
+          state: locationParts[2] || '',
+          zipCode: locationParts[3] || '',
+          expectedGuests: ev.guestCount ? String(ev.guestCount) : '',
+          budget: ev.budget ? String(ev.budget) : '',
+          description: ev.description || '',
+          specialRequirements: ev.specialRequirements || '',
+          emergencyContact: ev.contactOnSite || '',
+          emergencyPhone: ev.contactOnSitePhone || '',
+        }));
+      } catch {
+        toast.error('Failed to load event for editing');
+      }
+    };
+    loadEvent();
+  }, [editEventId]);
 
   const eventTypes = [
     "Wedding Event",
@@ -324,7 +361,7 @@ export function BookEvent({
         .map(([type, qty]) => `${qty}x ${type}`)
         .join(', ');
 
-      await api.post('/events', {
+      const payload = {
         clientId: clientProfileId,
         title: formData.eventTitle,
         description: formData.description || undefined,
@@ -334,7 +371,8 @@ export function BookEvent({
         startTime: formData.startTime || undefined,
         endTime: formData.endTime || undefined,
         location: [formData.address, formData.city, formData.state, formData.zipCode].filter(Boolean).join(', ') || formData.location || undefined,
-        staffRequired: totalStaff,
+        staffRequired: totalStaff || undefined,
+        guestCount: formData.expectedGuests ? parseInt(formData.expectedGuests) : undefined,
         budget: formData.budget ? parseFloat(formData.budget) : undefined,
         specialRequirements: [
           formData.specialRequirements,
@@ -344,11 +382,17 @@ export function BookEvent({
         ].filter(Boolean).join('\n') || undefined,
         contactOnSite: formData.emergencyContact || undefined,
         contactOnSitePhone: formData.emergencyPhone || undefined,
-      });
+      };
 
-      toast.success(
-        "Event booking request submitted! You'll receive confirmation within 24 hours.",
-      );
+      if (isEditMode) {
+        await api.put(`/events/${editEventId}`, payload);
+        toast.success("Event updated successfully!");
+      } else {
+        await api.post('/events', payload);
+        toast.success(
+          "Event booking request submitted! You'll receive confirmation within 24 hours.",
+        );
+      }
 
       setTimeout(() => {
         setCurrentPage("bookings");
@@ -449,7 +493,7 @@ export function BookEvent({
           <div>
             <h1 className="text-3xl font-semibold text-foreground flex items-center gap-2">
               <Sparkles className="h-8 w-8 text-primary" />
-              Book New Event
+              {isEditMode ? 'Edit Event' : 'Book New Event'}
             </h1>
             <p className="text-muted-foreground mt-1">
               Plan your perfect event with our professional
@@ -1479,7 +1523,7 @@ export function BookEvent({
                   ) : (
                     <>
                       <CheckCircle className="mr-2 h-5 w-5" />
-                      Submit Event Request
+                      {isEditMode ? 'Update Event' : 'Submit Event Request'}
                     </>
                   )}
                 </Button>

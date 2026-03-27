@@ -15,7 +15,10 @@ const httpServer = createServer(app);
 initializeSocket(httpServer);
 
 // ─── Global Middleware ───────────────────────────────────────────────────────
-app.use(cors({ origin: env.CORS_ORIGIN }));
+app.use(cors({
+  origin: env.CORS_ORIGIN === '*' ? true : env.CORS_ORIGIN.split(',').map(s => s.trim()),
+  credentials: true,
+}));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 

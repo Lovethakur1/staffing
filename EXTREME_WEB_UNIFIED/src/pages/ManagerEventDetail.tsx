@@ -41,7 +41,8 @@ import { useNavigation } from "../contexts/NavigationContext";
 import { toast } from "sonner";
 import { TooltipWrapper, IconTooltip } from "../components/ui/tooltip-wrapper";
 // Data fetched via API in useEffect below
-import { LiveTrackingMap } from "../components/dashboards/LiveTrackingMap";
+import { lazy, Suspense } from "react";
+const LiveStaffMap = lazy(() => import("../components/map/LiveStaffMap"));
 import api from "../services/api";
 
 interface ManagerEventDetailProps {
@@ -589,90 +590,19 @@ export function ManagerEventDetail({ userRole, userId, eventId }: ManagerEventDe
 
         {/* Live Tracking Tab */}
         <TabsContent value="live-tracking" className="space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[600px]">
-            {/* Staff List - Left Side */}
-            <div className="lg:col-span-1 flex flex-col bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden h-full">
-              <div className="p-5 border-b border-slate-100">
-                <h3 className="font-bold text-lg flex items-center gap-2 text-slate-800">
-                  <UserCheck className="h-5 w-5 text-[#5E1916]" />
-                  Staff Locations
-                </h3>
-                <p className="text-xs text-slate-500 mt-1">
-                  Select staff member to track real-time location
-                </p>
-              </div>
-              <div className="flex-1 overflow-auto p-4 space-y-3">
-                {staffMembers.map(staff => (
-                  <div
-                    key={staff.id}
-                    className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all duration-200 group ${(selectedMapStaff?.id === staff.id || (!selectedMapStaff && staff.id === staffMembers[0]?.id))
-                      ? 'border-blue-500 bg-blue-50/50 shadow-sm ring-1 ring-blue-500/20'
-                      : 'border-slate-100 hover:border-slate-300 hover:bg-slate-50'
-                      }`}
-                    onClick={() => setSelectedMapStaff(staff)}
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="relative">
-                        <Avatar className="h-10 w-10 border border-slate-100 bg-slate-100 text-slate-600 font-bold">
-                          <AvatarFallback className="bg-slate-100 text-slate-600 font-bold text-sm">
-                            {staff.name.split(' ').map(n => n[0]).join('')}
-                          </AvatarFallback>
-                        </Avatar>
-                        {/* Status Dot */}
-                        <span className={`absolute bottom-0 -right-1 h-3 w-3 border-2 border-white rounded-full ${staff.status === 'not-arrived' ? 'bg-blue-500 animate-pulse' : 'bg-green-500'}`}></span>
-                      </div>
-                      <div>
-                        <p className="font-bold text-sm text-slate-800">{staff.name}</p>
-                        <p className="text-xs text-slate-500 font-medium">{staff.role}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col items-end">
-                      {staff.status === 'not-arrived' ? (
-                        <span className="px-2.5 py-1 rounded-md bg-white border border-blue-200 text-blue-600 text-[10px] font-bold shadow-sm">
-                          En Route
-                        </span>
-                      ) : staff.status === 'checked-in' ? (
-                        <span className="px-2.5 py-1 rounded-md bg-white border border-green-200 text-green-600 text-[10px] font-bold shadow-sm">
-                          Arrived
-                        </span>
-                      ) : (
-                        getStatusBadge(staff.status)
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Map View - Right Side */}
-            <div className="lg:col-span-2 h-full rounded-xl border border-slate-200 shadow-sm overflow-hidden relative group bg-slate-900">
-              {/* Map Component */}
-              <div className="w-full h-full relative">
-                {staffMembers.length > 0 ? (
-                  <LiveTrackingMap
-                    staff={selectedMapStaff || staffMembers[0]}
-                    destinationName={event.venue}
-                    eta={(selectedMapStaff?.status === 'not-arrived' || (!selectedMapStaff && staffMembers[0].status === 'not-arrived')) ? "15 mins" : "Arrived"}
-                  />
-                ) : (
-                  <div className="h-full flex flex-col items-center justify-center text-muted-foreground space-y-4">
-                    <div className="bg-slate-800 p-4 rounded-full">
-                      <MapPinned className="h-8 w-8 text-slate-400" />
-                    </div>
-                    <p className="text-slate-400">No staff location data available</p>
-                  </div>
-                )}
-
-                {/* Bottom Stats Overlay - Exact Replica of Screenshot */}
-                {(selectedMapStaff || staffMembers[0]) && (
-                  <div className="absolute bottom-0 left-0 right-0 p-6 pointer-events-none">
-
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+          <Suspense fallback={
+            <Card><CardContent className="py-12 flex items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+            </CardContent></Card>
+          }>
+            <LiveStaffMap
+              eventId={resolvedEventId}
+              venueLat={apiEvent?.locationLat}
+              venueLng={apiEvent?.locationLng}
+              venueName={event.venue || event.title}
+              selectedStaffId={selectedMapStaff?.id || null}
+            />
+          </Suspense>
         </TabsContent>
 
         {/* Staff Roster */}

@@ -5,6 +5,83 @@ import { asyncHandler, parsePagination, calculateHours } from '../utils/helpers'
 import { calculateAndSaveStaffRating } from '../services/rating.service';
 import { emitToRole } from '../services/socket.service';
 
+// ═══════════════════════════════════════════════════════════════════
+// Haversine formula — distance in meters between two lat/lng points
+// ═══════════════════════════════════════════════════════════════════
+function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000; // Earth radius in meters
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Device verification helper
+// One staff = one device. First use registers the device.
+// Subsequent uses must match. Mismatch → blocked until admin approves.
+// ═══════════════════════════════════════════════════════════════════
+
+interface DeviceInfo {
+  deviceId?: string;
+  deviceName?: string;
+  deviceModel?: string;
+  deviceBrand?: string;
+  deviceOS?: string;
+  deviceIP?: string;
+}
+
+/**
+ * Checks the staff's registered device.
+ * - If no device registered → registers this one.
+ * - If device matches → OK.
+ * - If device differs → returns error string (caller should 403).
+ * Returns null on success, or error message string.
+ */
+async function verifyAndRegisterDevice(userId: string, device: DeviceInfo): Promise<string | null> {
+  if (!device.deviceId) return null; // no device info sent, skip check
+
+  const profile = await prisma.staffProfile.findUnique({ where: { userId } });
+  if (!profile) return null; // no staff profile, skip
+
+  // First time — register device
+  if (!profile.registeredDeviceId) {
+    await prisma.staffProfile.update({
+      where: { id: profile.id },
+      data: {
+        registeredDeviceId: device.deviceId,
+        registeredDeviceName: device.deviceName,
+        registeredDeviceModel: device.deviceModel,
+        registeredDeviceBrand: device.deviceBrand,
+        registeredDeviceOS: device.deviceOS,
+        deviceLockedAt: new Date(),
+      },
+    });
+    return null; // registered successfully
+  }
+
+  // Device matches
+  if (profile.registeredDeviceId === device.deviceId) {
+    return null; // OK
+  }
+
+  // Device mismatch — blocked
+  return `Device mismatch. This account is registered to "${profile.registeredDeviceName || profile.registeredDeviceModel || 'another device'}". You must request admin approval to change your device.`;
+}
+
+/** Extract device info from request body */
+function extractDevice(req: AuthRequest): DeviceInfo {
+  return {
+    deviceId: req.body.deviceId,
+    deviceName: req.body.deviceName,
+    deviceModel: req.body.deviceModel,
+    deviceBrand: req.body.deviceBrand,
+    deviceOS: req.body.deviceOS,
+    deviceIP: req.ip || req.headers['x-forwarded-for']?.toString() || undefined,
+  };
+}
+
 /**
  * GET /api/shifts
  */
@@ -206,6 +283,11 @@ export const startTravel = asyncHandler(async (req: AuthRequest, res: Response) 
     return;
   }
 
+  // Device verification
+  const device = extractDevice(req);
+  const deviceErr = await verifyAndRegisterDevice(req.user!.userId, device);
+  if (deviceErr) { res.status(403).json({ error: deviceErr, code: 'DEVICE_MISMATCH' }); return; }
+
   const { lat, lng } = req.body || {};
 
   const shift = await prisma.shift.update({
@@ -215,6 +297,12 @@ export const startTravel = asyncHandler(async (req: AuthRequest, res: Response) 
       travelStartTime: new Date(),
       travelLat: lat,
       travelLng: lng,
+      deviceId: device.deviceId,
+      deviceName: device.deviceName,
+      deviceModel: device.deviceModel,
+      deviceBrand: device.deviceBrand,
+      deviceOS: device.deviceOS,
+      deviceIP: device.deviceIP,
     },
   });
 
@@ -226,6 +314,11 @@ export const startTravel = asyncHandler(async (req: AuthRequest, res: Response) 
  * Staff arrived at the venue.
  */
 export const arriveAtVenue = asyncHandler(async (req: AuthRequest, res: Response) => {
+  // Device verification
+  const device = extractDevice(req);
+  const deviceErr = await verifyAndRegisterDevice(req.user!.userId, device);
+  if (deviceErr) { res.status(403).json({ error: deviceErr, code: 'DEVICE_MISMATCH' }); return; }
+
   const { lat, lng } = req.body || {};
 
   const shift = await prisma.shift.update({
@@ -235,6 +328,12 @@ export const arriveAtVenue = asyncHandler(async (req: AuthRequest, res: Response
       travelArrivalTime: new Date(),
       travelLat: lat,
       travelLng: lng,
+      deviceId: device.deviceId,
+      deviceName: device.deviceName,
+      deviceModel: device.deviceModel,
+      deviceBrand: device.deviceBrand,
+      deviceOS: device.deviceOS,
+      deviceIP: device.deviceIP,
     },
   });
 
@@ -244,10 +343,47 @@ export const arriveAtVenue = asyncHandler(async (req: AuthRequest, res: Response
 /**
  * POST /api/shifts/:id/clock-in
  * Staff clocks in to start the shift.
+ * Enforces location check: staff must be within 50m of the event venue.
  */
 export const clockIn = asyncHandler(async (req: AuthRequest, res: Response) => {
+  // Device verification
+  const device = extractDevice(req);
+  const deviceErr = await verifyAndRegisterDevice(req.user!.userId, device);
+  if (deviceErr) { res.status(403).json({ error: deviceErr, code: 'DEVICE_MISMATCH' }); return; }
+
   const { lat, lng } = req.body || {};
   const now = new Date();
+
+  // ── Location verification: must be within 50m of venue ────────
+  const shiftWithEvent = await prisma.shift.findUnique({
+    where: { id: req.params.id },
+    include: { event: { select: { locationLat: true, locationLng: true, title: true } } },
+  });
+
+  if (!shiftWithEvent) { res.status(404).json({ error: 'Shift not found.' }); return; }
+
+  const venueLat = shiftWithEvent.event?.locationLat;
+  const venueLng = shiftWithEvent.event?.locationLng;
+  const MAX_CHECKIN_DISTANCE_METERS = 50;
+
+  if (venueLat && venueLng && lat && lng) {
+    const distance = haversineMeters(lat, lng, venueLat, venueLng);
+    if (distance > MAX_CHECKIN_DISTANCE_METERS) {
+      res.status(403).json({
+        error: `You must be within ${MAX_CHECKIN_DISTANCE_METERS}m of the venue to check in. You are ${Math.round(distance)}m away.`,
+        code: 'TOO_FAR_FROM_VENUE',
+        distance: Math.round(distance),
+        maxDistance: MAX_CHECKIN_DISTANCE_METERS,
+      });
+      return;
+    }
+  } else if (!lat || !lng) {
+    res.status(400).json({
+      error: 'Location is required for check-in. Please enable GPS and try again.',
+      code: 'LOCATION_REQUIRED',
+    });
+    return;
+  }
 
   try {
     const shift = await prisma.shift.update({
@@ -256,6 +392,12 @@ export const clockIn = asyncHandler(async (req: AuthRequest, res: Response) => {
         status: 'IN_PROGRESS',
         clockIn: now,
         location: lat && lng ? `${lat},${lng}` : undefined,
+        deviceId: device.deviceId,
+        deviceName: device.deviceName,
+        deviceModel: device.deviceModel,
+        deviceBrand: device.deviceBrand,
+        deviceOS: device.deviceOS,
+        deviceIP: device.deviceIP,
       },
     });
 
@@ -368,6 +510,11 @@ export const endBreak = asyncHandler(async (req: AuthRequest, res: Response) => 
  * Staff clocks out, ending the active shift.
  */
 export const clockOut = asyncHandler(async (req: AuthRequest, res: Response) => {
+  // Device verification
+  const device = extractDevice(req);
+  const deviceErr = await verifyAndRegisterDevice(req.user!.userId, device);
+  if (deviceErr) { res.status(403).json({ error: deviceErr, code: 'DEVICE_MISMATCH' }); return; }
+
   const now = new Date();
 
   const shift = await prisma.shift.findUnique({
@@ -451,6 +598,11 @@ export const startTravelHome = asyncHandler(async (req: AuthRequest, res: Respon
     return;
   }
 
+  // Device verification
+  const device = extractDevice(req);
+  const deviceErr = await verifyAndRegisterDevice(req.user!.userId, device);
+  if (deviceErr) { res.status(403).json({ error: deviceErr, code: 'DEVICE_MISMATCH' }); return; }
+
   const { lat, lng } = req.body || {};
 
   const shift = await prisma.shift.update({
@@ -471,6 +623,11 @@ export const startTravelHome = asyncHandler(async (req: AuthRequest, res: Respon
  * Staff ended travel home.
  */
 export const endTravelHome = asyncHandler(async (req: AuthRequest, res: Response) => {
+  // Device verification
+  const device = extractDevice(req);
+  const deviceErr = await verifyAndRegisterDevice(req.user!.userId, device);
+  if (deviceErr) { res.status(403).json({ error: deviceErr, code: 'DEVICE_MISMATCH' }); return; }
+
   const shiftData = await prisma.shift.findUnique({ where: { id: req.params.id } });
 
   let travelDuration: number | undefined;
@@ -484,6 +641,7 @@ export const endTravelHome = asyncHandler(async (req: AuthRequest, res: Response
   const shift = await prisma.shift.update({
     where: { id: req.params.id },
     data: {
+      status: 'COMPLETED',
       travelHomeEnd: new Date(),
       travelDuration,
     },
@@ -525,9 +683,91 @@ export const updateLocation = asyncHandler(async (req: AuthRequest, res: Respons
     status: shift.status,
     timestamp: new Date(),
   };
+  console.log(`[Location] ${locationData.staffName} → lat:${lat}, lng:${lng}, event:${shift.eventId}`);
   emitToRole('ADMIN', 'staff:location', locationData);
   emitToRole('MANAGER', 'staff:location', locationData);
   emitToRole('SUB_ADMIN', 'staff:location', locationData);
 
   res.json({ message: 'Location updated.' });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// Device Management
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * POST /api/shifts/device/request-change
+ * Staff requests to change their registered device.
+ */
+export const requestDeviceChange = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { reason } = req.body;
+  const profile = await prisma.staffProfile.findUnique({
+    where: { userId: req.user!.userId },
+    include: { user: { select: { name: true } } },
+  });
+  if (!profile) { res.status(404).json({ error: 'Staff profile not found.' }); return; }
+
+  await prisma.staffProfile.update({
+    where: { id: profile.id },
+    data: {
+      deviceChangeRequested: true,
+      deviceChangeReason: reason || 'Staff requested device change',
+    },
+  });
+
+  // Notify admins
+  emitToRole('ADMIN', 'device:change-request', {
+    staffId: req.user!.userId,
+    staffName: profile.user?.name || 'Staff',
+    currentDevice: profile.registeredDeviceName || profile.registeredDeviceModel,
+    reason,
+    timestamp: new Date(),
+  });
+
+  res.json({ message: 'Device change request submitted. Please wait for admin approval.' });
+});
+
+/**
+ * POST /api/shifts/device/approve-change/:staffProfileId
+ * Admin approves device change — clears the registered device so staff can re-register.
+ */
+export const approveDeviceChange = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { staffProfileId } = req.params;
+
+  const profile = await prisma.staffProfile.update({
+    where: { id: staffProfileId },
+    data: {
+      registeredDeviceId: null,
+      registeredDeviceName: null,
+      registeredDeviceModel: null,
+      registeredDeviceBrand: null,
+      registeredDeviceOS: null,
+      deviceLockedAt: null,
+      deviceChangeRequested: false,
+      deviceChangeReason: null,
+    },
+    include: { user: { select: { id: true, name: true } } },
+  });
+
+  res.json({ message: `Device cleared for ${profile.user.name}. They can register a new device on next action.` });
+});
+
+/**
+ * GET /api/shifts/device/info
+ * Staff gets their registered device info.
+ */
+export const getDeviceInfo = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const profile = await prisma.staffProfile.findUnique({ where: { userId: req.user!.userId } });
+  if (!profile) { res.status(404).json({ error: 'Staff profile not found.' }); return; }
+
+  res.json({
+    registeredDeviceId: profile.registeredDeviceId,
+    registeredDeviceName: profile.registeredDeviceName,
+    registeredDeviceModel: profile.registeredDeviceModel,
+    registeredDeviceBrand: profile.registeredDeviceBrand,
+    registeredDeviceOS: profile.registeredDeviceOS,
+    deviceLockedAt: profile.deviceLockedAt,
+    deviceChangeRequested: profile.deviceChangeRequested,
+    deviceChangeReason: profile.deviceChangeReason,
+  });
 });

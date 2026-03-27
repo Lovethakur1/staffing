@@ -103,5 +103,6 @@ export type RootStackParamList = {
 export type MainTabParamList = {
   Dashboard: undefined;
   MyShifts: undefined;
+  Inbox: undefined;
   Profile: undefined;
 };

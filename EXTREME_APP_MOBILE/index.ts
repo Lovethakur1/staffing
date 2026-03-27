@@ -1,5 +1,8 @@
 import { registerRootComponent } from 'expo';
 
+// Register background tasks BEFORE app component loads
+import './src/services/backgroundLocation';
+
 import App from './App';
 
 // registerRootComponent calls AppRegistry.registerComponent('main', () => App);

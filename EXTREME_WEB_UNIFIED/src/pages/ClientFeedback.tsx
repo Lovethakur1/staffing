@@ -67,7 +67,8 @@ export function ClientFeedback({ userRole, userId }: ClientFeedbackProps) {
         const events = Array.isArray(res.data) ? res.data : (res.data?.data || []);
         const pending: Event[] = [];
         const submitted: any[] = [];
-        events.forEach((e: any) => {
+        for (const e of events) {
+          if (e.status !== 'COMPLETED') continue;
           const ev = {
             id: e.id,
             name: e.title || e.eventName || '',
@@ -76,12 +77,14 @@ export function ClientFeedback({ userRole, userId }: ClientFeedbackProps) {
             staffCount: e.shifts?.length || e.staffRequired || 0,
             status: 'pending-feedback' as const,
           };
-          if (e.feedbackSubmitted) {
-            submitted.push({ eventName: ev.name, date: ev.date, averageRating: e.averageRating || 0, totalStaff: ev.staffCount, submittedAt: e.feedbackDate || '' });
+          const hasReviews = (e.clientReviews && e.clientReviews.length > 0);
+          if (hasReviews) {
+            const avgRating = e.clientReviews.reduce((sum: number, r: any) => sum + r.rating, 0) / e.clientReviews.length;
+            submitted.push({ eventName: ev.name, date: ev.date, averageRating: avgRating, totalStaff: ev.staffCount, submittedAt: e.clientReviews[0]?.createdAt || '' });
           } else {
             pending.push(ev);
           }
-        });
+        }
         setEventsNeedingFeedback(pending);
         setSubmittedFeedback(submitted);
       } catch { /* No feedback endpoint yet */ }
@@ -120,12 +123,27 @@ export function ClientFeedback({ userRole, userId }: ClientFeedbackProps) {
     });
   };
 
-  const startRating = (event: Event) => {
+  const startRating = async (event: Event) => {
     setSelectedEvent(event);
     setCurrentStaffIndex(0);
-    setShowRatingDialog(true);
-    // Initialize first staff rating
-    initializeRatingForStaff(eventStaff[0].id, eventStaff[0].name, eventStaff[0].role);
+    setStaffRatings({});
+    try {
+      const res = await api.get(`/events/${event.id}`);
+      const ev = res.data;
+      const shifts = ev.shifts || [];
+      const staff = shifts.map((s: any) => ({
+        id: s.staffId || s.staff?.id || s.id,
+        name: s.staff?.name || 'Staff',
+        role: s.role || 'Staff',
+      }));
+      setEventStaff(staff);
+      if (staff.length > 0) {
+        initializeRatingForStaff(staff[0].id, staff[0].name, staff[0].role);
+      }
+      setShowRatingDialog(true);
+    } catch {
+      toast.error("Failed to load event staff");
+    }
   };
 
   const nextStaff = () => {
@@ -142,8 +160,37 @@ export function ClientFeedback({ userRole, userId }: ClientFeedbackProps) {
     }
   };
 
-  const submitAllRatings = () => {
-    toast.success("Thank you! Your feedback has been submitted.");
+  const submitAllRatings = async () => {
+    if (!selectedEvent) return;
+    try {
+      for (const staffId of Object.keys(staffRatings)) {
+        const r = staffRatings[staffId];
+        const avgRating = Math.round(
+          (r.punctuality + r.professionalism + r.appearance + r.serviceQuality + r.communication) / 5
+        );
+        await api.post('/reviews', {
+          staffId,
+          eventId: selectedEvent.id,
+          rating: avgRating || r.overallRating || 1,
+          feedback: r.comments || '',
+        });
+      }
+      toast.success("Thank you! Your feedback has been submitted.");
+      // Move event from pending to submitted
+      setEventsNeedingFeedback(prev => prev.filter(e => e.id !== selectedEvent.id));
+      setSubmittedFeedback(prev => [
+        ...prev,
+        {
+          eventName: selectedEvent.name,
+          date: selectedEvent.date,
+          averageRating: Object.values(staffRatings).reduce((sum, r) => sum + (r.punctuality + r.professionalism + r.appearance + r.serviceQuality + r.communication) / 5, 0) / Object.keys(staffRatings).length,
+          totalStaff: Object.keys(staffRatings).length,
+          submittedAt: new Date().toISOString(),
+        },
+      ]);
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || "Failed to submit review");
+    }
     setShowRatingDialog(false);
     setStaffRatings({});
     setCurrentStaffIndex(0);

@@ -12,7 +12,7 @@ import {
   AlertTriangle, Phone, Send, UserCheck, CreditCard, Activity, Star,
   Briefcase, ChevronRight, Users, Mail, DollarSign, Timer, Shield,
   CheckCircle, XCircle, AlertCircle, Ban, Search, Filter, X, CalendarClock,
-  Coffee, MessageSquare, Pause, Navigation
+  Coffee, MessageSquare, Pause, Navigation, RefreshCw, Radar, Locate
 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
@@ -29,6 +29,8 @@ import {
 import api from "../services/api";
 import { chatService } from "../services/chat.service";
 import { eventService } from "../services/event.service";
+import { lazy, Suspense } from "react";
+const LiveStaffMap = lazy(() => import("../components/map/LiveStaffMap"));
 import { Label } from "../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 
@@ -145,6 +147,9 @@ export function AdminEventDetail({ userRole = 'admin' }: AdminEventDetailProps) 
     title: '',
     eventType: '',
     venue: '',
+    location: '',
+    locationLat: '' as string | number,
+    locationLng: '' as string | number,
     date: '',
     startTime: '',
     endTime: '',
@@ -156,9 +161,13 @@ export function AdminEventDetail({ userRole = 'admin' }: AdminEventDetailProps) 
     contactOnSitePhone: '',
   });
   const [editSaving, setEditSaving] = useState(false);
+  const [geocoding, setGeocoding] = useState(false);
 
   // Used to show loading state if creating a conversation takes a moment
   const [navigatingToMsg, setNavigatingToMsg] = useState<string | null>(null);
+  // Live tracking map
+  const [selectedTrackStaff, setSelectedTrackStaff] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('overview');
 
   const handleNavigationToMessage = async (staffId: string) => {
     setNavigatingToMsg(staffId);
@@ -205,6 +214,9 @@ export function AdminEventDetail({ userRole = 'admin' }: AdminEventDetailProps) 
       title: event.name || '',
       eventType: event.type || '',
       venue: event.location || '',
+      location: apiEvent?.location || '',
+      locationLat: apiEvent?.locationLat ?? '',
+      locationLng: apiEvent?.locationLng ?? '',
       date: apiEvent?.date ? new Date(apiEvent.date).toISOString().split('T')[0] : '',
       startTime: event.startTime || '',
       endTime: event.endTime || '',
@@ -225,6 +237,9 @@ export function AdminEventDetail({ userRole = 'admin' }: AdminEventDetailProps) 
         title: editForm.title,
         eventType: editForm.eventType,
         venue: editForm.venue,
+        location: editForm.location || undefined,
+        locationLat: editForm.locationLat !== '' ? Number(editForm.locationLat) : undefined,
+        locationLng: editForm.locationLng !== '' ? Number(editForm.locationLng) : undefined,
         date: editForm.date ? new Date(editForm.date).toISOString() : undefined,
         startTime: editForm.startTime,
         endTime: editForm.endTime,
@@ -732,10 +747,14 @@ export function AdminEventDetail({ userRole = 'admin' }: AdminEventDetailProps) 
         </div>
 
         {/* Main Content Tabs */}
-        <Tabs defaultValue="overview" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="w-full justify-start overflow-x-auto">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="staff">Staff Details</TabsTrigger>
+            <TabsTrigger value="tracking" className="gap-1.5">
+              <Radar className="w-4 h-4" />
+              Live Tracking
+            </TabsTrigger>
             {isAdmin && <TabsTrigger value="payments">Payments</TabsTrigger>}
             <TabsTrigger value="timeline">Timeline</TabsTrigger>
             <TabsTrigger value="feedback">Client Feedback</TabsTrigger>
@@ -1009,6 +1028,17 @@ export function AdminEventDetail({ userRole = 'admin' }: AdminEventDetailProps) 
                           Message
                         </Button>
 
+                        <Button variant="ghost" size="sm" className="hidden group-hover:flex"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedTrackStaff(staff.staffId || staff.id);
+                            setActiveTab('tracking');
+                          }}
+                        >
+                          <Locate className="w-4 h-4 mr-1" />
+                          Track
+                        </Button>
+
                         <Button variant="ghost" size="sm" className="hidden group-hover:flex">
                           View Details <ChevronRight className="w-4 h-4 ml-1" />
                         </Button>
@@ -1173,6 +1203,23 @@ export function AdminEventDetail({ userRole = 'admin' }: AdminEventDetailProps) 
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* Live Tracking Tab */}
+          <TabsContent value="tracking" className="space-y-4">
+            <Suspense fallback={
+              <Card><CardContent className="py-12 flex items-center justify-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+              </CardContent></Card>
+            }>
+              <LiveStaffMap
+                eventId={eventId}
+                venueLat={apiEvent?.locationLat}
+                venueLng={apiEvent?.locationLng}
+                venueName={event.location || event.name}
+                selectedStaffId={selectedTrackStaff}
+              />
+            </Suspense>
           </TabsContent>
 
           {/* Feedback Tab */}
@@ -1343,6 +1390,33 @@ export function AdminEventDetail({ userRole = 'admin' }: AdminEventDetailProps) 
             <div>
               <Label htmlFor="edit-venue">Venue</Label>
               <Input id="edit-venue" value={editForm.venue} onChange={e => setEditForm(f => ({ ...f, venue: e.target.value }))} />
+            </div>
+            <div className="sm:col-span-2">
+              <Label htmlFor="edit-location">Full Address</Label>
+              <Input id="edit-location" placeholder="e.g. 123 Main St, City, State, ZIP" value={editForm.location} onChange={e => setEditForm(f => ({ ...f, location: e.target.value }))} />
+            </div>
+            <div>
+              <Label htmlFor="edit-lat">Latitude</Label>
+              <Input id="edit-lat" type="number" step="any" placeholder="e.g. 28.4744" value={editForm.locationLat} onChange={e => setEditForm(f => ({ ...f, locationLat: e.target.value }))} />
+            </div>
+            <div className="flex gap-2 items-end">
+              <div className="flex-1">
+                <Label htmlFor="edit-lng">Longitude</Label>
+                <Input id="edit-lng" type="number" step="any" placeholder="e.g. 77.5040" value={editForm.locationLng} onChange={e => setEditForm(f => ({ ...f, locationLng: e.target.value }))} />
+              </div>
+              <Button type="button" variant="outline" size="sm" disabled={geocoding} className="mb-0.5" onClick={async () => {
+                const addr = editForm.location || editForm.venue;
+                if (!addr) { toast.error('Enter an address or venue first'); return; }
+                setGeocoding(true);
+                try {
+                  const res = await api.post(`/events/${event.id}/geocode`);
+                  setEditForm(f => ({ ...f, locationLat: res.data.locationLat, locationLng: res.data.locationLng }));
+                  toast.success('Coordinates found!');
+                } catch { toast.error('Could not geocode this address'); }
+                finally { setGeocoding(false); }
+              }}>
+                {geocoding ? <RefreshCw className="h-4 w-4 animate-spin" /> : <MapPin className="h-4 w-4" />}
+              </Button>
             </div>
             <div>
               <Label htmlFor="edit-date">Date</Label>

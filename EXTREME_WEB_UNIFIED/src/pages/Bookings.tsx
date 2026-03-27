@@ -322,7 +322,9 @@ export function Bookings({ userRole, userId }: BookingsProps) {
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
-                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 hover:bg-muted">
+                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 hover:bg-muted"
+                          onClick={() => setCurrentPage("book-event", { editEventId: booking.id })}
+                        >
                           <Edit className="h-4 w-4" />
                         </Button>
                         <Button size="sm" variant="ghost" className="h-8 w-8 p-0 hover:bg-muted">
