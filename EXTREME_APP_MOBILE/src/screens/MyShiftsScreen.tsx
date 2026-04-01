@@ -5,12 +5,12 @@ import {
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../config/api';
 import { useAuth } from '../context/AuthContext';
 import { Shift, RootStackParamList } from '../types';
 import { Colors } from '../theme';
+import { ScreenLayout } from '../components';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -29,7 +29,6 @@ interface UnavailabilityItem {
 export default function MyShiftsScreen() {
   const { user } = useAuth();
   const nav = useNavigation<Nav>();
-  const insets = useSafeAreaInsets();
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [unavailabilities, setUnavailabilities] = useState<UnavailabilityItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -117,6 +116,43 @@ export default function MyShiftsScreen() {
     });
   }
 
+  function getUnavailabilitiesForDay(day: number): UnavailabilityItem[] {
+    const targetDate = new Date(year, month, day);
+    targetDate.setHours(0, 0, 0, 0);
+
+    return unavailabilities.filter(u => {
+      const s = new Date(u.startDate);
+      s.setHours(0, 0, 0, 0);
+      const e = new Date(u.endDate);
+      e.setHours(0, 0, 0, 0);
+      return targetDate >= s && targetDate <= e;
+    });
+  }
+
+  async function handleDayPress(day: number) {
+    if (subTab !== 'unavailability') return;
+
+    const unavailForItem = getUnavailabilitiesForDay(day);
+    if (unavailForItem.length > 0) {
+      handleDeleteUnavailability(unavailForItem[0].id);
+    } else {
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      const dateStr = `${year}-${pad(month + 1)}-${pad(day)}`;
+      try {
+        await api.post('/unavailability', {
+          startDate: dateStr,
+          endDate: dateStr,
+          startTime: '00:00',
+          endTime: '23:59',
+          reason: 'Unavailable (Calendar)',
+        });
+        fetchData();
+      } catch (err: any) {
+        Alert.alert('Error', err?.response?.data?.error || 'Failed to set unavailability');
+      }
+    }
+  }
+
   async function handleSaveUnavailability() {
     if (!unavailForm.startDate || !unavailForm.endDate) {
       Alert.alert('Error', 'Please enter start and end dates');
@@ -155,29 +191,16 @@ export default function MyShiftsScreen() {
     ]);
   }
 
-  const initials = (user?.name || 'S').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-
   if (loading) {
-    return <View style={st.center}><ActivityIndicator size="large" color={Colors.primary} /></View>;
+    return (
+      <ScreenLayout activeTab="MyShifts" notificationCount={pending.length}>
+        <View style={st.center}><ActivityIndicator size="large" color={Colors.primary} /></View>
+      </ScreenLayout>
+    );
   }
 
   return (
-    <View style={st.container}>
-      {/* Header */}
-      <View style={[st.header, { paddingTop: insets.top + 8 }]}>
-        <TouchableOpacity><Ionicons name="menu" size={24} color={Colors.textPrimary} /></TouchableOpacity>
-        <View style={st.logoBg}>
-          <Text style={st.logoTextBig}>E</Text>
-          <Text style={st.logoTextSmall}>XTREME{'\n'}STAFFING</Text>
-        </View>
-        <View style={st.headerRight}>
-          <TouchableOpacity style={st.bellBtn}>
-            <Ionicons name="notifications-outline" size={22} color={Colors.textPrimary} />
-            <View style={st.notifBadge}><Text style={st.notifCount}>{pending.length}</Text></View>
-          </TouchableOpacity>
-          <View style={st.avatarSmall}><Text style={st.avatarSmallText}>{initials}</Text></View>
-        </View>
-      </View>
+    <ScreenLayout activeTab="MyShifts" notificationCount={pending.length}>
 
       <ScrollView
         contentContainerStyle={st.scroll}
@@ -282,8 +305,24 @@ export default function MyShiftsScreen() {
               {calendarDays.slice(rowIdx * 7, rowIdx * 7 + 7).map((cell, colIdx) => {
                 const isToday = cell.isCurrentMonth && cell.day === today.getDate() && month === today.getMonth() && year === today.getFullYear();
                 const dayShifts = cell.isCurrentMonth ? getShiftsForDay(cell.day) : [];
+                const dayUnavail = cell.isCurrentMonth ? getUnavailabilitiesForDay(cell.day) : [];
+                const isUnavailable = dayUnavail.length > 0;
+
                 return (
-                  <View key={colIdx} style={[st.calCellBig, isToday && st.calCellToday]}>
+                  <TouchableOpacity 
+                    key={colIdx} 
+                    style={[
+                      st.calCellBig, 
+                      isToday && st.calCellToday,
+                      isUnavailable && st.calCellUnavailable
+                    ]}
+                    activeOpacity={subTab === 'unavailability' ? 0.7 : 1}
+                    onPress={() => {
+                        if (subTab === 'unavailability' && cell.isCurrentMonth) {
+                           handleDayPress(cell.day);
+                        }
+                    }}
+                  >
                     <Text style={[
                       st.calDayNum,
                       !cell.isCurrentMonth && st.calDayNumDim,
@@ -305,7 +344,10 @@ export default function MyShiftsScreen() {
                     {dayShifts.length > 1 && (
                       <Text style={st.calMoreText}>+{dayShifts.length - 1} more</Text>
                     )}
-                  </View>
+                    {isUnavailable && subTab === 'unavailability' && (
+                      <Text style={st.unavailIndicator}>⛔ Leave</Text>
+                    )}
+                  </TouchableOpacity>
                 );
               })}
             </View>
@@ -327,36 +369,7 @@ export default function MyShiftsScreen() {
           )}
         </View>
 
-        {/* Unavailability List */}
-        {subTab === 'unavailability' && (
-          <View style={st.card}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <Text style={st.sectionTitle}>My Unavailability</Text>
-              <TouchableOpacity style={st.addBtn} onPress={() => setShowUnavailModal(true)}>
-                <Ionicons name="add" size={20} color="#fff" />
-                <Text style={st.addBtnText}>Add</Text>
-              </TouchableOpacity>
-            </View>
-            {unavailabilities.length === 0 ? (
-              <Text style={st.noShiftsText}>No unavailability set</Text>
-            ) : (
-              unavailabilities.map(item => (
-                <View key={item.id} style={st.unavailItem}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={st.unavailDates}>
-                      {new Date(item.startDate).toLocaleDateString()} – {new Date(item.endDate).toLocaleDateString()}
-                    </Text>
-                    {item.startTime && <Text style={st.unavailTime}>{item.startTime} – {item.endTime}</Text>}
-                    {item.reason && <Text style={st.unavailReason}>{item.reason}</Text>}
-                  </View>
-                  <TouchableOpacity onPress={() => handleDeleteUnavailability(item.id)}>
-                    <Ionicons name="trash-outline" size={20} color={Colors.danger} />
-                  </TouchableOpacity>
-                </View>
-              ))
-            )}
-          </View>
-        )}
+        {/* Note: Unavailability List is now perfectly integrated into the visual calendar above! */}
       </ScrollView>
 
       {/* Set Unavailability Modal */}
@@ -436,7 +449,7 @@ export default function MyShiftsScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+    </ScreenLayout>
   );
 }
 
@@ -444,16 +457,6 @@ const st = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   scroll: { paddingHorizontal: 16, paddingBottom: 100 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 10, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
-  logoBg: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.primary, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
-  logoTextBig: { color: '#fff', fontSize: 18, fontWeight: '900' },
-  logoTextSmall: { color: '#fff', fontSize: 7, fontWeight: '700', marginLeft: 2, lineHeight: 9 },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  bellBtn: { position: 'relative' },
-  notifBadge: { position: 'absolute', top: -4, right: -6, backgroundColor: Colors.primary, borderRadius: 10, width: 18, height: 18, justifyContent: 'center', alignItems: 'center' },
-  notifCount: { color: '#fff', fontSize: 10, fontWeight: '700' },
-  avatarSmall: { width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center' },
-  avatarSmallText: { color: '#fff', fontSize: 12, fontWeight: '700' },
   pageTitle: { fontSize: 22, fontWeight: '700', color: Colors.textPrimary, marginTop: 16 },
   pageSubtitle: { fontSize: 13, color: Colors.textSecondary, marginTop: 2, marginBottom: 12 },
   subTabs: { flexDirection: 'row', gap: 8, marginBottom: 14 },
@@ -500,6 +503,8 @@ const st = StyleSheet.create({
   unavailDates: { fontSize: 14, fontWeight: '600', color: Colors.textPrimary },
   unavailTime: { fontSize: 12, color: Colors.textSecondary, marginTop: 2 },
   unavailReason: { fontSize: 12, color: Colors.textMuted, marginTop: 2, fontStyle: 'italic' },
+  calCellUnavailable: { backgroundColor: '#FEE2E2' },
+  unavailIndicator: { fontSize: 8, color: Colors.danger, fontWeight: '700', paddingLeft: 2, marginTop: 2, textAlign: 'center' },
 
   // Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', paddingHorizontal: 20 },

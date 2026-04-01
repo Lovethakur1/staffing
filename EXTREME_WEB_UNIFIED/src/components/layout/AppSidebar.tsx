@@ -59,7 +59,9 @@ import {
   CalendarDays,
   TrendingUp,
   Phone,
-  UserCog
+  UserCog,
+  ThumbsUp,
+  CreditCard
 } from "lucide-react";
 import { useNavigation } from "../../contexts/NavigationContext";
 import { useAlerts } from "../../contexts/AlertsContext";
@@ -93,7 +95,7 @@ export function AppSidebar({ currentUser, onLogout }: AppSidebarProps) {
       label: "Operations",
       items: [
         { title: "Command Center", icon: LayoutDashboard, id: "dashboard" },
-        { title: "Live Operations", icon: Radio, id: "live-ops", badge: "LIVE" },
+        // { title: "Live Operations", icon: Radio, id: "live-ops", badge: "LIVE" },
         { title: "Event Requests Queue", icon: FileText, id: "event-requests-queue", badge: "5" },
       ]
     },
@@ -379,40 +381,26 @@ export function AppSidebar({ currentUser, onLogout }: AppSidebarProps) {
   // ==================== CLIENT NAVIGATION ====================
   const getClientSections = () => [
     {
-      label: "Dashboard",
+      label: "MAIN MENU",
       items: [
         { title: "Dashboard", icon: LayoutDashboard, id: "dashboard" },
-      ]
-    },
-    {
-      label: "Events & Bookings",
-      items: [
-        { title: "Book Event", icon: Plus, id: "book-event" },
-        { title: "My Bookings", icon: Calendar, id: "bookings" },
-        { title: "Upcoming Events", icon: CalendarDays, id: "upcoming-events" },
-        { title: "Favorites", icon: Star, id: "favorites" },
-      ]
-    },
-    {
-      label: "Staff & Performance",
-      items: [
+        { title: "Book New Event", icon: Calendar, id: "book-event" },
+        { title: "My Bookings", icon: FileText, id: "bookings" },
+        { title: "Upcoming Events", icon: Clock, id: "upcoming-events" },
         { title: "Staff Directory", icon: Users, id: "staff" },
-        { title: "Performance", icon: TrendingUp, id: "performance" },
-      ]
-    },
-    {
-      label: "Communication & Support",
-      items: [
-        { title: "Messages", icon: MessageSquare, id: "messages", badge: msgBadge },
-        { title: "Help & Support", icon: Headphones, id: "help-support" },
-      ]
-    },
-    {
-      label: "Resources",
-      items: [
+        { title: "Invoices & Billing", icon: CreditCard, id: "billing" },
         { title: "Analytics", icon: BarChart3, id: "analytics" },
-        { title: "Documents", icon: FileText, id: "documents" },
+        { title: "Favorites", icon: Star, id: "favorites" },
+        { title: "Messages", icon: MessageSquare, id: "messages", badge: msgBadge },
+        { title: "Rate & Feedback", icon: ThumbsUp, id: "client-feedback", badge: "3" },
+      ]
+    },
+    {
+      label: "RESOURCES",
+      items: [
+        { title: "Help Center", icon: HelpCircle, id: "help-support" },
         { title: "Documentation", icon: BookOpen, id: "documentation" },
+        { title: "Support", icon: Headphones, id: "support" },
       ]
     }
   ];
@@ -440,19 +428,8 @@ export function AppSidebar({ currentUser, onLogout }: AppSidebarProps) {
 
   return (
     <Sidebar className="border-r border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <SidebarHeader className="border-b border-border p-4">
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <XtremeLogo size="md" />
-            <div className="absolute -top-1 -right-1 w-3 h-3 bg-success rounded-full flex items-center justify-center">
-              <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
-            </div>
-          </div>
-          <div className="flex-1">
-            <div className="text-base font-medium text-primary">Extreme Staffing</div>
-            <p className="text-xs text-muted-foreground">Enterprise</p>
-          </div>
-        </div>
+      <SidebarHeader className="h-[72px] border-b border-border px-4 flex items-center justify-center">
+        <XtremeLogo size="sm" />
       </SidebarHeader>
 
       <SidebarContent className="p-4">
@@ -552,6 +529,7 @@ export function AppSidebar({ currentUser, onLogout }: AppSidebarProps) {
                     <SidebarMenuButton
                       asChild
                       isActive={currentPage === item.id}
+                      tooltip={item.title}
                       className={`group relative rounded-lg transition-all duration-200 ${currentPage === item.id
                         ? "bg-primary text-primary-foreground shadow-sm"
                         : "hover:bg-accent text-foreground"

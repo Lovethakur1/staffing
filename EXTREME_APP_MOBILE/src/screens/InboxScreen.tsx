@@ -3,12 +3,14 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
   RefreshControl, ActivityIndicator,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../config/api';
 import { useAuth } from '../context/AuthContext';
 import { Colors } from '../theme';
+import { RootStackParamList } from '../types';
+import { ScreenLayout } from '../components';
 
 interface Conversation {
   id: string;
@@ -21,7 +23,7 @@ interface Conversation {
 
 export default function InboxScreen() {
   const { user } = useAuth();
-  const insets = useSafeAreaInsets();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -52,15 +54,14 @@ export default function InboxScreen() {
     }, [fetchConversations])
   );
 
-  const initials = (user?.name || 'S').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-
   const filteredConversations = conversations.filter(c => {
     if (activeFilter === 'unread') return c.unreadCount > 0;
     if (activeFilter === 'groups') return c.isGroup;
     return true;
   }).filter(c => {
     if (!searchQuery) return true;
-    return c.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const displayName = getConversationName(c);
+    return displayName.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
   const unreadConvCount = conversations.filter(c => c.unreadCount > 0).length;
@@ -77,8 +78,15 @@ export default function InboxScreen() {
     return `${days}d`;
   }
 
-  function getInitials(name: string): string {
+  function getInitials(name: string | null | undefined): string {
+    if (!name) return '?';
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  }
+
+  function getConversationName(conv: Conversation): string {
+    if (conv.name) return conv.name;
+    const other = conv.participants.find(p => p.user.id !== user?.id);
+    return other?.user.name || 'Chat';
   }
 
   function getOtherParticipantRole(conv: Conversation): string {
@@ -88,27 +96,15 @@ export default function InboxScreen() {
   }
 
   if (loading) {
-    return <View style={st.center}><ActivityIndicator size="large" color={Colors.primary} /></View>;
+    return (
+      <ScreenLayout activeTab="Inbox" notificationCount={0}>
+        <View style={st.center}><ActivityIndicator size="large" color={Colors.primary} /></View>
+      </ScreenLayout>
+    );
   }
 
   return (
-    <View style={st.container}>
-      {/* Header */}
-      <View style={[st.header, { paddingTop: insets.top + 8 }]}>
-        <TouchableOpacity><Ionicons name="menu" size={24} color={Colors.textPrimary} /></TouchableOpacity>
-        <View style={st.logoBg}>
-          <Text style={st.logoTextBig}>E</Text>
-          <Text style={st.logoTextSmall}>XTREME{'\n'}STAFFING</Text>
-        </View>
-        <View style={st.headerRight}>
-          <TouchableOpacity style={st.bellBtn}>
-            <Ionicons name="notifications-outline" size={22} color={Colors.textPrimary} />
-            {totalUnread > 0 && <View style={st.notifBadge}><Text style={st.notifCount}>{totalUnread}</Text></View>}
-          </TouchableOpacity>
-          <View style={st.avatarSmall}><Text style={st.avatarSmallText}>{initials}</Text></View>
-        </View>
-      </View>
-
+    <ScreenLayout activeTab="Inbox" notificationCount={totalUnread}>
       <ScrollView
         contentContainerStyle={st.scroll}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchConversations(); }} colors={[Colors.primary]} />}
@@ -150,20 +146,27 @@ export default function InboxScreen() {
           </View>
         ) : (
           filteredConversations.map(conv => (
-            <TouchableOpacity key={conv.id} style={st.msgRow}>
+            <TouchableOpacity
+              key={conv.id}
+              style={st.msgRow}
+              onPress={() => navigation.navigate('ChatDetail', {
+                conversationId: conv.id,
+                conversationName: getConversationName(conv),
+              })}
+            >
               <View style={st.msgAvatarWrap}>
                 <View style={[st.msgAvatar, conv.isGroup && st.msgAvatarGroup]}>
                   {conv.isGroup ? (
                     <Ionicons name="people" size={20} color={Colors.textSecondary} />
                   ) : (
-                    <Text style={st.msgAvatarText}>{getInitials(conv.name)}</Text>
+                    <Text style={st.msgAvatarText}>{getInitials(getConversationName(conv))}</Text>
                   )}
                 </View>
               </View>
 
               <View style={st.msgContent}>
                 <View style={st.msgTopRow}>
-                  <Text style={[st.msgName, conv.unreadCount > 0 && { fontWeight: '700' }]} numberOfLines={1}>{conv.name}</Text>
+                  <Text style={[st.msgName, conv.unreadCount > 0 && { fontWeight: '700' }]} numberOfLines={1}>{getConversationName(conv)}</Text>
                   <Text style={st.msgTime}>{getTimeAgo(conv.lastMessage?.createdAt)}</Text>
                 </View>
                 <View style={st.msgBottomRow}>
@@ -180,25 +183,23 @@ export default function InboxScreen() {
             </TouchableOpacity>
           ))
         )}
+        <View style={{ height: 80 }} />
       </ScrollView>
-    </View>
+
+      {/* New Chat FAB */}
+      <TouchableOpacity
+        style={st.fab}
+        onPress={() => navigation.navigate('NewChat')}
+      >
+        <Ionicons name="create-outline" size={24} color={Colors.white} />
+      </TouchableOpacity>
+    </ScreenLayout>
   );
 }
 
 const st = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8FAFC' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   scroll: { paddingHorizontal: 16, paddingBottom: 100 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 10, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
-  logoBg: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.primary, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
-  logoTextBig: { color: '#fff', fontSize: 18, fontWeight: '900' },
-  logoTextSmall: { color: '#fff', fontSize: 7, fontWeight: '700', marginLeft: 2, lineHeight: 9 },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  bellBtn: { position: 'relative' },
-  notifBadge: { position: 'absolute', top: -4, right: -6, backgroundColor: Colors.primary, borderRadius: 10, width: 18, height: 18, justifyContent: 'center', alignItems: 'center' },
-  notifCount: { color: '#fff', fontSize: 10, fontWeight: '700' },
-  avatarSmall: { width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center' },
-  avatarSmallText: { color: '#fff', fontSize: 12, fontWeight: '700' },
   pageTitle: { fontSize: 22, fontWeight: '700', color: Colors.textPrimary, marginTop: 16 },
   pageSubtitle: { fontSize: 13, color: Colors.textSecondary, marginTop: 2, marginBottom: 12 },
   searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0', paddingHorizontal: 12, marginBottom: 12 },
@@ -224,4 +225,5 @@ const st = StyleSheet.create({
   unreadBadge: { backgroundColor: Colors.primary, borderRadius: 10, minWidth: 20, height: 20, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 6 },
   unreadText: { color: '#fff', fontSize: 10, fontWeight: '700' },
   msgType: { fontSize: 10, color: Colors.textMuted, marginTop: 2 },
+  fab: { position: 'absolute', bottom: 24, right: 20, width: 54, height: 54, borderRadius: 27, backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center', elevation: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 4 },
 });

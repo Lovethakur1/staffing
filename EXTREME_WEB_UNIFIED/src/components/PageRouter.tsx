@@ -148,6 +148,9 @@ export function PageRouter({ userRole, userId }: PageRouterProps) {
             case 'analytics':
                 return <Analytics userRole={userRole} userId={userId} />;
             case 'billing':
+                return userRole === 'client' 
+                    ? <Billing userRole={userRole} userId={userId} />
+                    : <FinancialHub userRole={userRole} userId={userId} />;
             case 'financial-hub':
             case 'invoicing':
             case 'accounting-system':

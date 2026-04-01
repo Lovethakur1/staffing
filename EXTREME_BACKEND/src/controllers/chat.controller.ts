@@ -25,7 +25,7 @@ export const listConversations = asyncHandler(async (req: AuthRequest, res: Resp
       orderBy: { lastMessageAt: 'desc' },
       include: {
         participants: {
-          include: { user: { select: { id: true, name: true, avatar: true } } },
+          include: { user: { select: { id: true, name: true, role: true, avatar: true } } },
         },
         messages: {
           take: 1,
@@ -38,8 +38,32 @@ export const listConversations = asyncHandler(async (req: AuthRequest, res: Resp
     prisma.conversation.count({ where }),
   ]);
 
+  // Enrich with lastMessage and unreadCount per conversation
+  const enriched = await Promise.all(
+    conversations.map(async (conv) => {
+      const myParticipant = conv.participants.find(
+        (p) => p.userId === req.user!.userId
+      );
+      const lastReadAt = myParticipant?.lastReadAt;
+
+      const unreadCount = await prisma.message.count({
+        where: {
+          conversationId: conv.id,
+          senderId: { not: req.user!.userId },
+          ...(lastReadAt ? { createdAt: { gt: lastReadAt } } : {}),
+        },
+      });
+
+      return {
+        ...conv,
+        lastMessage: conv.messages[0] || null,
+        unreadCount,
+      };
+    })
+  );
+
   res.json({
-    data: conversations,
+    data: enriched,
     pagination: { page, limit: take, total, totalPages: Math.ceil(total / take) },
   });
 });

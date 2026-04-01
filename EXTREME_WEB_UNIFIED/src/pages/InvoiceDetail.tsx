@@ -43,11 +43,17 @@ import {
   Ban,
   RefreshCw,
   AlertTriangle,
-  XCircle
+  XCircle,
+  Eye,
+  ShieldCheck,
+  ShieldX,
+  Image,
+  Upload
 } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigation } from "../contexts/NavigationContext";
 import { invoiceService } from "../services/invoice.service";
+import api from "../services/api";
 import type { Invoice } from "../data/invoiceData";
 
 interface InvoiceDetailProps {
@@ -65,52 +71,61 @@ export function InvoiceDetail({ userRole }: InvoiceDetailProps) {
   const [cancellationReason, setCancellationReason] = useState("");
   const [reminderMessage, setReminderMessage] = useState("");
   const [invoice, setInvoice] = useState<Invoice | null>(null);
+  const [rawInvoice, setRawInvoice] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [showPayDialog, setShowPayDialog] = useState(false);
+  const [clientPaymentMethod, setClientPaymentMethod] = useState('');
+  const [clientPaymentNotes, setClientPaymentNotes] = useState('');
+  const [paymentProofFile, setPaymentProofFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   
   // Get invoice from API
   const invoiceId = pageParams?.invoiceId || "";
 
-  useEffect(() => {
+  const fetchInvoice = async () => {
     if (!invoiceId) { setLoading(false); return; }
-    const fetchInvoice = async () => {
-      try {
-        const raw = await invoiceService.getInvoice(invoiceId);
-        if (raw && raw.id) {
-          setInvoice({
-            id: raw.invoiceNumber || raw.id,
-            clientId: raw.clientId || '',
-            clientName: raw.client?.user?.name || raw.client?.companyName || '',
-            clientEmail: raw.client?.user?.email || '',
-            clientPhone: raw.client?.user?.phone || '',
-            clientAddress: raw.client?.companyAddress || raw.client?.address || '',
-            eventName: raw.event?.title || '',
-            eventDate: raw.event?.date || '',
-            eventLocation: raw.event?.venue || '',
-            amount: raw.amount || 0,
-            status: (raw.status || 'draft').toLowerCase() as Invoice['status'],
-            issueDate: raw.createdAt || '',
-            dueDate: raw.dueDate || '',
-            paidDate: raw.paidDate || undefined,
-            paymentMethod: undefined,
-            lineItems: (raw.lineItems || []).map((li: any) => ({
-              description: li.description,
-              quantity: li.quantity,
-              rate: li.unitPrice,
-              hours: li.quantity,
-              total: li.amount,
-            })),
-            subtotal: raw.subtotal || 0,
-            tax: raw.taxAmount || 0,
-            taxRate: raw.taxRate || 0,
-            total: raw.amount || 0,
-            notes: raw.notes || undefined,
-          });
-        }
-      } catch {
-        // Invoice not found
+    try {
+      const raw = await invoiceService.getInvoice(invoiceId);
+      setRawInvoice(raw);
+      if (raw && raw.id) {
+        setInvoice({
+          id: raw.invoiceNumber || raw.id,
+          clientId: raw.clientId || '',
+          clientName: raw.client?.user?.name || raw.client?.companyName || '',
+          clientEmail: raw.client?.user?.email || '',
+          clientPhone: raw.client?.user?.phone || '',
+          clientAddress: raw.client?.companyAddress || raw.client?.address || '',
+          eventName: raw.event?.title || '',
+          eventDate: raw.event?.date || '',
+          eventLocation: raw.event?.venue || '',
+          amount: raw.amount || 0,
+          status: (raw.status || 'draft').toLowerCase() as Invoice['status'],
+          issueDate: raw.createdAt || '',
+          dueDate: raw.dueDate || '',
+          paidDate: raw.paidDate || undefined,
+          paymentMethod: raw.paymentMethod || undefined,
+          lineItems: (raw.lineItems || []).map((li: any) => ({
+            description: li.description,
+            quantity: li.quantity,
+            rate: li.unitPrice,
+            hours: li.quantity,
+            total: li.amount,
+          })),
+          subtotal: raw.subtotal || 0,
+          tax: raw.taxAmount || 0,
+          taxRate: raw.taxRate || 0,
+          total: raw.amount || 0,
+          notes: raw.notes || undefined,
+        });
       }
-      setLoading(false);
-    };
+    } catch {
+      // Invoice not found
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
     fetchInvoice();
   }, [invoiceId]);
   
@@ -139,16 +154,28 @@ export function InvoiceDetail({ userRole }: InvoiceDetailProps) {
     toast.success(`Sending invoice ${invoice.id} to ${invoice.clientEmail}`);
   };
 
-  const handleConfirmMarkAsPaid = () => {
+  const handleConfirmMarkAsPaid = async () => {
     if (!paymentMethod) {
       toast.error("Please select a payment method");
       return;
     }
-    toast.success(`Invoice ${invoice.id} marked as PAID via ${paymentMethod}`);
-    setShowMarkPaidDialog(false);
-    setPaymentMethod("");
-    setPaymentNotes("");
-    // In real app, would update status and refresh data
+    setIsProcessing(true);
+    try {
+      await invoiceService.updateInvoice(rawInvoice.id, {
+        status: 'PAID',
+        paymentMethod,
+        notes: paymentNotes || undefined,
+      } as any);
+      toast.success(`Invoice ${invoice.id} marked as PAID via ${paymentMethod}`);
+      setShowMarkPaidDialog(false);
+      setPaymentMethod("");
+      setPaymentNotes("");
+      fetchInvoice();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to mark as paid');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleSendReminder = () => {
@@ -162,15 +189,99 @@ export function InvoiceDetail({ userRole }: InvoiceDetailProps) {
     setReminderMessage("");
   };
 
-  const handleCancelInvoice = () => {
+  const handleCancelInvoice = async () => {
     if (!cancellationReason) {
       toast.error("Please provide a cancellation reason");
       return;
     }
-    toast.success(`Invoice ${invoice.id} has been CANCELLED`);
-    setShowCancelDialog(false);
-    setCancellationReason("");
-    // In real app, would update status and navigate back
+    setIsProcessing(true);
+    try {
+      await invoiceService.updateInvoice(rawInvoice.id, {
+        status: 'CANCELLED',
+        notes: cancellationReason,
+      });
+      toast.success(`Invoice ${invoice.id} has been CANCELLED`);
+      setShowCancelDialog(false);
+      setCancellationReason("");
+      fetchInvoice();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to cancel invoice');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Payment verification handlers (admin reviews client proof)
+  const handleApprovePayment = async () => {
+    setIsProcessing(true);
+    try {
+      await invoiceService.updateInvoice(rawInvoice.id, {
+        status: 'PAID',
+      } as any);
+      toast.success(`Payment verified! Invoice ${invoice?.id} marked as PAID.`);
+      fetchInvoice();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to approve payment');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleRejectPayment = async () => {
+    setIsProcessing(true);
+    try {
+      await invoiceService.updateInvoice(rawInvoice.id, {
+        status: 'SENT',
+        notes: `Payment proof rejected. ${invoice?.notes || ''}`.trim(),
+      } as any);
+      toast.success(`Payment rejected. Invoice sent back to client for re-payment.`);
+      fetchInvoice();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to reject payment');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Client submits payment proof
+  const handleClientSubmitPayment = async () => {
+    if (!clientPaymentMethod) {
+      toast.error('Please select a payment method');
+      return;
+    }
+    if (!paymentProofFile) {
+      toast.error('Please upload proof of payment');
+      return;
+    }
+    setIsUploading(true);
+    try {
+      // Upload file
+      const formData = new FormData();
+      formData.append('file', paymentProofFile);
+      const uploadRes = await api.post('/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const fileUrl = uploadRes.data?.file?.url || uploadRes.data?.url;
+
+      // Update invoice with proof
+      await invoiceService.updateInvoice(rawInvoice.id, {
+        status: 'AWAITING_VERIFICATION',
+        paymentMethod: clientPaymentMethod,
+        paymentProofUrl: fileUrl,
+        notes: clientPaymentNotes || undefined,
+      } as any);
+
+      toast.success('Payment proof submitted! Awaiting admin verification.');
+      setShowPayDialog(false);
+      setClientPaymentMethod('');
+      setClientPaymentNotes('');
+      setPaymentProofFile(null);
+      fetchInvoice();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to submit payment');
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const handleEdit = () => {
@@ -194,11 +305,14 @@ export function InvoiceDetail({ userRole }: InvoiceDetailProps) {
       case 'paid':
         return <Badge className="bg-green-100 text-green-700 border-green-200"><CheckCircle2 className="h-3 w-3 mr-1" />Paid</Badge>;
       case 'pending':
-        return <Badge className="bg-yellow-100 text-yellow-700 border-yellow-200"><Clock className="h-3 w-3 mr-1" />Pending</Badge>;
+      case 'sent':
+        return <Badge className="bg-yellow-100 text-yellow-700 border-yellow-200"><Clock className="h-3 w-3 mr-1" />Pending Payment</Badge>;
       case 'overdue':
         return <Badge className="bg-red-100 text-red-700 border-red-200"><AlertTriangle className="h-3 w-3 mr-1" />Overdue</Badge>;
       case 'draft':
         return <Badge variant="outline" className="bg-gray-100 text-gray-700"><FileText className="h-3 w-3 mr-1" />Draft</Badge>;
+      case 'awaiting_verification':
+        return <Badge className="bg-blue-100 text-blue-700 border-blue-200"><Clock className="h-3 w-3 mr-1" />Awaiting Verification</Badge>;
       case 'cancelled':
         return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200"><XCircle className="h-3 w-3 mr-1" />Cancelled</Badge>;
       default:
@@ -281,7 +395,19 @@ export function InvoiceDetail({ userRole }: InvoiceDetailProps) {
           </CardHeader>
           <CardContent>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {(invoice.status === 'pending' || invoice.status === 'overdue') && (
+              {invoice.status === 'awaiting_verification' && (
+                <>
+                  <Button className="bg-green-600 hover:bg-green-700" onClick={handleApprovePayment} disabled={isProcessing}>
+                    <ShieldCheck className="h-4 w-4 mr-2" />
+                    Approve Payment
+                  </Button>
+                  <Button variant="destructive" onClick={handleRejectPayment} disabled={isProcessing}>
+                    <ShieldX className="h-4 w-4 mr-2" />
+                    Reject Payment
+                  </Button>
+                </>
+              )}
+              {(invoice.status === 'pending' || invoice.status === 'sent' || invoice.status === 'overdue' || invoice.status === 'draft') && (
                 <Button 
                   variant={invoice.status === 'overdue' ? 'destructive' : 'default'}
                   onClick={() => setShowMarkPaidDialog(true)}
@@ -329,8 +455,158 @@ export function InvoiceDetail({ userRole }: InvoiceDetailProps) {
         </Card>
       )}
 
-      {/* Warning for Overdue Invoices */}
-      {invoice.status === 'overdue' && (
+      {/* Payment Verification Banner - Admin reviews client proof */}
+      {invoice.status === 'awaiting_verification' && rawInvoice && userRole === 'admin' && (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <ShieldCheck className="h-5 w-5 text-blue-600" />
+              Payment Verification Required
+            </CardTitle>
+            <CardDescription>The client has submitted payment proof for this invoice. Please review and approve or reject.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <div className="text-sm text-muted-foreground mb-1">Payment Method</div>
+                <div className="font-medium flex items-center gap-2">
+                  <CreditCard className="h-4 w-4 text-blue-600" />
+                  {rawInvoice.paymentMethod || 'Not specified'}
+                </div>
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground mb-1">Submitted On</div>
+                <div className="font-medium flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-blue-600" />
+                  {rawInvoice.paymentProofDate ? new Date(rawInvoice.paymentProofDate).toLocaleDateString() : 'N/A'}
+                </div>
+              </div>
+            </div>
+
+            {rawInvoice.paymentProofUrl ? (
+              <div>
+                <div className="text-sm text-muted-foreground mb-2">Payment Proof</div>
+                <div className="border rounded-lg p-3 bg-white">
+                  {rawInvoice.paymentProofUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
+                    <div className="space-y-2">
+                      <img
+                        src={`http://localhost:5000${rawInvoice.paymentProofUrl}`}
+                        alt="Payment proof"
+                        className="max-h-96 rounded-md border object-contain mx-auto"
+                      />
+                      <div className="flex justify-center">
+                        <Button variant="outline" size="sm" asChild>
+                          <a href={`http://localhost:5000${rawInvoice.paymentProofUrl}`} target="_blank" rel="noopener noreferrer">
+                            <Eye className="h-4 w-4 mr-2" />
+                            View Full Size
+                          </a>
+                        </Button>
+                      </div>
+                    </div>
+                  ) : rawInvoice.paymentProofUrl.match(/\.pdf$/i) ? (
+                    <div className="space-y-2">
+                      <iframe
+                        src={`http://localhost:5000${rawInvoice.paymentProofUrl}`}
+                        className="w-full h-96 rounded-md border"
+                        title="Payment proof PDF"
+                      />
+                      <div className="flex justify-center">
+                        <Button variant="outline" size="sm" asChild>
+                          <a href={`http://localhost:5000${rawInvoice.paymentProofUrl}`} target="_blank" rel="noopener noreferrer">
+                            <Eye className="h-4 w-4 mr-2" />
+                            Open PDF
+                          </a>
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-blue-50 rounded-lg">
+                        <FileText className="h-6 w-6 text-blue-600" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-medium text-sm">Payment Proof Document</div>
+                        <div className="text-xs text-muted-foreground">Click to view the uploaded proof file</div>
+                      </div>
+                      <Button variant="outline" size="sm" asChild>
+                        <a href={`http://localhost:5000${rawInvoice.paymentProofUrl}`} target="_blank" rel="noopener noreferrer">
+                          <Eye className="h-4 w-4 mr-2" />
+                          View File
+                        </a>
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="border rounded-lg p-3 bg-white text-sm text-muted-foreground">
+                No payment proof file was uploaded.
+              </div>
+            )}
+
+            <Separator />
+            <div className="flex gap-3">
+              <Button
+                className="bg-green-600 hover:bg-green-700"
+                onClick={handleApprovePayment}
+                disabled={isProcessing}
+              >
+                <ShieldCheck className="h-4 w-4 mr-2" />
+                {isProcessing ? 'Processing...' : 'Approve Payment'}
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleRejectPayment}
+                disabled={isProcessing}
+              >
+                <ShieldX className="h-4 w-4 mr-2" />
+                {isProcessing ? 'Processing...' : 'Reject Payment'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Client Payment Action - show Pay button for clients */}
+      {userRole === 'client' && (invoice.status === 'pending' || invoice.status === 'sent' || invoice.status === 'overdue' || invoice.status === 'draft') && (
+        <Card className="border-green-200 bg-green-50">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3">
+              <CreditCard className="h-5 w-5 text-green-600 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-semibold text-green-900">Payment Required</p>
+                <p className="text-sm text-green-700 mt-1">
+                  Please submit your payment of <span className="font-semibold">${invoice.total.toLocaleString()}</span> and upload proof of payment for verification.
+                </p>
+                <Button size="sm" className="mt-3 bg-green-600 hover:bg-green-700" onClick={() => setShowPayDialog(true)}>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Pay & Upload Proof
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Client Awaiting Verification Notice */}
+      {userRole === 'client' && invoice.status === 'awaiting_verification' && (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3">
+              <Clock className="h-5 w-5 text-blue-600 mt-0.5" />
+              <div>
+                <p className="font-semibold text-blue-900">Payment Under Review</p>
+                <p className="text-sm text-blue-700 mt-1">
+                  Your payment proof has been submitted and is being reviewed by the admin. You will be notified once it's approved.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Warning for Overdue Invoices - Admin only */}
+      {invoice.status === 'overdue' && userRole === 'admin' && (
         <Card className="border-red-200 bg-red-50">
           <CardContent className="pt-6">
             <div className="flex items-start gap-3">
@@ -599,6 +875,34 @@ export function InvoiceDetail({ userRole }: InvoiceDetailProps) {
                   </div>
                 </>
               )}
+              {invoice.status === 'awaiting_verification' && rawInvoice && (
+                <>
+                  <Separator />
+                  <div>
+                    <div className="text-sm text-muted-foreground mb-2">Verification Pending</div>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-blue-600" />
+                        <span>Proof submitted {rawInvoice.paymentProofDate ? new Date(rawInvoice.paymentProofDate).toLocaleDateString() : ''}</span>
+                      </div>
+                      {rawInvoice.paymentMethod && (
+                        <div className="flex items-center gap-2">
+                          <CreditCard className="h-4 w-4 text-muted-foreground" />
+                          <span>{rawInvoice.paymentMethod}</span>
+                        </div>
+                      )}
+                      {rawInvoice.paymentProofUrl && (
+                        <Button variant="outline" size="sm" className="w-full mt-2" asChild>
+                          <a href={`http://localhost:5000${rawInvoice.paymentProofUrl}`} target="_blank" rel="noopener noreferrer">
+                            <Eye className="h-4 w-4 mr-2" />
+                            View Payment Proof
+                          </a>
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
 
@@ -649,7 +953,19 @@ export function InvoiceDetail({ userRole }: InvoiceDetailProps) {
               <CardTitle className="text-base">Quick Actions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              {invoice.status !== 'paid' && invoice.status !== 'cancelled' && (
+              {/* Client: Pay button */}
+              {userRole === 'client' && (invoice.status === 'pending' || invoice.status === 'sent' || invoice.status === 'overdue' || invoice.status === 'draft') && (
+                <Button
+                  size="sm"
+                  className="w-full justify-start bg-green-600 hover:bg-green-700"
+                  onClick={() => setShowPayDialog(true)}
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Pay & Upload Proof
+                </Button>
+              )}
+              {/* Admin: Send Reminder */}
+              {userRole === 'admin' && invoice.status !== 'paid' && invoice.status !== 'cancelled' && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -839,6 +1155,107 @@ export function InvoiceDetail({ userRole }: InvoiceDetailProps) {
             <Button variant="destructive" onClick={handleCancelInvoice}>
               <Ban className="h-4 w-4 mr-2" />
               Cancel Invoice
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Client Payment Proof Upload Dialog */}
+      <Dialog open={showPayDialog} onOpenChange={setShowPayDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Submit Payment</DialogTitle>
+            <DialogDescription>
+              Upload proof of payment for invoice {invoice.id} — ${invoice.total.toLocaleString()}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="bg-gray-50 rounded-lg p-3 text-sm">
+              <div className="flex justify-between mb-1">
+                <span className="text-muted-foreground">Invoice</span>
+                <span className="font-medium">{invoice.id}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Amount Due</span>
+                <span className="font-semibold text-[#5E1916]">${invoice.total.toLocaleString()}</span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Payment Method *</Label>
+              <Select value={clientPaymentMethod} onValueChange={setClientPaymentMethod}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select payment method" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
+                  <SelectItem value="Wire Transfer">Wire Transfer</SelectItem>
+                  <SelectItem value="ACH Transfer">ACH Transfer</SelectItem>
+                  <SelectItem value="Check">Check</SelectItem>
+                  <SelectItem value="Cash">Cash</SelectItem>
+                  <SelectItem value="Zelle">Zelle</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Proof of Payment *</Label>
+              <div
+                className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:border-primary/50 hover:bg-gray-50 transition-colors"
+                onClick={() => document.getElementById('proofFileInput')?.click()}
+              >
+                {paymentProofFile ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-green-600" />
+                    <span className="text-sm font-medium">{paymentProofFile.name}</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0 text-muted-foreground"
+                      onClick={(e) => { e.stopPropagation(); setPaymentProofFile(null); }}
+                    >
+                      <XCircle className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                    <p className="text-sm text-muted-foreground">Click to upload receipt or screenshot</p>
+                    <p className="text-xs text-muted-foreground mt-1">JPG, PNG, PDF up to 10MB</p>
+                  </>
+                )}
+              </div>
+              <input
+                id="proofFileInput"
+                type="file"
+                className="hidden"
+                accept="image/*,.pdf"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) setPaymentProofFile(file);
+                }}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Notes (Optional)</Label>
+              <Textarea
+                placeholder="Transaction ID, reference number, or any details..."
+                value={clientPaymentNotes}
+                onChange={(e) => setClientPaymentNotes(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPayDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-green-600 hover:bg-green-700"
+              onClick={handleClientSubmitPayment}
+              disabled={isUploading}
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              {isUploading ? 'Submitting...' : 'Submit Payment'}
             </Button>
           </DialogFooter>
         </DialogContent>

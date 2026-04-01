@@ -5,12 +5,12 @@ import {
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../config/api';
 import { useAuth } from '../context/AuthContext';
 import { RootStackParamList } from '../types';
 import { Colors } from '../theme';
+import { ScreenLayout } from '../components';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -38,7 +38,6 @@ interface DashboardData {
 export default function DashboardScreen() {
   const { user } = useAuth();
   const nav = useNavigation<Nav>();
-  const insets = useSafeAreaInsets();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -63,7 +62,6 @@ export default function DashboardScreen() {
     }, [fetchDashboard])
   );
 
-  const initials = (user?.name || 'S').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   const today = new Date();
   const dateStr = today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
@@ -79,23 +77,7 @@ export default function DashboardScreen() {
   const totalHours = completedRecent.reduce((sum: number, sh: any) => sum + (sh.totalHours || 0), 0);
 
   return (
-    <View style={st.container}>
-      <View style={[st.header, { paddingTop: insets.top + 8 }]}>
-        <TouchableOpacity style={st.menuBtn}>
-          <Ionicons name="menu" size={24} color={Colors.textPrimary} />
-        </TouchableOpacity>
-        <View style={st.logoBg}>
-          <Text style={st.logoTextBig}>E</Text>
-          <Text style={st.logoTextSmall}>XTREME{'\n'}STAFFING</Text>
-        </View>
-        <View style={st.headerRight}>
-          <TouchableOpacity style={st.bellBtn}>
-            <Ionicons name="notifications-outline" size={22} color={Colors.textPrimary} />
-            <View style={st.notifBadge}><Text style={st.notifCount}>{stats.pendingRequests}</Text></View>
-          </TouchableOpacity>
-          <View style={st.avatarSmall}><Text style={st.avatarSmallText}>{initials}</Text></View>
-        </View>
-      </View>
+    <ScreenLayout activeTab="Dashboard" notificationCount={stats.pendingRequests}>
 
       <ScrollView
         contentContainerStyle={st.scroll}
@@ -264,7 +246,7 @@ export default function DashboardScreen() {
           </View>
         )}
       </ScrollView>
-    </View>
+    </ScreenLayout>
   );
 }
 
@@ -285,17 +267,6 @@ const st = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   scroll: { paddingHorizontal: 16, paddingBottom: 100 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 10, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
-  menuBtn: { padding: 4 },
-  logoBg: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.primary, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
-  logoTextBig: { color: '#fff', fontSize: 18, fontWeight: '900' },
-  logoTextSmall: { color: '#fff', fontSize: 7, fontWeight: '700', marginLeft: 2, lineHeight: 9 },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  bellBtn: { position: 'relative' },
-  notifBadge: { position: 'absolute', top: -4, right: -6, backgroundColor: Colors.primary, borderRadius: 10, width: 18, height: 18, justifyContent: 'center', alignItems: 'center' },
-  notifCount: { color: '#fff', fontSize: 10, fontWeight: '700' },
-  avatarSmall: { width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center' },
-  avatarSmallText: { color: '#fff', fontSize: 12, fontWeight: '700' },
   welcomeText: { fontSize: 20, fontWeight: '700', color: Colors.textPrimary, marginTop: 16 },
   dateText: { fontSize: 13, color: Colors.textSecondary, marginTop: 2, marginBottom: 16 },
   statsSection: { gap: 10 },

@@ -137,7 +137,7 @@ export function UnifiedChatSystem({ userRole, userId, userName, initialConversat
         timestamp: new Date(msg.createdAt || msg.sentAt || Date.now()),
         read: false,
         delivered: true,
-        type: msg.type || 'text',
+        type: (msg.type || 'text').toLowerCase() as Message['type'],
         fileUrl: msg.fileUrl,
         fileName: msg.fileName,
       };
@@ -232,7 +232,7 @@ export function UnifiedChatSystem({ userRole, userId, userName, initialConversat
             ? conv.participants?.find((p: any) => p.userId !== userId)
             : null;
           const participantUser = otherParticipant?.user || {};
-          const lastMsg = conv.messages?.[0];
+          const lastMsg = conv.lastMessage || conv.messages?.[0];
           return {
             id: conv.id,
             participantId: otherParticipant?.userId || conv.id,
@@ -243,7 +243,7 @@ export function UnifiedChatSystem({ userRole, userId, userName, initialConversat
             participantEmail: participantUser.email,
             lastMessage: lastMsg?.content || 'No messages yet',
             lastMessageTime: lastMsg ? new Date(lastMsg.sentAt || lastMsg.createdAt) : new Date(conv.createdAt),
-            unreadCount: 0,
+            unreadCount: conv.unreadCount || 0,
             online: false,
             isGroup,
             participantCount: conv.participants?.length || 0,
@@ -280,7 +280,7 @@ export function UnifiedChatSystem({ userRole, userId, userName, initialConversat
         timestamp: new Date(msg.sentAt || msg.createdAt),
         read: msg.read || false,
         delivered: true,
-        type: msg.type || 'text',
+        type: (msg.type || 'text').toLowerCase() as Message['type'],
         fileUrl: msg.fileUrl,
         fileName: msg.fileName,
       }));

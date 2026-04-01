@@ -232,6 +232,11 @@ model Event {
   dressCode           String?
   contactOnSite       String?
   contactOnSitePhone  String?
+  staffCosts          Float       @default(0)
+  travelFee           Float       @default(0)
+  platformFee         Float       @default(0)
+  additionalFees      Float       @default(0)
+  adminNotes          String?     @db.Text
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -446,9 +451,12 @@ model Invoice {
   taxRate       Float         @default(0)
   taxAmount     Float         @default(0)
   amount        Float
-  status        String        @default("DRAFT") // DRAFT, SENT, PAID, OVERDUE, CANCELLED
+  status        String        @default("DRAFT") // DRAFT, SENT, PAID, OVERDUE, CANCELLED, AWAITING_VERIFICATION
   dueDate       DateTime
   paidDate      DateTime?
+  paymentMethod String?       // Bank Transfer, Wire, ACH, Credit Card, Check, Cash, Other
+  paymentProofUrl String?     // URL to uploaded payment proof file
+  paymentProofDate DateTime?  // When client submitted payment proof
   stripeId      String? // Payment gateway reference
   pdfUrl        String?
   notes         String?

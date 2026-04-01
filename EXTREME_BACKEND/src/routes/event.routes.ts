@@ -12,9 +12,9 @@ router.use(authenticate);
 
 router.get('/', listEvents);
 router.get('/:id', getEvent);
-router.post('/', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER', 'CLIENT'), createEvent);
-router.put('/:id', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER', 'CLIENT'), updateEvent);
-router.delete('/:id', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER'), deleteEvent);
+router.post('/', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER', 'SCHEDULER', 'CLIENT'), createEvent);
+router.put('/:id', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER', 'SCHEDULER', 'CLIENT'), updateEvent);
+router.delete('/:id', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER', 'SCHEDULER'), deleteEvent);
 
 // Staff live locations
 router.get('/:id/staff-locations', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER'), getEventStaffLocations);

@@ -75,7 +75,7 @@ export function LoginForm({ onLogin }: LoginFormProps) {
       {/* Logo Section */}
       <div className="mb-8 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
         <div className="flex items-center justify-center mb-4">
-          <XtremeLogo size="lg" />
+          <XtremeLogo size="sm" />
         </div>
         <h1 className="text-2xl font-semibold text-slate-900 mb-2">
           Staff Management Portal

@@ -8,8 +8,8 @@ interface XtremeLogoProps {
 export function XtremeLogo({ size = "md", className = "" }: XtremeLogoProps) {
   const sizeClasses = {
     sm: "h-10",
-    md: "h-16",
-    lg: "h-24",
+    md: "h-24",
+    lg: "h-28",
     xl: "h-32"
   };
 

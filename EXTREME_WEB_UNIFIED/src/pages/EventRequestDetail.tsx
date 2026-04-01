@@ -49,6 +49,8 @@ import { useNavigation } from "../contexts/NavigationContext";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { eventService } from "../services/event.service";
+import { staffService } from "../services/staff.service";
+import { invoiceService } from "../services/invoice.service";
 import api from "../services/api";
 
 interface EventRequestDetailProps {
@@ -84,88 +86,9 @@ interface StaffAssignment {
   assignedStaff: SelectedStaff[];
 }
 
-// Mock available staff pool
-const mockAvailableStaff: StaffMember[] = [
-  { staffId: "staff-001", staffName: "Sarah Martinez", rate: 55, rating: 4.9, available: true, role: "Bartenders" },
-  { staffId: "staff-002", staffName: "Mike Johnson", rate: 45, rating: 4.8, available: true, role: "Bartenders" },
-  { staffId: "staff-010", staffName: "Jessica Rodriguez", rate: 43, rating: 4.7, available: true, role: "Bartenders" },
-  { staffId: "staff-011", staffName: "Marcus Thompson", rate: 42, rating: 4.6, available: true, role: "Bartenders" },
-  { staffId: "staff-012", staffName: "Amy Chen", rate: 40, rating: 4.7, available: false, role: "Bartenders" },
-  { staffId: "staff-013", staffName: "Tyler Brooks", rate: 41, rating: 4.5, available: true, role: "Bartenders" },
-  { staffId: "staff-014", staffName: "Olivia Parker", rate: 39, rating: 4.6, available: true, role: "Bartenders" },
-  { staffId: "staff-015", staffName: "Daniel Kim", rate: 42, rating: 4.8, available: true, role: "Bartenders" },
-  { staffId: "staff-030", staffName: "Michael Scott", rate: 36, rating: 4.5, available: true, role: "Servers" },
-  { staffId: "staff-031", staffName: "Jennifer Lopez", rate: 35, rating: 4.6, available: true, role: "Servers" },
-  { staffId: "staff-032", staffName: "Robert Taylor", rate: 34, rating: 4.4, available: true, role: "Servers" },
-  { staffId: "staff-033", staffName: "Emma Watson", rate: 35, rating: 4.7, available: true, role: "Servers" },
-  { staffId: "staff-034", staffName: "Chris Evans", rate: 36, rating: 4.6, available: false, role: "Servers" },
-  { staffId: "staff-003", staffName: "Linda Chen", rate: 65, rating: 5.0, available: true, role: "Supervisors" },
-  { staffId: "staff-040", staffName: "David Anderson", rate: 56, rating: 4.8, available: true, role: "Supervisors" },
-  { staffId: "staff-041", staffName: "Patricia Moore", rate: 54, rating: 4.7, available: true, role: "Supervisors" },
-  { staffId: "staff-050", staffName: "Robert Garcia", rate: 55, rating: 4.9, available: true, role: "Managers" },
-  { staffId: "staff-051", staffName: "Emily Rodriguez", rate: 50, rating: 4.8, available: true, role: "Managers" },
-  { staffId: "staff-052", staffName: "James Wilson", rate: 52, rating: 4.7, available: false, role: "Managers" },
-];
 
-// Mock detailed request data
-const mockRequestDetail = {
-  id: "req-001",
-  requestNumber: "REQ-2024-001",
-  submittedDate: "2024-11-10T09:30:00",
-  status: "pending",
 
-  // Client Info
-  client: {
-    id: "client-001",
-    name: "Emma Williams",
-    company: "TechCorp Industries",
-    email: "emma.w@techcorp.com",
-    phone: "+1 (555) 234-5678",
-    accountType: "Corporate",
-    totalBookings: 12,
-    favoriteStaff: 8
-  },
 
-  // Event Info
-  event: {
-    name: "Annual Corporate Gala 2024",
-    type: "Corporate Event",
-    date: "2024-12-15",
-    startTime: "18:00",
-    endTime: "23:00",
-    duration: 5,
-    venue: "Grand Luxe Hotel Ballroom",
-    address: "456 Luxury Ave, Los Angeles, CA 90001",
-    expectedGuests: 200,
-    distance: 15,
-    description: "Annual year-end celebration for 200+ employees and partners. Formal event with premium service expectations.",
-    specialRequirements: "VIP section for executives, premium bar selection, formal dress code, valet coordination",
-  },
-
-  // Staff Requirements from client
-  staffRequirements: [
-    {
-      role: "Bartenders",
-      quantity: 8,
-      favoriteStaff: [
-        { staffId: "staff-001", staffName: "Sarah Martinez", rate: 55, rating: 4.9 },
-        { staffId: "staff-002", staffName: "Mike Johnson", rate: 45, rating: 4.8 }
-      ],
-    },
-    {
-      role: "Servers",
-      quantity: 12,
-      favoriteStaff: [],
-    },
-    {
-      role: "Supervisors",
-      quantity: 3,
-      favoriteStaff: [
-        { staffId: "staff-003", staffName: "Linda Chen", rate: 65, rating: 5.0 }
-      ],
-    }
-  ],
-};
 
 export function EventRequestDetail({ userRole, userId }: EventRequestDetailProps) {
   const { setCurrentPage, pageParams } = useNavigation();
@@ -176,6 +99,9 @@ export function EventRequestDetail({ userRole, userId }: EventRequestDetailProps
   const [isCreating, setIsCreating] = useState(false);
   const [hasBreaks, setHasBreaks] = useState(false);
   const [apiEvent, setApiEvent] = useState<any>(null);
+  const [realStaff, setRealStaff] = useState<any[]>([]);
+  const [realManagersList, setRealManagersList] = useState<any[]>([]);
+  const [isLoadingStaff, setIsLoadingStaff] = useState(false);
 
   // Pricing fields
   const [staffCosts, setStaffCosts] = useState("");
@@ -186,6 +112,36 @@ export function EventRequestDetail({ userRole, userId }: EventRequestDetailProps
 
   const isScheduler = userRole === 'scheduler';
 
+  // Fetch real staff for staff assignment
+  useEffect(() => {
+    const fetchStaff = async () => {
+      setIsLoadingStaff(true);
+      try {
+        const response = await staffService.getStaffList({ take: 100 });
+        setRealStaff(response.data || []);
+      } catch (err) {
+        console.error('Failed to fetch staff', err);
+      } finally {
+        setIsLoadingStaff(false);
+      }
+    };
+    fetchStaff();
+  }, []);
+
+  // Fetch managers from users API
+  useEffect(() => {
+    const fetchManagers = async () => {
+      try {
+        const response = await api.get('/users', { params: { role: 'MANAGER' } });
+        const managers = response.data?.data || response.data || [];
+        setRealManagersList(managers);
+      } catch (err) {
+        console.error('Failed to fetch managers', err);
+      }
+    };
+    fetchManagers();
+  }, []);
+
   // Fetch real event data from API
   useEffect(() => {
     const fetchEvent = async () => {
@@ -195,54 +151,103 @@ export function EventRequestDetail({ userRole, userId }: EventRequestDetailProps
         const data = await eventService.getEvent(eventId);
         setApiEvent(data);
       } catch (err) {
-        console.log('Failed to fetch event detail, using fallback');
+        console.error('Failed to fetch event detail', err);
+        toast.error('Failed to load event details');
+      } finally {
+        setIsLoadingEvent(false);
       }
     };
     fetchEvent();
   }, [pageParams?.requestId]);
 
-  // Build request from API data or fall back to mock
+  // Sync API event data to local state for editing
+  useEffect(() => {
+    if (apiEvent) {
+      if (apiEvent.managerId) setSelectedManager(apiEvent.managerId);
+      if (apiEvent.staffCosts) setStaffCosts(String(apiEvent.staffCosts));
+      if (apiEvent.travelFee) setTravelFee(String(apiEvent.travelFee));
+      if (apiEvent.platformFee) setPlatformFee(String(apiEvent.platformFee));
+      if (apiEvent.additionalFees) setAdditionalFees(String(apiEvent.additionalFees));
+      if (apiEvent.adminNotes) setAdminNotes(apiEvent.adminNotes);
+    }
+  }, [apiEvent]);
+
+  const [isLoadingEvent, setIsLoadingEvent] = useState(true);
+
+  // Build request from API data
   const request = apiEvent ? {
     id: apiEvent.id,
-    requestNumber: `REQ-${apiEvent.id?.slice(-4)?.toUpperCase() || '0001'}`,
+    requestNumber: `REQ-${apiEvent.id?.substring(0, 4).toUpperCase() || '0000'}`,
     submittedDate: apiEvent.createdAt || apiEvent.date || new Date().toISOString(),
     status: (apiEvent.status || 'PENDING').toLowerCase(),
     client: {
       id: apiEvent.client?.id || apiEvent.clientId || '',
-      name: apiEvent.client?.user?.name || 'Client',
-      company: apiEvent.client?.companyName || '',
+      name: apiEvent.client?.user?.name || '',
+      company: apiEvent.client?.company || '',
       email: apiEvent.client?.user?.email || '',
       phone: apiEvent.client?.user?.phone || '',
-      accountType: apiEvent.client?.companyName ? 'Corporate' : 'Individual',
+      accountType: apiEvent.client?.company ? 'Corporate' : 'Individual',
       totalBookings: apiEvent.client?.totalEvents || 0,
       favoriteStaff: 0,
     },
     event: {
-      name: apiEvent.title || 'Event',
-      type: apiEvent.eventType || 'General',
+      name: apiEvent.title || '',
+      type: apiEvent.eventType || '',
       date: apiEvent.date || '',
       startTime: apiEvent.startTime || '',
       endTime: apiEvent.endTime || '',
-      duration: 0,
+      proposedBudget: apiEvent.budget || 0,
+      duration: apiEvent.startTime && apiEvent.endTime ? (() => {
+        const [h1, m1] = apiEvent.startTime.split(':').map(Number);
+        const [h2, m2] = apiEvent.endTime.split(':').map(Number);
+        let diff = (h2 + m2/60) - (h1 + m1/60);
+        if (diff < 0) diff += 24;
+        return parseFloat(diff.toFixed(1));
+      })() : 0,
       venue: apiEvent.venue || apiEvent.location || '',
       address: apiEvent.location || '',
       expectedGuests: apiEvent.guestCount || 0,
-      distance: 0,
       description: apiEvent.description || apiEvent.specialRequirements || '',
       specialRequirements: apiEvent.specialRequirements || '',
     },
-    staffRequirements: mockRequestDetail.staffRequirements,
-  } : mockRequestDetail;
+    staffRequirements: [
+      {
+        role: "Requested Staff",
+        quantity: apiEvent.staffRequired || 0,
+        favoriteStaff: [],
+      }
+    ],
+  } : null;
 
   // Staff assignments - initialize with favorites
-  const [staffAssignments, setStaffAssignments] = useState<StaffAssignment[]>(
-    mockRequestDetail.staffRequirements.map(req => ({
-      role: req.role,
-      quantity: req.quantity,
-      favoriteStaff: req.favoriteStaff,
-      assignedStaff: [...req.favoriteStaff], // Start with favorites pre-assigned
-    }))
-  );
+  const [staffAssignments, setStaffAssignments] = useState<StaffAssignment[]>([]);
+
+  useEffect(() => {
+    if (apiEvent && request) {
+      // Map API shifts into the existing role requirements
+      const mappedAssignments = request.staffRequirements.map(req => {
+        // Find shifts that match this requirement role (defaulting to the first requirement)
+        const relevantShifts = apiEvent.shifts?.filter((s: any) => 
+          (s.role || "Requested Staff").toLowerCase() === req.role.toLowerCase() || 
+          req.role === "Requested Staff"
+        ) || [];
+
+        return {
+          role: req.role,
+          quantity: req.quantity,
+          favoriteStaff: req.favoriteStaff || [],
+          assignedStaff: relevantShifts.map((s: any) => ({
+            staffId: s.staffId,
+            staffName: s.staff?.name || 'Staff Member',
+            rate: s.hourlyRate || s.staff?.staffProfile?.hourlyRate || 0,
+            rating: s.staff?.staffProfile?.rating || 0,
+          }))
+        };
+      });
+
+      setStaffAssignments(mappedAssignments);
+    }
+  }, [apiEvent]);
 
   const [showStaffSelector, setShowStaffSelector] = useState(false);
   const [selectedRole, setSelectedRole] = useState("");
@@ -334,7 +339,51 @@ export function EventRequestDetail({ userRole, userId }: EventRequestDetailProps
     if (!validateForm()) return;
     setIsCreating(true);
     try {
-      await eventService.updateEvent(request.id, { status: 'CONFIRMED' });
+      await eventService.updateEvent(request.id, { 
+        status: 'CONFIRMED',
+        managerId: selectedManager || undefined,
+        budget: total,
+        deposit: deposit,
+        staffCosts: parseFloat(staffCosts) || 0,
+        travelFee: parseFloat(travelFee) || 0,
+        platformFee: parseFloat(platformFee) || 0,
+        additionalFees: parseFloat(additionalFees) || 0,
+        adminNotes: adminNotes
+      });
+
+      // Auto-create invoice for the client
+      try {
+        const staffCost = parseFloat(staffCosts) || 0;
+        const travel = parseFloat(travelFee) || 0;
+        const platform = parseFloat(platformFee) || 0;
+        const additional = parseFloat(additionalFees) || 0;
+        const subtotal = staffCost + travel + platform + additional;
+
+        const lineItems: { description: string; quantity: number; unitPrice: number }[] = [];
+        if (staffCost > 0) lineItems.push({ description: 'Staff Costs', quantity: 1, unitPrice: staffCost });
+        if (travel > 0) lineItems.push({ description: 'Travel Fee', quantity: 1, unitPrice: travel });
+        if (platform > 0) lineItems.push({ description: 'Platform Fee', quantity: 1, unitPrice: platform });
+        if (additional > 0) lineItems.push({ description: 'Additional Fees', quantity: 1, unitPrice: additional });
+
+        const dueDate = new Date();
+        dueDate.setDate(dueDate.getDate() + 14); // 14 days to pay
+
+        await api.post('/invoices', {
+          clientId: request.client.id,
+          eventId: request.id,
+          subtotal,
+          taxRate: 0,
+          status: 'SENT',
+          dueDate: dueDate.toISOString(),
+          notes: `Invoice for ${request.event.name}`,
+          lineItems,
+        });
+        toast.success("Invoice created and sent to client!");
+      } catch (invoiceErr) {
+        console.error('Failed to auto-create invoice', invoiceErr);
+        toast.warning("Event approved but invoice creation failed. Create manually.");
+      }
+
       setCreatedEventId(request.id);
       setShowSuccessDialog(true);
       toast.success("Event approved successfully!");
@@ -351,7 +400,10 @@ export function EventRequestDetail({ userRole, userId }: EventRequestDetailProps
       return;
     }
     try {
-      await eventService.updateEvent(request.id, { status: 'CANCELLED' });
+      await eventService.updateEvent(request.id, { 
+        status: 'CANCELLED',
+        adminNotes: adminNotes
+      });
       toast.success(`Request ${request.requestNumber} rejected. Client will be notified.`);
       setCurrentPage("event-requests-queue");
     } catch (err: any) {
@@ -364,13 +416,73 @@ export function EventRequestDetail({ userRole, userId }: EventRequestDetailProps
     setCurrentPage("event-requests-queue");
   };
 
-  const availableManagers = mockAvailableStaff.filter(s => s.role === "Managers");
-  const availableStaffForRole = mockAvailableStaff.filter(s => s.role === selectedRole);
+  // Map managers from users API
+  const availableManagers = realManagersList.map((m: any) => ({
+    staffId: m.id,
+    staffName: m.name || 'Unknown',
+    role: 'Manager',
+    available: m.isActive !== false,
+    rating: m.staffProfile?.rating || 5.0,
+    rate: m.staffProfile?.hourlyRate || 0,
+  }));
+  
+  const availableStaffForRole: StaffMember[] = realStaff.map(s => ({
+    staffId: s.user?.id || s.userId || s.id,
+    staffName: s.user?.name || s.name || 'Unknown',
+    rate: s.hourlyRate || 0,
+    rating: s.rating || 0,
+    available: s.availabilityStatus === 'AVAILABLE' || s.availabilityStatus === undefined,
+    role: s.role || 'Staff',
+  }));
 
   const totalStaffNeeded = staffAssignments.reduce((acc, r) => acc + r.quantity, 0);
   const totalStaffAssigned = staffAssignments.reduce((acc, r) => acc + r.assignedStaff.length, 0);
   const total = calculateTotal();
   const deposit = calculateDeposit();
+
+  // Loading state while fetching event data
+  if (isLoadingEvent || !request) {
+    return (
+      <div className="space-y-6 w-full pb-12">
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setCurrentPage('event-requests-queue')}
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Queue
+          </Button>
+        </div>
+        <div className="flex flex-col items-center justify-center py-20">
+          {isLoadingEvent ? (
+            <>
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                className="mb-4"
+              >
+                <Sparkles className="h-8 w-8 text-[#5E1916]" />
+              </motion.div>
+              <p className="text-gray-600">Loading event details...</p>
+            </>
+          ) : (
+            <>
+              <AlertTriangle className="h-8 w-8 text-red-500 mb-4" />
+              <p className="text-gray-600">Failed to load event details</p>
+              <Button
+                variant="outline"
+                className="mt-4"
+                onClick={() => setCurrentPage('event-requests-queue')}
+              >
+                Return to Queue
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 w-full pb-12">
@@ -526,6 +638,10 @@ export function EventRequestDetail({ userRole, userId }: EventRequestDetailProps
                 <div>
                   <p className="text-sm text-gray-600 mb-1">Expected Guests</p>
                   <p className="font-medium">{request.event.expectedGuests} guests</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600 mb-1">Proposed Budget</p>
+                  <p className="font-semibold text-green-700 font-mono text-lg">${request.event.proposedBudget.toLocaleString()}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600 mb-1">Date</p>
@@ -900,10 +1016,7 @@ export function EventRequestDetail({ userRole, userId }: EventRequestDetailProps
                 <span className="text-gray-600">Expected Guests:</span>
                 <span className="font-medium">{request.event.expectedGuests}</span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-gray-600">Distance:</span>
-                <span className="font-medium">{request.event.distance} miles</span>
-              </div>
+
             </CardContent>
           </Card>
         </div>

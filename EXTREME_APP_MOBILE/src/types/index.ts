@@ -98,6 +98,20 @@ export type RootStackParamList = {
     eventTitle?: string;
     eventAddress?: string;
   };
+  ChatDetail: { conversationId: string; conversationName: string };
+  NewChat: undefined;
+  Notifications: undefined;
+  // Drawer screens
+  Timesheets: undefined;
+  Payroll: undefined;
+  TrainingPortal: undefined;
+  Certifications: undefined;
+  Performance: undefined;
+  Documents: undefined;
+  Analytics: undefined;
+  Resources: undefined;
+  HelpSupport: undefined;
+  Documentation: undefined;
 };
 
 export type MainTabParamList = {

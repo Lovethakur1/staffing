@@ -74,7 +74,7 @@ export const getInvoice = asyncHandler(async (req: Request, res: Response) => {
  * POST /api/invoices
  */
 export const createInvoice = asyncHandler(async (req: Request, res: Response) => {
-  const { clientId, eventId, subtotal, taxRate, dueDate, notes, lineItems } = req.body;
+  const { clientId, eventId, subtotal, taxRate, dueDate, notes, lineItems, status } = req.body;
 
   const taxAmount = (subtotal || 0) * ((taxRate || 0) / 100);
   const amount = (subtotal || 0) + taxAmount;
@@ -88,6 +88,7 @@ export const createInvoice = asyncHandler(async (req: Request, res: Response) =>
       taxRate: taxRate || 0,
       taxAmount,
       amount,
+      status: status || 'DRAFT',
       dueDate: new Date(dueDate),
       notes,
       lineItems: lineItems ? {
@@ -112,7 +113,7 @@ export const createInvoice = asyncHandler(async (req: Request, res: Response) =>
  * PUT /api/invoices/:id
  */
 export const updateInvoice = asyncHandler(async (req: Request, res: Response) => {
-  const { status, paidDate, stripeId, pdfUrl, notes, subtotal, taxRate, dueDate } = req.body;
+  const { status, paidDate, stripeId, pdfUrl, notes, subtotal, taxRate, dueDate, paymentMethod, paymentProofUrl } = req.body;
 
   const data: any = {};
   if (status) data.status = status;
@@ -121,6 +122,13 @@ export const updateInvoice = asyncHandler(async (req: Request, res: Response) =>
   if (pdfUrl !== undefined) data.pdfUrl = pdfUrl;
   if (notes !== undefined) data.notes = notes;
   if (dueDate) data.dueDate = new Date(dueDate);
+  if (paymentMethod !== undefined) data.paymentMethod = paymentMethod;
+  if (paymentProofUrl !== undefined) data.paymentProofUrl = paymentProofUrl;
+
+  // Client submitting payment proof
+  if (status === 'AWAITING_VERIFICATION') {
+    data.paymentProofDate = new Date();
+  }
 
   if (subtotal !== undefined || taxRate !== undefined) {
     const invoice = await prisma.invoice.findUnique({ where: { id: req.params.id } });

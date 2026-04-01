@@ -22,6 +22,7 @@ Each page should be tested for:
 5. **Permissions** — Role-based access enforced
 
 ---
+## Page | Admin | Sub-Admin | Scheduler | Manager | Staff | Client | Notes |
 
 | Page | Admin | Sub-Admin | Scheduler | Manager | Staff | Client | Notes |
 |------|:-----:|:---------:|:---------:|:-------:|:-----:|:------:|-------|
@@ -127,8 +128,8 @@ Each page should be tested for:
 | 1 | | | | | |
 | 2 | | | | | |
 | 3 | | | | | |
-| 4 | | | | | |
-| 5 | | | | | |
+| 4 | | | | | | 
+| 5 | | | | | | 
 
 **Severity Levels:** 🔴 Critical | 🟠 High | 🟡 Medium | 🟢 Low
 

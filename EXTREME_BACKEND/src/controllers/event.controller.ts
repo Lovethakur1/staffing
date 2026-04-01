@@ -53,10 +53,23 @@ export const listEvents = asyncHandler(async (req: AuthRequest, res: Response) =
       take,
       orderBy: { date: 'desc' },
       include: {
-        client: { include: { user: { select: { name: true } } } },
+        client: { 
+          include: { 
+            user: { 
+              select: { id: true, name: true, email: true, phone: true } 
+            } 
+          } 
+        },
         manager: { select: { id: true, name: true } },
         shifts: {
-          select: { id: true, status: true, staffId: true, staff: { select: { id: true, name: true } } }
+          select: { 
+            id: true, 
+            status: true, 
+            staffId: true, 
+            staff: { 
+              select: { id: true, name: true, email: true, phone: true } 
+            } 
+          }
         },
         clientReviews: { select: { id: true, rating: true, createdAt: true } },
         _count: { select: { shifts: true } },
@@ -85,17 +98,31 @@ export const getEvent = asyncHandler(async (req: Request, res: Response) => {
   const event = await prisma.event.findUnique({
     where: { id: req.params.id },
     include: {
-      client: { include: { user: { select: { id: true, name: true, email: true, phone: true } } } },
+      client: { 
+        include: { 
+          user: { 
+            select: { id: true, name: true, email: true, phone: true } 
+          } 
+        } 
+      },
       manager: { select: { id: true, name: true, email: true } },
       shifts: {
         include: {
-          staff: { select: { id: true, name: true, phone: true, avatar: true, staffProfile: { select: { rating: true, skills: true, hourlyRate: true, totalEvents: true, location: true, availabilityStatus: true } } } },
-        },
-        orderBy: { startTime: 'asc' },
+          staff: {
+            select: { id: true, name: true, email: true, phone: true }
+          }
+        }
       },
-      incidents: { orderBy: { createdAt: 'desc' } },
-      conversations: true,
-      invoices: true,
+      incidents: {
+        orderBy: { createdAt: 'desc' }
+      },
+      conversations: {
+        orderBy: { createdAt: 'desc' },
+        take: 50
+      },
+      _count: {
+        select: { shifts: true, incidents: true, conversations: true }
+      }
     },
   });
 
@@ -117,6 +144,7 @@ export const createEvent = asyncHandler(async (req: AuthRequest, res: Response) 
     startTime, endTime, location, locationLat, locationLng,
     staffRequired, guestCount, budget, deposit, tips, specialRequirements,
     dressCode, contactOnSite, contactOnSitePhone,
+    staffCosts, travelFee, platformFee, additionalFees, adminNotes,
   } = req.body;
 
   let finalClientId = clientId;
@@ -169,6 +197,11 @@ export const createEvent = asyncHandler(async (req: AuthRequest, res: Response) 
       dressCode,
       contactOnSite,
       contactOnSitePhone,
+      staffCosts: staffCosts != null ? Number(staffCosts) : 0,
+      travelFee: travelFee != null ? Number(travelFee) : 0,
+      platformFee: platformFee != null ? Number(platformFee) : 0,
+      additionalFees: additionalFees != null ? Number(additionalFees) : 0,
+      adminNotes: adminNotes || '',
     },
     include: {
       client: { include: { user: { select: { name: true } } } },
@@ -194,7 +227,20 @@ export const updateEvent = asyncHandler(async (req: Request, res: Response) => {
     location, locationLat, locationLng, status, staffRequired, guestCount,
     budget, deposit, tips, specialRequirements, managerId,
     dressCode, contactOnSite, contactOnSitePhone,
+    staffCosts, travelFee, platformFee, additionalFees, adminNotes,
   } = req.body;
+
+  // Validation: Ensure manager exists if managerId is provided
+  if (managerId) {
+    const managerExists = await prisma.user.findUnique({
+      where: { id: managerId },
+      select: { id: true }
+    });
+    if (!managerExists) {
+      res.status(400).json({ error: 'Selected manager not found in database.' });
+      return;
+    }
+  }
 
   const existingEvent = await prisma.event.findUnique({
     where: { id: req.params.id },
@@ -241,11 +287,38 @@ export const updateEvent = asyncHandler(async (req: Request, res: Response) => {
       ...(dressCode !== undefined && { dressCode }),
       ...(contactOnSite !== undefined && { contactOnSite }),
       ...(contactOnSitePhone !== undefined && { contactOnSitePhone }),
+      ...(staffCosts !== undefined && { staffCosts: Number(staffCosts) }),
+      ...(travelFee !== undefined && { travelFee: Number(travelFee) }),
+      ...(platformFee !== undefined && { platformFee: Number(platformFee) }),
+      ...(additionalFees !== undefined && { additionalFees: Number(additionalFees) }),
+      ...(adminNotes !== undefined && { adminNotes }),
     },
     include: {
-      client: { include: { user: { select: { name: true } } } },
-      manager: { select: { id: true, name: true } },
-      _count: { select: { shifts: true } },
+      client: { 
+        include: { 
+          user: { 
+            select: { id: true, name: true, email: true, phone: true } 
+          } 
+        } 
+      },
+      manager: { select: { id: true, name: true, email: true } },
+      shifts: {
+        include: {
+          staff: {
+            select: { id: true, name: true, email: true, phone: true }
+          }
+        }
+      },
+      incidents: {
+        orderBy: { createdAt: 'desc' }
+      },
+      conversations: {
+        orderBy: { createdAt: 'desc' },
+        take: 50
+      },
+      _count: {
+        select: { shifts: true, incidents: true, conversations: true }
+      }
     },
   });
 

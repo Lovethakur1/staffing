@@ -20,6 +20,11 @@ export interface EventPayload {
     dressCode?: string;
     contactOnSite?: string;
     contactOnSitePhone?: string;
+    staffCosts?: number;
+    travelFee?: number;
+    platformFee?: number;
+    additionalFees?: number;
+    adminNotes?: string;
 }
 
 export const eventService = {

@@ -41,8 +41,8 @@ export function Header({ currentUser, onLogout }: HeaderProps) {
   };
 
   return (
-    <header className="border-b border-border bg-card shadow-sm px-6 py-4">
-      <div className="flex items-center justify-between">
+    <header className="h-[72px] border-b border-border bg-card shadow-sm px-6 sticky top-0 z-10 flex items-center">
+      <div className="flex items-center justify-between w-full">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-3">
             <XtremeLogo size="sm" />

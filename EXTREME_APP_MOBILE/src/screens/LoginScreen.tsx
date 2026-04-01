@@ -8,6 +8,8 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useAuth } from '../context/AuthContext';
 import { Colors, Spacing, FontSize, BorderRadius } from '../theme';
 
+const logoImg = require('../../assets/logo.png');
+
 export default function LoginScreen() {
   const { login } = useAuth();
   const [email, setEmail] = useState('');
@@ -97,10 +99,7 @@ export default function LoginScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         {/* Logo */}
         <View style={styles.logoSection}>
-          <View style={styles.logoBg}>
-            <Text style={styles.logoTextBig}>E</Text>
-            <Text style={styles.logoTextSmall}>XTREME{'\n'}STAFFING</Text>
-          </View>
+          <Image source={logoImg} style={styles.logoImg} resizeMode="contain" />
         </View>
 
         <Text style={styles.portalTitle}>Staff Management Portal</Text>
@@ -242,16 +241,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F1F5F9' },
   scrollContent: { flexGrow: 1, alignItems: 'center', paddingVertical: 40, paddingHorizontal: Spacing.lg },
   logoSection: { alignItems: 'center', marginBottom: Spacing.md },
-  logoBg: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  logoTextBig: { color: '#fff', fontSize: 28, fontWeight: '900' },
-  logoTextSmall: { color: '#fff', fontSize: 10, fontWeight: '700', marginLeft: 2, lineHeight: 13 },
+  logoImg: { width: 180, height: 64 },
   portalTitle: { fontSize: 22, fontWeight: '700', color: Colors.textPrimary, textAlign: 'center', marginTop: 8 },
   portalSubtitle: { fontSize: 13, color: Colors.textSecondary, textAlign: 'center', marginTop: 4, marginBottom: 20 },
 

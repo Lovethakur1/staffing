@@ -92,13 +92,13 @@ export function EventRequestsQueue({ userRole, userId }: EventRequestsQueueProps
         const evStatus = (ev.status || 'PENDING').toUpperCase();
         return {
           id: ev.id,
-          requestNumber: `REQ-${String(idx + 1).padStart(4, '0')}`,
+          requestNumber: `REQ-${ev.id?.substring(0, 4).toUpperCase() || String(idx + 1).padStart(4, '0')}`,
           submittedDate: ev.createdAt || ev.date || new Date().toISOString(),
           clientId: ev.clientId || '',
           clientName: ev.client?.user?.name || ev.clientName || 'Client',
-          clientEmail: ev.client?.user?.email || '',
-          clientPhone: ev.client?.user?.phone || '',
-          clientCompany: ev.client?.companyName || ev.company || '',
+          clientEmail: ev.client?.user?.email || ev.clientEmail || '',
+          clientPhone: ev.client?.user?.phone || ev.clientPhone || '',
+          clientCompany: ev.client?.company || ev.company || '',
           eventName: ev.title || ev.eventName || 'Untitled Event',
           eventType: ev.eventType || ev.type || 'General',
           eventDate: ev.date || '',
@@ -253,7 +253,7 @@ export function EventRequestsQueue({ userRole, userId }: EventRequestsQueueProps
     });
 
     return filtered;
-  }, [searchQuery, statusFilter, priorityFilter, validationFilter, eventTypeFilter, dateRangeFilter, sortBy, sortOrder]);
+  }, [eventRequestsData, searchQuery, statusFilter, priorityFilter, validationFilter, eventTypeFilter, dateRangeFilter, sortBy, sortOrder]);
 
   // Paginate data
   const paginatedData = useMemo(() => {
@@ -380,6 +380,11 @@ export function EventRequestsQueue({ userRole, userId }: EventRequestsQueueProps
     setAdminMessage("");
     setShowMessageDialog(true);
   };
+
+  const eventTypes = useMemo(() => {
+    const types = new Set(eventRequestsData.map(r => r.eventType).filter(Boolean));
+    return Array.from(types).sort();
+  }, [eventRequestsData]);
 
   const handleSendMessage = () => {
     toast.success(`Message sent to ${selectedRequest?.clientName}`);
@@ -587,12 +592,9 @@ export function EventRequestsQueue({ userRole, userId }: EventRequestsQueueProps
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="Corporate Event">Corporate</SelectItem>
-                  <SelectItem value="Wedding">Wedding</SelectItem>
-                  <SelectItem value="Private Party">Private Party</SelectItem>
-                  <SelectItem value="Networking">Networking</SelectItem>
-                  <SelectItem value="Fundraiser">Fundraiser</SelectItem>
-                  <SelectItem value="Conference">Conference</SelectItem>
+                  {eventTypes.map(type => (
+                    <SelectItem key={type} value={type}>{type}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

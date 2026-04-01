@@ -4,11 +4,13 @@ import {
   RefreshControl, ActivityIndicator, Alert, Image,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../config/api';
 import { useAuth } from '../context/AuthContext';
 import { Colors, Spacing } from '../theme';
+import { ScreenLayout } from '../components';
+
+const logoImg = require('../../assets/logo.png');
 
 type TabKey = 'personal' | 'professional' | 'performance' | 'reviews';
 
@@ -34,8 +36,9 @@ interface ProfileData {
     rating: number;
     totalEvents: number;
     availabilityStatus: string;
-    emergencyContactName?: string;
-    emergencyContactPhone?: string;
+    emergencyContact?: string;
+    emergencyPhone?: string;
+    location?: string;
     certifications?: any[];
   };
 }
@@ -51,7 +54,6 @@ interface Review {
 
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
-  const insets = useSafeAreaInsets();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [dashStats, setDashStats] = useState<any>(null);
@@ -108,24 +110,18 @@ export default function ProfileScreen() {
 
   if (loading && !profile) {
     return (
-      <View style={[s.center, { paddingTop: insets.top + 80 }]}>
-        <ActivityIndicator size="large" color={Colors.primary} />
-      </View>
+      <ScreenLayout activeTab="Profile">
+        <View style={s.center}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+        </View>
+      </ScreenLayout>
     );
   }
 
   const sp = profile?.staffProfile;
 
   return (
-    <View style={[s.root, { paddingTop: insets.top }]}>
-      {/* Header */}
-      <View style={s.header}>
-        <Text style={s.headerTitle}>My Profile</Text>
-        <TouchableOpacity onPress={handleLogout} style={s.logoutBtn}>
-          <Ionicons name="log-out-outline" size={22} color={Colors.danger} />
-        </TouchableOpacity>
-      </View>
-
+    <ScreenLayout activeTab="Profile">
       {/* Avatar + name */}
       <View style={s.avatarSection}>
         {profile?.avatar ? (
@@ -179,7 +175,7 @@ export default function ProfileScreen() {
         {activeTab === 'reviews' && renderReviews(reviews, avgRating, ratingDist)}
         <View style={{ height: 100 }} />
       </ScrollView>
-    </View>
+    </ScreenLayout>
   );
 }
 
@@ -196,7 +192,7 @@ function renderPersonal(p: ProfileData | null) {
     { icon: 'document-text-outline', label: 'Bio', value: p.bio || 'No bio added' },
   ];
   const addressParts = [p.address, p.city, p.state, p.zipCode, p.country].filter(Boolean);
-  const addressStr = addressParts.length > 0 ? addressParts.join(', ') : 'Not set';
+  const addressStr = addressParts.length > 0 ? addressParts.join(', ') : (sp?.location || 'Not set');
 
   return (
     <View>
@@ -207,8 +203,8 @@ function renderPersonal(p: ProfileData | null) {
       <InfoRow icon="location-outline" label="Address" value={addressStr} />
 
       <SectionTitle title="Emergency Contact" />
-      <InfoRow icon="person-outline" label="Name" value={sp?.emergencyContactName || 'Not set'} />
-      <InfoRow icon="call-outline" label="Phone" value={sp?.emergencyContactPhone || 'Not set'} />
+      <InfoRow icon="person-outline" label="Name" value={sp?.emergencyContact || 'Not set'} />
+      <InfoRow icon="call-outline" label="Phone" value={sp?.emergencyPhone || 'Not set'} />
     </View>
   );
 }
@@ -405,17 +401,6 @@ function computeRatingDist(reviews: Review[]): number[] {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.background },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.background },
-
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingVertical: 14,
-    backgroundColor: Colors.primary,
-  },
-  headerTitle: { fontSize: 20, fontWeight: '700', color: Colors.white },
-  logoutBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: Colors.white, alignItems: 'center', justifyContent: 'center',
-  },
 
   avatarSection: { alignItems: 'center', paddingVertical: 20, backgroundColor: Colors.white },
   avatar: { width: 80, height: 80, borderRadius: 40 },
