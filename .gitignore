@@ -13,20 +13,19 @@
 !/EXTREME_WEB_UNIFIED/
 !/EXTREME_WEB_UNIFIED/**
 
-dailyreport.txt
-
 # Also allow Git configuration files so they are saved
 !/.gitignore
 !/.gitattributes
 
+# ── Root files to exclude ─────────────────────────────────────────
+dailyreport.txt
+cmds.txt
+TESTING_TRACKER.md
+PAGE_COMPLETION_TRACKER.md
+task.md.resolved
 📅 Meeting Minutes (MoM).docx
 📅 Meeting Minutes (MoM).txt
-cmds.txt
-dailyreport.txt
-PAGE_COMPLETION_TRACKER.md 
 Scope_of_Work_—_Extreme_Staffing_Website_Redesign_&_Portal.pdf
-task.md.resolved
-TESTING_TRACKER.md
 # ====================================================================
 # 3. Standard Ignores (These rules apply INSIDE the allowed folders)
 # ====================================================================
