@@ -465,6 +465,30 @@ export const getEventStaffLocations = asyncHandler(async (req: Request, res: Res
 // ═══════════════════════════════════════════════════════════════════
 
 /**
+ * GET /api/events/incidents
+ * List all incidents (for managers)
+ */
+export const listIncidents = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { status, eventId, priority } = req.query as any;
+
+  const where: any = {};
+  if (status) where.status = status;
+  if (eventId) where.eventId = eventId;
+  if (priority) where.severity = priority;
+
+  const incidents = await prisma.incidentReport.findMany({
+    where,
+    orderBy: { createdAt: 'desc' },
+    include: {
+      event: { select: { id: true, title: true, venue: true } },
+      reporter: { select: { id: true, name: true } },
+    },
+  });
+
+  res.json({ data: incidents });
+});
+
+/**
  * POST /api/events/:eventId/incidents
  */
 export const createIncident = asyncHandler(async (req: AuthRequest, res: Response) => {

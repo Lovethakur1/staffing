@@ -59,6 +59,18 @@ export const markAllAsRead = asyncHandler(async (req: AuthRequest, res: Response
 });
 
 /**
+ * DELETE /api/notifications/all
+ * Clear all notifications for the authenticated user.
+ */
+export const clearAllNotifications = asyncHandler(async (req: AuthRequest, res: Response) => {
+  await prisma.notification.deleteMany({
+    where: { userId: req.user!.userId },
+  });
+
+  res.json({ message: 'All notifications cleared.' });
+});
+
+/**
  * DELETE /api/notifications/:id
  */
 export const deleteNotification = asyncHandler(async (req: Request, res: Response) => {

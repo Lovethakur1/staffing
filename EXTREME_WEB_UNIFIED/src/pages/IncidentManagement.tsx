@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigation } from "../contexts/NavigationContext";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
 import { Button } from "../components/ui/button";
@@ -523,10 +523,10 @@ export function IncidentManagement({ userRole, userId }: IncidentManagementProps
             </div>
             <div className="col-span-2 space-y-2">
               <Label>Related Event (optional)</Label>
-              <Select value={form.eventId} onValueChange={v => setForm(f => ({ ...f, eventId: v }))}>
+              <Select value={form.eventId || 'none'} onValueChange={v => setForm(f => ({ ...f, eventId: v === 'none' ? '' : v }))}>
                 <SelectTrigger><SelectValue placeholder={loadingEvents ? 'Loading eventsâ€¦' : 'Select eventâ€¦'} /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">No specific event</SelectItem>
+                  <SelectItem value="none">No specific event</SelectItem>
                   {events.map(e => <SelectItem key={e.id} value={e.id}>{e.title}{e.venue ? ` â€” ${e.venue}` : ''}</SelectItem>)}
                 </SelectContent>
               </Select>

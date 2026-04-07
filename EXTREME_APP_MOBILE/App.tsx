@@ -6,6 +6,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { SocketProvider } from './src/context/SocketContext';
 import LoginScreen from './src/screens/LoginScreen';
 import DashboardScreen from './src/screens/DashboardScreen';
 import MyShiftsScreen from './src/screens/MyShiftsScreen';
@@ -27,12 +28,23 @@ import AnalyticsScreen from './src/screens/AnalyticsScreen';
 import ResourcesScreen from './src/screens/ResourcesScreen';
 import HelpSupportScreen from './src/screens/HelpSupportScreen';
 import DocumentationScreen from './src/screens/DocumentationScreen';
-import { RootStackParamList, MainTabParamList } from './src/types';
+// Manager screens
+import {
+  ManagerDashboardScreen,
+  ManagerEventsScreen,
+  ManagerEventDetailScreen,
+  ManagerStaffScreen,
+  ManagerReportsScreen,
+  ManagerTimesheetsScreen,
+  ManagerIncidentsScreen,
+} from './src/screens/manager';
+import { RootStackParamList, MainTabParamList, ManagerTabParamList } from './src/types';
 import { Colors } from './src/theme';
-import { CustomTabBar } from './src/components';
+import { CustomTabBar, ManagerTabBar } from './src/components';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
+const ManagerTab = createBottomTabNavigator<ManagerTabParamList>();
 
 function MainTabs() {
   return (
@@ -48,8 +60,23 @@ function MainTabs() {
   );
 }
 
+function ManagerMainTabs() {
+  return (
+    <ManagerTab.Navigator
+      screenOptions={{ headerShown: false }}
+      tabBar={(props) => <ManagerTabBar {...props} />}
+    >
+      <ManagerTab.Screen name="ManagerDashboard" component={ManagerDashboardScreen} />
+      <ManagerTab.Screen name="ManagerMyShifts" component={MyShiftsScreen} />
+      <ManagerTab.Screen name="ManagerInbox" component={InboxScreen} />
+      <ManagerTab.Screen name="ManagerProfile" component={ProfileScreen} />
+    </ManagerTab.Navigator>
+  );
+}
+
 function RootNavigator() {
   const { user, isLoading } = useAuth();
+  const isManager = user?.role === 'MANAGER';
 
   if (isLoading) {
     return (
@@ -65,7 +92,12 @@ function RootNavigator() {
         <Stack.Screen name="Login" component={LoginScreen} />
       ) : (
         <>
-          <Stack.Screen name="Main" component={MainTabs} />
+          {/* Show appropriate tabs based on role */}
+          {isManager ? (
+            <Stack.Screen name="ManagerMain" component={ManagerMainTabs} />
+          ) : (
+            <Stack.Screen name="Main" component={MainTabs} />
+          )}
           <Stack.Screen
             name="ShiftWorkflow"
             component={ShiftWorkflowScreen}
@@ -91,7 +123,7 @@ function RootNavigator() {
             component={NotificationsScreen}
             options={{ animation: 'slide_from_bottom' }}
           />
-          {/* ── Drawer Screens ─────────────────────────────── */}
+          {/* ── Drawer Screens (Shared) ─────────────────────────────── */}
           <Stack.Screen
             name="Timesheets"
             component={TimesheetsScreen}
@@ -142,6 +174,37 @@ function RootNavigator() {
             component={DocumentationScreen}
             options={{ animation: 'slide_from_right' }}
           />
+          {/* ── Manager-Only Screens ─────────────────────────────── */}
+          <Stack.Screen
+            name="ManagerEvents"
+            component={ManagerEventsScreen}
+            options={{ animation: 'slide_from_right' }}
+          />
+          <Stack.Screen
+            name="ManagerEventDetail"
+            component={ManagerEventDetailScreen}
+            options={{ animation: 'slide_from_right' }}
+          />
+          <Stack.Screen
+            name="ManagerStaff"
+            component={ManagerStaffScreen}
+            options={{ animation: 'slide_from_right' }}
+          />
+          <Stack.Screen
+            name="ManagerReports"
+            component={ManagerReportsScreen}
+            options={{ animation: 'slide_from_right' }}
+          />
+          <Stack.Screen
+            name="ManagerTimesheets"
+            component={ManagerTimesheetsScreen}
+            options={{ animation: 'slide_from_right' }}
+          />
+          <Stack.Screen
+            name="ManagerIncidents"
+            component={ManagerIncidentsScreen}
+            options={{ animation: 'slide_from_right' }}
+          />
         </>
       )}
     </Stack.Navigator>
@@ -152,10 +215,12 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <NavigationContainer>
-          <RootNavigator />
-          <StatusBar style="auto" />
-        </NavigationContainer>
+        <SocketProvider>
+          <NavigationContainer>
+            <RootNavigator />
+            <StatusBar style="auto" />
+          </NavigationContainer>
+        </SocketProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );

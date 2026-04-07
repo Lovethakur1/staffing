@@ -90,6 +90,7 @@ export interface Shift {
 export type RootStackParamList = {
   Login: undefined;
   Main: undefined;
+  ManagerMain: undefined;
   ShiftWorkflow: { shiftId: string };
   LiveMap: {
     shiftId: string;
@@ -112,6 +113,15 @@ export type RootStackParamList = {
   Resources: undefined;
   HelpSupport: undefined;
   Documentation: undefined;
+  // Manager screens
+  ManagerEvents: undefined;
+  ManagerEventDetail: { eventId: string };
+  ManagerStaff: undefined;
+  ManagerStaffDetail: { staffId: string };
+  ManagerReports: undefined;
+  ManagerTimesheets: undefined;
+  ManagerIncidents: undefined;
+  ManagerIncidentDetail: { incidentId: string };
 };
 
 export type MainTabParamList = {
@@ -119,4 +129,11 @@ export type MainTabParamList = {
   MyShifts: undefined;
   Inbox: undefined;
   Profile: undefined;
+};
+
+export type ManagerTabParamList = {
+  ManagerDashboard: undefined;
+  ManagerMyShifts: undefined;
+  ManagerInbox: undefined;
+  ManagerProfile: undefined;
 };

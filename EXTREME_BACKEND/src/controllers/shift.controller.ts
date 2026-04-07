@@ -4,6 +4,7 @@ import { AuthRequest } from '../middleware/auth';
 import { asyncHandler, parsePagination, calculateHours } from '../utils/helpers';
 import { calculateAndSaveStaffRating } from '../services/rating.service';
 import { emitToRole } from '../services/socket.service';
+import { notifyShiftAssigned, sendNotification, sendRoleNotification } from '../services/notification.service';
 
 // ═══════════════════════════════════════════════════════════════════
 // Haversine formula — distance in meters between two lat/lng points
@@ -127,6 +128,34 @@ export const listShifts = asyncHandler(async (req: AuthRequest, res: Response) =
 });
 
 /**
+ * GET /api/shifts/my
+ * Get logged-in user's own shifts (works for both STAFF and MANAGER)
+ */
+export const getMyShifts = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const userId = req.user!.userId;
+  const { status, dateFrom, dateTo } = req.query as any;
+
+  const where: any = { staffId: userId };
+  if (status) where.status = status;
+  if (dateFrom || dateTo) {
+    where.date = {};
+    if (dateFrom) where.date.gte = new Date(dateFrom);
+    if (dateTo) where.date.lte = new Date(dateTo);
+  }
+
+  const shifts = await prisma.shift.findMany({
+    where,
+    orderBy: { date: 'desc' },
+    include: {
+      event: { select: { id: true, title: true, venue: true, location: true, locationLat: true, locationLng: true, date: true, startTime: true, endTime: true } },
+      breaks: { orderBy: { startTime: 'asc' } },
+    },
+  });
+
+  res.json({ data: shifts });
+});
+
+/**
  * GET /api/shifts/:id
  */
 export const getShift = asyncHandler(async (req: Request, res: Response) => {
@@ -177,6 +206,12 @@ export const createShift = asyncHandler(async (req: Request, res: Response) => {
       staff: { select: { id: true, name: true } },
     },
   });
+
+  // Notify staff about new shift assignment
+  try {
+    const shiftDate = new Date(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    await notifyShiftAssigned(staffId, shift.event.title, shiftDate);
+  } catch {}
 
   res.status(201).json(shift);
 });
@@ -249,6 +284,26 @@ export const updateShiftStatus = asyncHandler(async (req: AuthRequest, res: Resp
       event: { select: { id: true, title: true } },
     }
   });
+
+  // Notify admins when staff confirms/rejects a shift
+  try {
+    if (status === 'CONFIRMED') {
+      await sendRoleNotification('ADMIN', {
+        title: 'Shift Confirmed',
+        message: `Staff confirmed shift for "${updatedShift.event.title}".`,
+        type: 'shift',
+        category: 'work',
+      });
+    } else if (status === 'REJECTED') {
+      await sendRoleNotification('ADMIN', {
+        title: 'Shift Rejected',
+        message: `Staff rejected shift for "${updatedShift.event.title}". Reassignment needed.`,
+        type: 'shift',
+        category: 'work',
+        priority: 'high',
+      });
+    }
+  } catch {}
 
   res.json(updatedShift);
 });
@@ -694,6 +749,41 @@ export const updateLocation = asyncHandler(async (req: AuthRequest, res: Respons
 // ═══════════════════════════════════════════════════════════════════
 // Device Management
 // ═══════════════════════════════════════════════════════════════════
+
+/**
+ * GET /api/shifts/device/pending
+ * List all staff with pending device change requests (Admin only)
+ */
+export const getPendingDeviceChanges = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const pendingRequests = await prisma.staffProfile.findMany({
+    where: { deviceChangeRequested: true },
+    include: {
+      user: { select: { id: true, name: true, email: true, phone: true, avatar: true } },
+    },
+  });
+
+  res.json({
+    data: pendingRequests.map(p => ({
+      id: p.id,
+      staffId: p.userId,
+      staffName: p.user.name,
+      staffEmail: p.user.email,
+      staffPhone: p.user.phone,
+      staffAvatar: p.user.avatar,
+      currentDevice: {
+        id: p.registeredDeviceId,
+        name: p.registeredDeviceName,
+        model: p.registeredDeviceModel,
+        brand: p.registeredDeviceBrand,
+        os: p.registeredDeviceOS,
+        lockedAt: p.deviceLockedAt,
+      },
+      reason: p.deviceChangeReason,
+      requestedAt: p.deviceLockedAt || new Date(),
+    })),
+    total: pendingRequests.length,
+  });
+});
 
 /**
  * POST /api/shifts/device/request-change

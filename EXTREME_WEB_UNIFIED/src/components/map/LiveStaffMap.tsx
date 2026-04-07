@@ -26,6 +26,27 @@ interface StaffLocation {
   travelHomeEnd?: string;
 }
 
+interface ArrivedStaffNotification {
+  id: string;
+  staffName: string;
+  timestamp: number;
+}
+
+// Geofence radius in meters
+const VENUE_RADIUS_METERS = 100;
+
+// Calculate distance between two coordinates in meters
+function getDistanceMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000; // Earth's radius in meters
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLng/2) * Math.sin(dLng/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
+
 interface LiveStaffMapProps {
   eventId: string;
   venueLat?: number | null;
@@ -120,15 +141,76 @@ export default function LiveStaffMap({
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef<Map<string, L.Marker>>(new Map());
   const venueMarkerRef = useRef<L.Marker | null>(null);
+  const venueCircleRef = useRef<L.Circle | null>(null);
+  const pulseCircleRef = useRef<L.Circle | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const initialFitDone = useRef(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const enteredStaffRef = useRef<Set<string>>(new Set()); // Track staff who already entered
 
   const [staffLocations, setStaffLocations] = useState<StaffLocation[]>([]);
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
   const [focusedStaffId, setFocusedStaffId] = useState<string | null>(selectedStaffId || null);
+  const [arrivedNotifications, setArrivedNotifications] = useState<ArrivedStaffNotification[]>([]);
+
+  // Trigger arrival animation when staff enters venue radius
+  const triggerArrivalAnimation = useCallback((staffName: string, staffId: string, lat: number, lng: number) => {
+    if (!mapRef.current || !mapContainerRef.current) return;
+
+    // Flash the venue radius circle
+    if (venueCircleRef.current) {
+      const circleElement = venueCircleRef.current.getElement();
+      if (circleElement) {
+        circleElement.classList.add('venue-radius-flash');
+        setTimeout(() => circleElement.classList.remove('venue-radius-flash'), 1000);
+      }
+    }
+
+    // Create burst animation at staff location
+    const point = mapRef.current.latLngToContainerPoint([lat, lng]);
+    const burst = document.createElement('div');
+    burst.className = 'staff-arrival-marker';
+    burst.style.left = `${point.x - 30}px`;
+    burst.style.top = `${point.y - 30}px`;
+    mapContainerRef.current.appendChild(burst);
+    setTimeout(() => burst.remove(), 1500);
+
+    // Add notification
+    const notifId = `${staffId}-${Date.now()}`;
+    setArrivedNotifications(prev => [...prev, {
+      id: notifId,
+      staffName,
+      timestamp: Date.now(),
+    }]);
+
+    // Remove notification after 4 seconds
+    setTimeout(() => {
+      setArrivedNotifications(prev => prev.filter(n => n.id !== notifId));
+    }, 4000);
+  }, []);
+
+  // Check if staff is within venue radius and trigger animation
+  const checkAndTriggerArrival = useCallback((staff: StaffLocation) => {
+    if (!venueLat || !venueLng || !staff.lat || !staff.lng) return;
+    
+    const staffId = staff.staffId || staff.shiftId;
+    const distance = getDistanceMeters(staff.lat, staff.lng, venueLat, venueLng);
+    const isInRadius = distance <= VENUE_RADIUS_METERS;
+    const wasAlreadyIn = enteredStaffRef.current.has(staffId);
+
+    if (isInRadius && !wasAlreadyIn) {
+      // Staff just entered the radius!
+      enteredStaffRef.current.add(staffId);
+      triggerArrivalAnimation(staff.staffName, staffId, staff.lat, staff.lng);
+      console.log(`[LiveStaffMap] ${staff.staffName} entered venue radius (${Math.round(distance)}m)`);
+    } else if (!isInRadius && wasAlreadyIn) {
+      // Staff left the radius
+      enteredStaffRef.current.delete(staffId);
+      console.log(`[LiveStaffMap] ${staff.staffName} left venue radius (${Math.round(distance)}m)`);
+    }
+  }, [venueLat, venueLng, triggerArrivalAnimation]);
 
   // Fetch initial staff locations
   const fetchLocations = useCallback(async () => {
@@ -174,6 +256,30 @@ export default function LiveStaffMap({
         .addTo(map)
         .bindPopup(`<div style="text-align:center; padding:4px;"><strong>${venueName || 'Event Venue'}</strong></div>`);
       venueMarkerRef.current = venueMarker;
+
+      // Add geofence radius circle
+      const venueCircle = L.circle([venueLat, venueLng], {
+        radius: VENUE_RADIUS_METERS,
+        color: '#dc2626',
+        fillColor: '#dc2626',
+        fillOpacity: 0.08,
+        weight: 2,
+        dashArray: '8, 4',
+        className: 'venue-radius-circle',
+      }).addTo(map);
+      venueCircleRef.current = venueCircle;
+
+      // Add pulse circle (animated)
+      const pulseCircle = L.circle([venueLat, venueLng], {
+        radius: VENUE_RADIUS_METERS,
+        color: '#dc2626',
+        fillColor: 'transparent',
+        fillOpacity: 0,
+        weight: 3,
+        opacity: 0.6,
+        className: 'venue-pulse-circle',
+      }).addTo(map);
+      pulseCircleRef.current = pulseCircle;
     }
 
     mapRef.current = map;
@@ -187,6 +293,88 @@ export default function LiveStaffMap({
     style.textContent = `
       @keyframes ping {
         75%, 100% { transform: scale(2); opacity: 0; }
+      }
+      @keyframes venue-pulse {
+        0% { 
+          stroke-opacity: 0.6;
+          stroke-width: 3px;
+        }
+        50% {
+          stroke-opacity: 0.3;
+          stroke-width: 5px;
+        }
+        100% {
+          stroke-opacity: 0.6;
+          stroke-width: 3px;
+        }
+      }
+      @keyframes arrival-burst {
+        0% { 
+          transform: scale(1);
+          opacity: 1;
+        }
+        50% {
+          transform: scale(2.5);
+          opacity: 0.6;
+        }
+        100% {
+          transform: scale(4);
+          opacity: 0;
+        }
+      }
+      @keyframes radius-flash {
+        0% { 
+          fill-opacity: 0.08;
+        }
+        25% {
+          fill-opacity: 0.3;
+          fill: #22c55e;
+        }
+        50% {
+          fill-opacity: 0.4;
+          fill: #22c55e;
+        }
+        100% {
+          fill-opacity: 0.08;
+          fill: #dc2626;
+        }
+      }
+      @keyframes notification-slide {
+        0% { 
+          transform: translateX(100%);
+          opacity: 0;
+        }
+        10% {
+          transform: translateX(0);
+          opacity: 1;
+        }
+        90% {
+          transform: translateX(0);
+          opacity: 1;
+        }
+        100% {
+          transform: translateX(100%);
+          opacity: 0;
+        }
+      }
+      .venue-pulse-circle {
+        animation: venue-pulse 2s ease-in-out infinite;
+      }
+      .venue-radius-flash {
+        animation: radius-flash 1s ease-out forwards;
+      }
+      .staff-arrival-marker {
+        position: absolute;
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        background: radial-gradient(circle, #22c55e 0%, transparent 70%);
+        animation: arrival-burst 1.5s ease-out forwards;
+        pointer-events: none;
+        z-index: 1000;
+      }
+      .arrival-notification {
+        animation: notification-slide 4s ease-in-out forwards;
       }
       .custom-staff-icon {
         background: transparent !important;
@@ -317,6 +505,9 @@ export default function LiveStaffMap({
       const key = staff.staffId || staff.shiftId;
       activeIds.add(key);
 
+      // Check if staff entered venue radius
+      checkAndTriggerArrival(staff);
+
       const isSelected = selectedStaffId === staff.staffId;
       const icon = createStaffIcon(staff.staffName || 'Staff', staff.status, isSelected);
 
@@ -367,7 +558,7 @@ export default function LiveStaffMap({
         initialFitDone.current = true;
       }
     }
-  }, [staffLocations, selectedStaffId, venueLat, venueLng]);
+  }, [staffLocations, selectedStaffId, venueLat, venueLng, checkAndTriggerArrival]);
 
   // When selectedStaffId changes (from parent), fly to that staff
   useEffect(() => {
@@ -604,6 +795,34 @@ export default function LiveStaffMap({
                 <MapPin className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                 <p className="text-sm font-medium text-gray-600">No location data yet</p>
                 <p className="text-xs text-gray-400 mt-1">Staff locations will appear once they start travel</p>
+              </div>
+            </div>
+          )}
+
+          {/* Arrival notifications */}
+          <div className="absolute top-4 right-4 z-[1002] space-y-2 pointer-events-none">
+            {arrivedNotifications.map((notif) => (
+              <div
+                key={notif.id}
+                className="arrival-notification flex items-center gap-3 bg-green-500 text-white px-4 py-3 rounded-lg shadow-lg pointer-events-auto"
+              >
+                <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+                  <MapPin className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="font-semibold text-sm">{notif.staffName}</p>
+                  <p className="text-xs opacity-90">Arrived at venue!</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Geofence indicator legend */}
+          {venueLat && venueLng && (
+            <div className="absolute bottom-4 left-4 z-[1002] bg-white/95 backdrop-blur rounded-lg p-3 shadow-lg">
+              <div className="flex items-center gap-2 text-xs text-gray-600">
+                <div className="w-3 h-3 rounded-full border-2 border-dashed border-red-500 bg-red-500/10"></div>
+                <span>Venue geofence ({VENUE_RADIUS_METERS}m radius)</span>
               </div>
             </div>
           )}

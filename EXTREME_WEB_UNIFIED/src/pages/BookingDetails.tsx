@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { useNavigation } from "../contexts/NavigationContext";
 import api from "../services/api";
+import { unavailabilityService, UnavailabilityRecord } from "../services/unavailability.service";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback } from "../components/ui/avatar";
@@ -46,6 +47,8 @@ export function BookingDetails({ userRole, userId }: BookingDetailsProps) {
   const [apiInvoices, setApiInvoices] = useState<any[]>([]);
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
   const [availableStaff, setAvailableStaff] = useState<any[]>([]);
+  const [staffUnavailability, setStaffUnavailability] = useState<UnavailabilityRecord[]>([]);
+  const [loadingUnavailability, setLoadingUnavailability] = useState(false);
   const [assigning, setAssigning] = useState(false);
 
   useEffect(() => {
@@ -122,14 +125,33 @@ export function BookingDetails({ userRole, userId }: BookingDetailsProps) {
 
   const handleAssignStaffClick = async () => {
     setIsAssignDialogOpen(true);
+    
+    // Fetch staff and unavailability data in parallel
+    const fetchPromises: Promise<any>[] = [];
+    
     if (availableStaff.length === 0) {
-      try {
-        const res = await api.get('/staff');
-        setAvailableStaff(res.data.data || res.data || []);
-      } catch (e) {
-        toast.error('Failed to load available staff');
-      }
+      fetchPromises.push(
+        api.get('/staff').then(res => {
+          setAvailableStaff(res.data.data || res.data || []);
+        }).catch(() => {
+          toast.error('Failed to load available staff');
+        })
+      );
     }
+    
+    // Fetch unavailability data to filter out staff on leave
+    setLoadingUnavailability(true);
+    fetchPromises.push(
+      unavailabilityService.getAllUnavailability().then(data => {
+        setStaffUnavailability(data);
+      }).catch(err => {
+        console.error('Failed to fetch unavailability:', err);
+      }).finally(() => {
+        setLoadingUnavailability(false);
+      })
+    );
+    
+    await Promise.all(fetchPromises);
   };
 
   const handleConfirmAssignment = async (staffId: string) => {
@@ -577,16 +599,38 @@ export function BookingDetails({ userRole, userId }: BookingDetailsProps) {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+            {loadingUnavailability && (
+              <div className="flex items-center justify-center py-4">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary mr-2" />
+                <span className="text-sm text-muted-foreground">Checking staff availability...</span>
+              </div>
+            )}
             {availableStaff.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">Loading available staff...</div>
-            ) : availableStaff.map((profile) => {
+            ) : availableStaff.filter((profile) => {
               const user = profile.user || {};
               const staffId = user.id || profile.userId;
+              const staffProfileId = profile.id;
 
               // Exclude already assigned staff
               if (assignedStaff.some((assigned: any) => assigned.id === staffId)) {
-                return null;
+                return false;
               }
+
+              // Exclude staff on leave for the event date
+              if (booking?.date && staffUnavailability.length > 0) {
+                const eventDate = new Date(booking.date);
+                const unavailableStaffIds = unavailabilityService.getUnavailableStaffIds(staffUnavailability, eventDate);
+                if (unavailableStaffIds.has(staffId) || unavailableStaffIds.has(staffProfileId)) {
+                  return false;
+                }
+              }
+
+              return true;
+            }).map((profile) => {
+              const user = profile.user || {};
+              const staffId = user.id || profile.userId;
+
               return (
                 <div
                   key={staffId}

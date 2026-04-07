@@ -3,6 +3,7 @@ import prisma from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { asyncHandler, parsePagination } from '../utils/helpers';
 import { getIO } from '../services/socket.service';
+import { sendNotification } from '../services/notification.service';
 
 /**
  * GET /api/chat/conversations
@@ -264,6 +265,16 @@ export const sendMessage = asyncHandler(async (req: AuthRequest, res: Response) 
         senderName: message.sender?.name || 'Someone',
         preview: content.substring(0, 100),
       });
+
+      // Persist to DB so it shows in the notifications page
+      sendNotification({
+        userId: p.userId,
+        title: `New message from ${message.sender?.name || 'Someone'}`,
+        message: content.substring(0, 150),
+        type: 'message',
+        category: 'communication',
+        data: { conversationId, senderName: message.sender?.name },
+      }).catch(() => {}); // fire-and-forget, don't block response
     }
   } catch (err) {
     console.error('Failed to broadcast message notification', err);

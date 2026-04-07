@@ -1,7 +1,7 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 
-const API_BASE_URL = 'http://192.168.0.107:5000/api'; // Android emulator → host localhost
+const API_BASE_URL = 'https://conception-pokies-nonalphabetically.ngrok-free.dev/api'; // Android emulator → host localhost
 // For physical device, use your machine's local IP e.g. 'http://192.168.0.111:5000/api'
 
 export { API_BASE_URL };

@@ -59,5 +59,15 @@
     server: {
       port: 3000,
       open: true,
+      proxy: {
+        '/api': {
+          target: 'https://conception-pokies-nonalphabetically.ngrok-free.dev',
+          changeOrigin: true,
+          secure: false,
+          headers: {
+            'ngrok-skip-browser-warning': 'true',
+          },
+        },
+      },
     },
   });

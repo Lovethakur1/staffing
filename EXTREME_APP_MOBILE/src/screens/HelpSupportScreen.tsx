@@ -144,7 +144,7 @@ export default function HelpSupportScreen() {
                 {[
                   { icon: 'chatbubble-outline', label: 'Live Chat', sub: 'Mon–Fri 9am–6pm', color: '#3B82F6' },
                   { icon: 'mail-outline', label: 'Email', sub: 'support@extreme.com', color: '#10B981' },
-                  { icon: 'call-outline', label: 'Phone', sub: '+44 20 XXXX XXXX', color: '#F59E0B' },
+                  { icon: 'call-outline', label: 'Phone', sub: '+44 20 7946 0958', color: '#F59E0B' },
                 ].map(ch => (
                   <View key={ch.label} style={st.channelCard}>
                     <View style={[st.channelIcon, { backgroundColor: ch.color + '18' }]}>

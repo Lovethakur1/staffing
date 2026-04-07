@@ -15,7 +15,7 @@ import { ScreenLayout } from '../components';
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 interface UnavailabilityItem {
   id: string;
@@ -33,6 +33,8 @@ export default function MyShiftsScreen() {
   const [unavailabilities, setUnavailabilities] = useState<UnavailabilityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [calView, setCalView] = useState<'Day' | 'Week' | 'Month'>('Month');
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -130,7 +132,7 @@ export default function MyShiftsScreen() {
   }
 
   async function handleDayPress(day: number) {
-    if (subTab !== 'unavailability') return;
+    if (subTab !== 'unavailability' || saving || deletingId) return;
 
     const unavailForItem = getUnavailabilitiesForDay(day);
     if (unavailForItem.length > 0) {
@@ -139,6 +141,7 @@ export default function MyShiftsScreen() {
       const pad = (n: number) => n.toString().padStart(2, '0');
       const dateStr = `${year}-${pad(month + 1)}-${pad(day)}`;
       try {
+        setSaving(true);
         await api.post('/unavailability', {
           startDate: dateStr,
           endDate: dateStr,
@@ -149,6 +152,8 @@ export default function MyShiftsScreen() {
         fetchData();
       } catch (err: any) {
         Alert.alert('Error', err?.response?.data?.error || 'Failed to set unavailability');
+      } finally {
+        setSaving(false);
       }
     }
   }
@@ -159,6 +164,7 @@ export default function MyShiftsScreen() {
       return;
     }
     try {
+      setSaving(true);
       await api.post('/unavailability', {
         startDate: unavailForm.startDate,
         endDate: unavailForm.endDate,
@@ -172,6 +178,8 @@ export default function MyShiftsScreen() {
       Alert.alert('Success', 'Unavailability saved');
     } catch (err: any) {
       Alert.alert('Error', err?.response?.data?.error || 'Failed to save');
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -181,10 +189,13 @@ export default function MyShiftsScreen() {
       {
         text: 'Delete', style: 'destructive', onPress: async () => {
           try {
+            setDeletingId(id);
             await api.delete(`/unavailability/${id}`);
             fetchData();
           } catch (err) {
             Alert.alert('Error', 'Failed to delete');
+          } finally {
+            setDeletingId(null);
           }
         },
       },
@@ -281,7 +292,15 @@ export default function MyShiftsScreen() {
 
         {/* Calendar */}
         <View style={st.card}>
-          <Text style={st.calTitle}>{MONTHS[month]} {year}</Text>
+          <View style={st.calHeader}>
+            <Text style={st.calTitle}>{MONTHS[month]} {year}</Text>
+            {(saving || deletingId) && (
+              <View style={st.calLoading}>
+                <ActivityIndicator size="small" color={Colors.primary} />
+                <Text style={st.calLoadingText}>{saving ? 'Saving...' : 'Removing...'}</Text>
+              </View>
+            )}
+          </View>
 
           <View style={st.calControls}>
             {(['Day', 'Week', 'Month'] as const).map(v => (
@@ -309,18 +328,18 @@ export default function MyShiftsScreen() {
                 const isUnavailable = dayUnavail.length > 0;
 
                 return (
-                  <TouchableOpacity 
-                    key={colIdx} 
+                  <TouchableOpacity
+                    key={colIdx}
                     style={[
-                      st.calCellBig, 
+                      st.calCellBig,
                       isToday && st.calCellToday,
                       isUnavailable && st.calCellUnavailable
                     ]}
                     activeOpacity={subTab === 'unavailability' ? 0.7 : 1}
                     onPress={() => {
-                        if (subTab === 'unavailability' && cell.isCurrentMonth) {
-                           handleDayPress(cell.day);
-                        }
+                      if (subTab === 'unavailability' && cell.isCurrentMonth) {
+                        handleDayPress(cell.day);
+                      }
                     }}
                   >
                     <Text style={[
@@ -440,10 +459,14 @@ export default function MyShiftsScreen() {
               onChangeText={v => setUnavailForm(f => ({ ...f, reason: v }))}
             />
 
-            <TouchableOpacity style={st.saveBtn} onPress={handleSaveUnavailability}>
-              <Text style={st.saveBtnText}>Save Unavailability</Text>
+            <TouchableOpacity style={[st.saveBtn, saving && st.saveBtnDisabled]} onPress={handleSaveUnavailability} disabled={saving}>
+              {saving ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={st.saveBtnText}>Save Unavailability</Text>
+              )}
             </TouchableOpacity>
-            <TouchableOpacity style={st.cancelBtn} onPress={() => setShowUnavailModal(false)}>
+            <TouchableOpacity style={st.cancelBtn} onPress={() => setShowUnavailModal(false)} disabled={saving}>
               <Text style={st.cancelBtnText}>Cancel</Text>
             </TouchableOpacity>
           </View>
@@ -474,7 +497,10 @@ const st = StyleSheet.create({
   searchInput: { flex: 1, paddingVertical: 10, fontSize: 14, color: Colors.textPrimary, marginLeft: 8 },
   card: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#E2E8F0' },
   sectionTitle: { fontSize: 16, fontWeight: '700', color: Colors.textPrimary, marginBottom: 10 },
-  calTitle: { fontSize: 18, fontWeight: '700', color: Colors.textPrimary, marginBottom: 10 },
+  calHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  calTitle: { fontSize: 18, fontWeight: '700', color: Colors.textPrimary },
+  calLoading: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  calLoadingText: { fontSize: 12, color: Colors.primary, fontWeight: '500' },
   calControls: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
   calViewBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
   calViewActive: { backgroundColor: Colors.primary },
@@ -520,4 +546,5 @@ const st = StyleSheet.create({
   saveBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
   cancelBtn: { paddingVertical: 12, alignItems: 'center', marginTop: 8, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10 },
   cancelBtnText: { fontSize: 14, color: Colors.textSecondary, fontWeight: '600' },
+  saveBtnDisabled: { backgroundColor: '#94A3B8' },
 });

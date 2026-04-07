@@ -1,154 +1,83 @@
-import { createContext, useContext, useState, useEffect, ReactNode, useRef } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode, useRef } from "react";
 import { io, Socket } from "socket.io-client";
 import { toast } from "sonner";
 import { useNavigation } from "./NavigationContext";
+import api from "../services/api";
+
 export interface Notification {
-  id: number;
+  id: string;
   title: string;
   message: string;
   time: string;
-  type: 'shift' | 'payment' | 'reminder' | 'schedule' | 'review' | 'training' | 'profile' | 'system';
+  type: string;
   unread: boolean;
-  priority: 'high' | 'medium' | 'low';
+  priority: string;
   actionRequired: boolean;
   category?: string;
   userId?: string;
-  data?: any; // Additional data for the notification
+  data?: any;
+  createdAt?: string;
 }
 
 interface NotificationsContextType {
   notifications: Notification[];
   unreadCount: number;
   actionRequiredCount: number;
-  markAsRead: (id: number) => void;
+  markAsRead: (id: string) => void;
   markAllAsRead: () => void;
-  deleteNotification: (id: number) => void;
-  addNotification: (notification: Omit<Notification, 'id'>) => void;
+  deleteNotification: (id: string) => void;
+  refreshNotifications: () => void;
   getFilteredNotifications: (filter: 'all' | 'unread' | 'read') => Notification[];
 }
 
 const NotificationsContext = createContext<NotificationsContextType | undefined>(undefined);
 
-// Mock notifications data - in a real app this would come from an API
-const initialNotifications: Notification[] = [
-  {
-    id: 1,
-    title: "New shift assigned",
-    message: "You have been assigned to work at Wedding Reception on Oct 30, 2024 from 6:00 PM to 11:00 PM",
-    time: "2 minutes ago",
-    type: "shift",
-    unread: true,
-    priority: "high",
-    actionRequired: true,
-    category: "work"
-  },
-  {
-    id: 2,
-    title: "Payment received",
-    message: "$350 has been deposited to your account for last week's shifts",
-    time: "1 hour ago",
-    type: "payment",
-    unread: true,
-    priority: "medium",
-    actionRequired: false,
-    category: "finance"
-  },
-  {
-    id: 3,
-    title: "Shift reminder",
-    message: "Corporate Event tomorrow at Grand Plaza, 10:00 AM - 6:00 PM. Don't forget to bring your uniform!",
-    time: "3 hours ago",
-    type: "reminder",
-    unread: false,
-    priority: "high",
-    actionRequired: false,
-    category: "work"
-  },
-  {
-    id: 4,
-    title: "Schedule updated",
-    message: "Your availability for next week has been confirmed. Check your schedule for details.",
-    time: "5 hours ago",
-    type: "schedule",
-    unread: false,
-    priority: "low",
-    actionRequired: false,
-    category: "work"
-  },
-  {
-    id: 5,
-    title: "New review received",
-    message: "You received a 5-star rating from Grand Hotel event client with positive feedback",
-    time: "1 day ago",
-    type: "review",
-    unread: false,
-    priority: "medium",
-    actionRequired: false,
-    category: "feedback"
-  },
-  {
-    id: 6,
-    title: "Timesheet reminder",
-    message: "Please submit your timesheet for the week ending Oct 20, 2024",
-    time: "2 days ago",
-    type: "reminder",
-    unread: false,
-    priority: "high",
-    actionRequired: true,
-    category: "admin"
-  },
-  {
-    id: 7,
-    title: "Profile update required",
-    message: "Please update your emergency contact information in your profile settings",
-    time: "3 days ago",
-    type: "profile",
-    unread: false,
-    priority: "medium",
-    actionRequired: true,
-    category: "account"
-  },
-  {
-    id: 8,
-    title: "Training opportunity",
-    message: "New wine service training available. Register by Oct 25 to secure your spot.",
-    time: "1 week ago",
-    type: "training",
-    unread: false,
-    priority: "low",
-    actionRequired: false,
-    category: "development"
-  },
-  {
-    id: 9,
-    title: "System maintenance",
-    message: "Scheduled maintenance tonight from 2:00 AM to 4:00 AM. Service may be temporarily unavailable.",
-    time: "1 week ago",
-    type: "system",
-    unread: false,
-    priority: "medium",
-    actionRequired: false,
-    category: "system"
-  },
-  {
-    id: 10,
-    title: "Welcome to Extreme Staffing",
-    message: "Welcome to the team! Complete your profile setup to get started with your first shifts.",
-    time: "2 weeks ago",
-    type: "system",
-    unread: false,
-    priority: "low",
-    actionRequired: false,
-    category: "onboarding"
-  }
-];
+function timeAgo(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diffSec = Math.floor((now - then) / 1000);
+  if (diffSec < 60) return 'Just now';
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin} minute${diffMin > 1 ? 's' : ''} ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr} hour${diffHr > 1 ? 's' : ''} ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay < 7) return `${diffDay} day${diffDay > 1 ? 's' : ''} ago`;
+  return new Date(dateStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
 
 export function NotificationsProvider({ children }: { children: ReactNode }) {
   const { setCurrentPage } = useNavigation();
-  const [notifications, setNotifications] = useState<Notification[]>(initialNotifications);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const socketRef = useRef<Socket | null>(null);
 
+  const fetchNotifications = useCallback(async () => {
+    try {
+      const res = await api.get('/notifications?take=50');
+      const raw = res.data?.data || res.data || [];
+      const mapped: Notification[] = raw.map((n: any) => ({
+        id: n.id,
+        title: n.title || '',
+        message: n.message || '',
+        time: n.createdAt ? timeAgo(n.createdAt) : '',
+        type: (n.type || 'system').toLowerCase(),
+        unread: n.unread ?? true,
+        priority: n.priority || 'medium',
+        actionRequired: n.actionRequired ?? false,
+        category: n.category,
+        userId: n.userId,
+        data: n.data,
+        createdAt: n.createdAt,
+      }));
+      setNotifications(mapped);
+    } catch {
+      // Not logged in or API unavailable — keep empty
+    }
+  }, []);
+
   useEffect(() => {
+    fetchNotifications();
+
     // Request browser notification permission
     if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
       Notification.requestPermission();
@@ -164,10 +93,32 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
     socketRef.current = socket;
 
+    // Real-time: new notification from backend
+    socket.on('notification:new', (data: any) => {
+      const newNotif: Notification = {
+        id: data.id || crypto.randomUUID(),
+        title: data.title || '',
+        message: data.message || '',
+        time: 'Just now',
+        type: (data.type || 'system').toLowerCase(),
+        unread: true,
+        priority: data.priority || 'medium',
+        actionRequired: data.actionRequired ?? false,
+        category: data.category,
+        data: data.data,
+        createdAt: data.createdAt || new Date().toISOString(),
+      };
+
+      setNotifications(prev => [newNotif, ...prev]);
+
+      toast.info(newNotif.title, { description: newNotif.message });
+
+      if (document.hidden && "Notification" in window && Notification.permission === "granted") {
+        new window.Notification(newNotif.title, { body: newNotif.message, icon: "/favicon.ico" });
+      }
+    });
+
     socket.on('notification:message', (data: { conversationId: string, senderName: string, preview: string }) => {
-      // Only show notification if not currently viewing that conversation
-      // We can check the URL, or simply show a toast and add to the notifications list
-      
       const isViewingChat = window.location.pathname.includes('/messages');
       
       if (!isViewingChat) {
@@ -181,71 +132,63 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
           }
         });
 
-        // Show browser notification if tab is inactive
         if (document.hidden && "Notification" in window && Notification.permission === "granted") {
           new window.Notification(`New message from ${data.senderName}`, {
             body: data.preview,
-            icon: "/favicon.ico", // Or appropriate icon path
+            icon: "/favicon.ico",
           });
         }
       }
 
+      // Add to notification list
       setNotifications(prev => [{
-        id: Math.max(...prev.map(n => n.id), 0) + 1,
+        id: crypto.randomUUID(),
         title: `New message from ${data.senderName}`,
         message: data.preview,
         time: "Just now",
-        type: "system", // Or a new "message" type
+        type: "message",
         unread: true,
-        priority: "high",
-        actionRequired: true,
+        priority: "medium",
+        actionRequired: false,
         category: "communication",
-        data: { conversationId: data.conversationId }
+        data: { conversationId: data.conversationId },
+        createdAt: new Date().toISOString(),
       }, ...prev]);
     });
+
+    // Refresh periodically (every 60s)
+    const interval = setInterval(fetchNotifications, 60000);
 
     return () => {
       socket.disconnect();
       socketRef.current = null;
+      clearInterval(interval);
     };
   }, []);
 
   const unreadCount = notifications.filter(n => n.unread).length;
   const actionRequiredCount = notifications.filter(n => n.actionRequired && n.unread).length;
 
-  const markAsRead = (id: number) => {
-    setNotifications(prev => 
-      prev.map(notification => 
-        notification.id === id 
-          ? { ...notification, unread: false }
-          : notification
-      )
-    );
+  const markAsRead = async (id: string) => {
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, unread: false } : n));
+    try { await api.put(`/notifications/${id}/read`); } catch {}
   };
 
-  const markAllAsRead = () => {
-    setNotifications(prev => 
-      prev.map(notification => ({ ...notification, unread: false }))
-    );
+  const markAllAsRead = async () => {
+    setNotifications(prev => prev.map(n => ({ ...n, unread: false })));
+    try { await api.put('/notifications/read-all'); } catch {}
   };
 
-  const deleteNotification = (id: number) => {
-    setNotifications(prev => prev.filter(notification => notification.id !== id));
-  };
-
-  const addNotification = (newNotification: Omit<Notification, 'id'>) => {
-    const id = Math.max(...notifications.map(n => n.id), 0) + 1;
-    setNotifications(prev => [{ id, ...newNotification }, ...prev]);
+  const deleteNotification = async (id: string) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+    try { await api.delete(`/notifications/${id}`); } catch {}
   };
 
   const getFilteredNotifications = (filter: 'all' | 'unread' | 'read') => {
     switch (filter) {
-      case 'unread':
-        return notifications.filter(n => n.unread);
-      case 'read':
-        return notifications.filter(n => !n.unread);
-      default:
-        return notifications;
+      case 'unread': return notifications.filter(n => n.unread);
+      case 'read': return notifications.filter(n => !n.unread);
+      default: return notifications;
     }
   };
 
@@ -258,7 +201,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         markAsRead,
         markAllAsRead,
         deleteNotification,
-        addNotification,
+        refreshNotifications: fetchNotifications,
         getFilteredNotifications,
       }}
     >

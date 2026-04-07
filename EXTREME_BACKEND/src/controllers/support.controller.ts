@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../config/database';
 import { AuthRequest } from '../middleware/auth';
+import { sendNotification, sendRoleNotification } from '../services/notification.service';
 
 // Add support ticket
 export const submitTicket = async (req: Request, res: Response) => {
@@ -28,6 +29,16 @@ export const submitTicket = async (req: Request, res: Response) => {
         user: { select: { name: true, email: true, role: true } },
       },
     });
+
+    // Notify admins about new support ticket
+    try {
+      await sendRoleNotification('ADMIN', {
+        title: 'New Support Ticket',
+        message: `${ticket.user.name} submitted: "${subject}".`,
+        type: 'ticket',
+        category: 'support',
+      });
+    } catch {}
 
     res.status(201).json(ticket);
   } catch (error: any) {
@@ -100,10 +111,21 @@ export const resolveTicket = async (req: Request, res: Response) => {
         resolvedById: adminId,
       },
       include: {
-        user: { select: { name: true, email: true, role: true } },
+        user: { select: { id: true, name: true, email: true, role: true } },
         resolvedBy: { select: { name: true, role: true } },
       },
     });
+
+    // Notify user that their ticket was resolved
+    try {
+      await sendNotification({
+        userId: ticket.user.id,
+        title: 'Ticket Resolved',
+        message: `Your support ticket "${ticket.subject}" has been resolved.${resolutionNotes ? ' Notes: ' + resolutionNotes.substring(0, 100) : ''}`,
+        type: 'ticket',
+        category: 'support',
+      });
+    } catch {}
 
     res.json(ticket);
   } catch (error: any) {

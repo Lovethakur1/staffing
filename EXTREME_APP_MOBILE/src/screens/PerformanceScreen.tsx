@@ -7,7 +7,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { ScreenLayout } from '../components';
 import { Colors } from '../theme';
-import { getMyReviews, getTimesheets, StaffReview } from '../services/extraScreens.service';
+import { getMyReviews, getTimesheets, getStaffAnalytics, StaffReview, StaffAnalyticsSummary } from '../services/extraScreens.service';
 import { useAuth } from '../context/AuthContext';
 
 type PerfTab = 'overview' | 'reviews' | 'goals' | 'skills';
@@ -41,6 +41,7 @@ export default function PerformanceScreen() {
   const { user } = useAuth();
   const [reviews, setReviews] = useState<StaffReview[]>([]);
   const [totalShifts, setTotalShifts] = useState(0);
+  const [analytics, setAnalytics] = useState<StaffAnalyticsSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [tab, setTab] = useState<PerfTab>('overview');
@@ -48,12 +49,14 @@ export default function PerformanceScreen() {
   const load = async (quiet = false) => {
     if (!quiet) setLoading(true);
     try {
-      const [revData, shiftData] = await Promise.all([
+      const [revData, shiftData, analyticsData] = await Promise.all([
         user?.id ? getMyReviews(user.id) : Promise.resolve([]),
         getTimesheets(),
+        getStaffAnalytics(),
       ]);
       setReviews(revData);
-      setTotalShifts(shiftData.filter(t => t.status === 'approved' || t.status === 'paid').length);
+      setTotalShifts(analyticsData?.totalShifts ?? shiftData.length);
+      setAnalytics(analyticsData);
     } catch {}
     setLoading(false);
     setRefreshing(false);
@@ -62,27 +65,21 @@ export default function PerformanceScreen() {
   useFocusEffect(useCallback(() => { load(); }, []));
 
   const avgRating = reviews.length > 0 ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : 0;
-  const avgPunctuality = reviews.filter(r => r.punctuality).length > 0
-    ? reviews.filter(r => r.punctuality).reduce((s, r) => s + (r.punctuality || 0), 0) / reviews.filter(r => r.punctuality).length : 0;
-  const avgProfessionalism = reviews.filter(r => r.professionalism).length > 0
-    ? reviews.filter(r => r.professionalism).reduce((s, r) => s + (r.professionalism || 0), 0) / reviews.filter(r => r.professionalism).length : 0;
-  const avgQuality = reviews.filter(r => r.qualityOfWork).length > 0
-    ? reviews.filter(r => r.qualityOfWork).reduce((s, r) => s + (r.qualityOfWork || 0), 0) / reviews.filter(r => r.qualityOfWork).length : 0;
+  const overallRating = analytics?.avgRating ?? avgRating;
+
+  const punctualityPct = analytics?.punctualityRate ?? 0;
+  const certPct = analytics && analytics.certTotal > 0
+    ? Math.round((analytics.certValid / analytics.certTotal) * 100) : 0;
 
   const goals = [
     { label: 'Complete 50 events this year', progress: Math.min(totalShifts / 50 * 100, 100), current: totalShifts, target: 50 },
     { label: 'Maintain 4.5+ average rating', progress: Math.min(avgRating / 5 * 100, 100), current: avgRating.toFixed(1), target: '4.5' },
-    { label: 'Zero late arrivals this month', progress: 85, current: '85%', target: '100%' },
-    { label: 'Complete all required training', progress: 60, current: '60%', target: '100%' },
+    { label: 'On-time arrivals this month', progress: punctualityPct, current: `${punctualityPct}%`, target: '100%' },
+    { label: 'Valid certifications', progress: certPct, current: `${analytics?.certValid ?? 0}/${analytics?.certTotal ?? 0}`, target: '100%' },
   ];
 
-  const skills = [
-    { label: 'Event Management', value: 88, color: '#3B82F6' },
-    { label: 'Customer Service', value: 92, color: '#10B981' },
-    { label: 'Team Collaboration', value: 79, color: '#8B5CF6' },
-    { label: 'Communication', value: 85, color: '#F59E0B' },
-    { label: 'Problem Solving', value: 73, color: '#EF4444' },
-  ];
+  const SKILL_COLORS = ['#3B82F6', '#10B981', '#8B5CF6', '#F59E0B', '#EF4444', '#06B6D4', '#EC4899', '#14B8A6'];
+  const staffSkills = analytics?.skills ?? [];
 
   if (loading) {
     return (
@@ -105,8 +102,8 @@ export default function PerformanceScreen() {
         <View style={st.heroRow}>
           <View style={st.heroCard}>
             <Text style={st.heroLabel}>Overall Rating</Text>
-            <Text style={st.heroValue}>{avgRating > 0 ? avgRating.toFixed(1) : '—'}</Text>
-            <StarRating rating={Math.round(avgRating)} />
+            <Text style={st.heroValue}>{overallRating > 0 ? overallRating.toFixed(1) : '—'}</Text>
+            <StarRating rating={Math.round(overallRating)} />
           </View>
           <View style={st.heroCard}>
             <Text style={st.heroLabel}>Total Shifts</Text>
@@ -136,10 +133,11 @@ export default function PerformanceScreen() {
           <View>
             <View style={st.card}>
               <Text style={st.cardSectionTitle}>Performance Breakdown</Text>
-              {avgPunctuality > 0 && <BarChart label="Punctuality" value={avgPunctuality} max={5} color="#10B981" />}
-              {avgProfessionalism > 0 && <BarChart label="Professionalism" value={avgProfessionalism} max={5} color="#3B82F6" />}
-              {avgQuality > 0 && <BarChart label="Quality of Work" value={avgQuality} max={5} color="#8B5CF6" />}
-              {avgPunctuality === 0 && avgProfessionalism === 0 && avgQuality === 0 && (
+              {overallRating > 0 && <BarChart label="Overall Rating" value={overallRating} max={5} color="#F59E0B" />}
+              {avgRating > 0 && <BarChart label="Client Satisfaction" value={avgRating} max={5} color="#3B82F6" />}
+              {analytics && analytics.punctualityRate > 0 && <BarChart label="Punctuality" value={analytics.punctualityRate} max={100} color="#10B981" />}
+              {analytics && analytics.completionRate > 0 && <BarChart label="Completion Rate" value={analytics.completionRate} max={100} color="#8B5CF6" />}
+              {overallRating === 0 && avgRating === 0 && !analytics && (
                 <Text style={{ color: Colors.textMuted, fontSize: 13, textAlign: 'center', paddingVertical: 16 }}>
                   Complete more shifts to see detailed metrics
                 </Text>
@@ -149,7 +147,7 @@ export default function PerformanceScreen() {
               <Text style={st.cardSectionTitle}>Recent Activity</Text>
               <View style={st.activityRow}><Ionicons name="checkmark-circle-outline" size={18} color="#10B981" /><Text style={st.activityText}>{totalShifts} shifts completed</Text></View>
               <View style={st.activityRow}><Ionicons name="chatbubble-outline" size={18} color="#3B82F6" /><Text style={st.activityText}>{reviews.length} client reviews received</Text></View>
-              <View style={st.activityRow}><Ionicons name="star-outline" size={18} color="#F59E0B" /><Text style={st.activityText}>Average rating: {avgRating > 0 ? avgRating.toFixed(1) : 'N/A'}</Text></View>
+              <View style={st.activityRow}><Ionicons name="star-outline" size={18} color="#F59E0B" /><Text style={st.activityText}>Average rating: {overallRating > 0 ? overallRating.toFixed(1) : 'N/A'}</Text></View>
             </View>
           </View>
         )}
@@ -200,8 +198,21 @@ export default function PerformanceScreen() {
         {/* Skills */}
         {tab === 'skills' && (
           <View style={st.card}>
-            <Text style={st.cardSectionTitle}>Skill Ratings</Text>
-            {skills.map(s => <BarChart key={s.label} label={s.label} value={s.value} max={100} color={s.color} />)}
+            <Text style={st.cardSectionTitle}>Your Skills</Text>
+            {staffSkills.length > 0 ? (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                {staffSkills.map((skill, i) => (
+                  <View key={skill} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: (SKILL_COLORS[i % SKILL_COLORS.length]) + '15', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: (SKILL_COLORS[i % SKILL_COLORS.length]) + '30' }}>
+                    <Ionicons name="checkmark-circle" size={16} color={SKILL_COLORS[i % SKILL_COLORS.length]} />
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: Colors.textPrimary, marginLeft: 6 }}>{skill}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Text style={{ color: Colors.textMuted, fontSize: 13, textAlign: 'center', paddingVertical: 16 }}>
+                No skills recorded yet. Contact your manager to update your profile.
+              </Text>
+            )}
           </View>
         )}
       </ScrollView>

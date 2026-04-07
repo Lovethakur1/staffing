@@ -22,7 +22,7 @@ export default function PayrollScreen() {
     if (!quiet) setLoading(true);
     try {
       const [all, runData] = await Promise.all([getTimesheets(), getPayrollRuns()]);
-      setPending(all.filter(t => t.status === 'submitted' || t.status === 'draft'));
+      setPending(all.filter(t => ['submitted', 'draft', 'pending'].includes(t.status)));
       setRuns(runData);
     } catch {}
     setLoading(false);

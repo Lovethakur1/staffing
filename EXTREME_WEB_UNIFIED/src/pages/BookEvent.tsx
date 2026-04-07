@@ -50,6 +50,7 @@ import { useNavigation } from "../contexts/NavigationContext";
 import { toast } from "sonner";
 import type { Client } from "../data/mockData";
 import api from "../services/api";
+import { LocationMapPicker } from "../components/LocationMapPicker";
 
 interface BookEventProps {
   userRole: string;
@@ -75,6 +76,8 @@ export function BookEvent({
     city: "",
     state: "",
     zipCode: "",
+    latitude: null as number | null,
+    longitude: null as number | null,
     expectedGuests: "",
     staffRequired: "",
     staffRequirements: {} as Record<string, number>,
@@ -121,6 +124,8 @@ export function BookEvent({
           city: locationParts[1] || '',
           state: locationParts[2] || '',
           zipCode: locationParts[3] || '',
+          latitude: ev.locationLat || null,
+          longitude: ev.locationLng || null,
           expectedGuests: ev.guestCount ? String(ev.guestCount) : '',
           budget: ev.budget ? String(ev.budget) : '',
           description: ev.description || '',
@@ -371,6 +376,8 @@ export function BookEvent({
         startTime: formData.startTime || undefined,
         endTime: formData.endTime || undefined,
         location: [formData.address, formData.city, formData.state, formData.zipCode].filter(Boolean).join(', ') || formData.location || undefined,
+        locationLat: formData.latitude || undefined,
+        locationLng: formData.longitude || undefined,
         staffRequired: totalStaff || undefined,
         guestCount: formData.expectedGuests ? parseInt(formData.expectedGuests) : undefined,
         budget: formData.budget ? parseFloat(formData.budget) : undefined,
@@ -863,6 +870,32 @@ export function BookEvent({
                     className="mt-1"
                   />
                 </div>
+
+                {/* Map Location Picker */}
+                <div className="space-y-2">
+                  <Label>Select Location on Map</Label>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Search for an address or click on the map to set the exact location
+                  </p>
+                  <LocationMapPicker
+                    initialLatitude={formData.latitude || 40.7128}
+                    initialLongitude={formData.longitude || -74.0060}
+                    onLocationSelect={(locationData) => {
+                      setFormData((prev) => ({
+                        ...prev,
+                        address: locationData.address || prev.address,
+                        city: locationData.city || prev.city,
+                        state: locationData.state || prev.state,
+                        zipCode: locationData.zipCode || prev.zipCode,
+                        latitude: locationData.latitude,
+                        longitude: locationData.longitude,
+                      }));
+                    }}
+                  />
+                </div>
+
+                <Separator className="my-4" />
+
                 <div>
                   <Label htmlFor="address">
                     Street Address
@@ -927,6 +960,20 @@ export function BookEvent({
                     />
                   </div>
                 </div>
+
+                {/* Coordinates Display */}
+                {formData.latitude && formData.longitude && (
+                  <div className="grid grid-cols-2 gap-4 p-3 bg-muted/50 rounded-lg">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Latitude</Label>
+                      <p className="text-sm font-medium">{formData.latitude.toFixed(6)}</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Longitude</Label>
+                      <p className="text-sm font-medium">{formData.longitude.toFixed(6)}</p>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 

@@ -61,7 +61,8 @@ import {
   Phone,
   UserCog,
   ThumbsUp,
-  CreditCard
+  CreditCard,
+  Smartphone,
 } from "lucide-react";
 import { useNavigation } from "../../contexts/NavigationContext";
 import { useAlerts } from "../../contexts/AlertsContext";
@@ -160,6 +161,7 @@ export function AppSidebar({ currentUser, onLogout }: AppSidebarProps) {
         { title: "Integrations", icon: Zap, id: "integrations" },
         { title: "Database", icon: Database, id: "database" },
         { title: "Roles & Permissions", icon: UserCog, id: "roles-permissions" },
+        { title: "Device Approvals", icon: Smartphone, id: "device-approvals" },
         { title: "System Settings", icon: Settings, id: "settings" },
         { title: "Security & Access", icon: Shield, id: "security" },
       ]

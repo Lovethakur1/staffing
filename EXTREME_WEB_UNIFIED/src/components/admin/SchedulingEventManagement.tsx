@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import api from "../../services/api";
+import { unavailabilityService, UnavailabilityRecord } from "../../services/unavailability.service";
 
 interface StaffAssignment {
   staffId: string;
@@ -67,6 +68,8 @@ export function SchedulingEventManagement() {
 
   const [events, setEvents] = useState<any[]>([]);
   const [staffList, setStaffList] = useState<any[]>([]);
+  const [staffUnavailability, setStaffUnavailability] = useState<UnavailabilityRecord[]>([]);
+  const [loadingUnavailability, setLoadingUnavailability] = useState(false);
 
   // Fetch events and staff from API
   useEffect(() => {
@@ -168,7 +171,37 @@ export function SchedulingEventManagement() {
   };
 
   const getAvailableStaff = () => {
-    return staffList.filter((staff: any) => staff.isActive !== false);
+    let filtered = staffList.filter((staff: any) => staff.isActive !== false);
+    
+    // Filter out staff on leave for the selected event date
+    if (selectedEvent?.date && staffUnavailability.length > 0) {
+      const eventDate = new Date(selectedEvent.date);
+      const unavailableStaffIds = unavailabilityService.getUnavailableStaffIds(staffUnavailability, eventDate);
+      
+      filtered = filtered.filter((staff: any) => {
+        const staffId = staff.user?.id || staff.userId;
+        const staffProfileId = staff.id;
+        return !unavailableStaffIds.has(staffId) && !unavailableStaffIds.has(staffProfileId);
+      });
+    }
+    
+    return filtered;
+  };
+
+  // Fetch unavailability when opening assignment dialog
+  const handleOpenAssignmentDialog = async (event: any) => {
+    setSelectedEvent(event);
+    setIsAssignmentDialogOpen(true);
+    
+    setLoadingUnavailability(true);
+    try {
+      const unavailData = await unavailabilityService.getAllUnavailability();
+      setStaffUnavailability(unavailData);
+    } catch (err) {
+      console.error('Failed to fetch unavailability:', err);
+    } finally {
+      setLoadingUnavailability(false);
+    }
   };
 
   const handleStaffAssignment = (eventId: string, staffIds: string[]) => {
@@ -322,10 +355,7 @@ export function SchedulingEventManagement() {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => {
-                                  setSelectedEvent(event);
-                                  setIsAssignmentDialogOpen(true);
-                                }}
+                                onClick={() => handleOpenAssignmentDialog(event)}
                               >
                                 <Users className="h-3 w-3 mr-1" />
                                 Assign
@@ -645,6 +675,12 @@ export function SchedulingEventManagement() {
 
               <div>
                 <h4 className="font-medium mb-4">Available Staff</h4>
+                {loadingUnavailability && (
+                  <div className="flex items-center justify-center py-4">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary mr-2" />
+                    <span className="text-sm text-muted-foreground">Checking staff availability...</span>
+                  </div>
+                )}
                 <div className="space-y-3 max-h-[400px] overflow-y-auto">
                   {getAvailableStaff().map((staff: any) => (
                     <div key={staff.id} className="flex items-center justify-between p-3 border rounded-lg">

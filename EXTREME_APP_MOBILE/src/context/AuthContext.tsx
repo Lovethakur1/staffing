@@ -41,8 +41,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const res = await api.post('/auth/login', { email, password });
     const { user: userData, token: authToken } = res.data;
 
-    if (userData.role !== 'STAFF') {
-      throw new Error('This app is for staff members only.');
+    // Allow STAFF and MANAGER roles to login to the app
+    if (userData.role !== 'STAFF' && userData.role !== 'MANAGER') {
+      throw new Error('This app is for staff and managers only.');
     }
 
     await SecureStore.setItemAsync('authToken', authToken);

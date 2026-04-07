@@ -46,9 +46,27 @@ import {
 import { SidebarTrigger, useSidebar } from "../ui/sidebar";
 import { useNavigation } from "../../contexts/NavigationContext";
 import { useAppState } from "../../contexts/AppStateContext";
-import { useNotifications } from "../../contexts/NotificationsContext";
+import { useNotifications, Notification } from "../../contexts/NotificationsContext";
 import { useAlerts } from "../../contexts/AlertsContext";
 import { XtremeLogo } from "../XtremeLogo";
+
+function getNotificationTargetPage(notification: Notification, userRole: string): { page: string; params?: Record<string, any> } | null {
+  const type = notification.type?.toLowerCase();
+  const data = notification.data || {};
+  switch (type) {
+    case 'shift': case 'event': case 'schedule':
+      if (data.eventId) return { page: userRole === 'admin' ? 'admin-event-detail' : 'shifts-schedule', params: { eventId: data.eventId } };
+      return { page: 'shifts-schedule' };
+    case 'payment': return { page: userRole === 'admin' ? 'financial-hub' : 'payroll' };
+    case 'review': case 'feedback': return { page: userRole === 'admin' ? 'client-feedback' : 'performance' };
+    case 'message': case 'msg': return { page: 'messages', params: data.conversationId ? { conversationId: data.conversationId } : undefined };
+    case 'support': case 'ticket': return { page: 'help-support' };
+    case 'timesheet': return { page: 'timesheets' };
+    case 'training': return { page: 'training' };
+    case 'compliance': return { page: 'certifications' };
+    default: return null;
+  }
+}
 
 interface TopNavigationProps {
   currentUser: {
@@ -708,6 +726,8 @@ export function TopNavigation({
                           if (notification.unread) {
                             markAsRead(notification.id);
                           }
+                          const target = getNotificationTargetPage(notification, currentUser.role);
+                          if (target) setCurrentPage(target.page, target.params);
                         }}
                       >
                         <div className="flex gap-3 w-full">
@@ -758,7 +778,7 @@ export function TopNavigation({
                 </div>
 
                 <div className="p-2 border-t bg-muted/20">
-                  <Button variant="ghost" className="w-full text-xs h-8" onClick={() => setCurrentPage('messages')}>
+                  <Button variant="ghost" className="w-full text-xs h-8" onClick={() => setCurrentPage('notifications')}>
                     View all notifications
                   </Button>
                 </div>

@@ -49,6 +49,7 @@ import { eventService } from "../services/event.service";
 import { staffService } from "../services/staff.service";
 import { shiftService } from "../services/shift.service";
 import { chatService } from "../services/chat.service";
+import { unavailabilityService, UnavailabilityRecord } from "../services/unavailability.service";
 
 interface SchedulerProps {
   userRole: string;
@@ -95,9 +96,11 @@ export function Scheduler({ userRole, userId }: SchedulerProps) {
 
   const [events, setEvents] = useState<any[]>([]);
   const [apiStaff, setApiStaff] = useState<any[]>([]);
+  const [allUnavailability, setAllUnavailability] = useState<UnavailabilityRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [assigning, setAssigning] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [loadingUnavailability, setLoadingUnavailability] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const fetchSchedulerData = useCallback(async (showRefresh = false) => {
@@ -254,9 +257,21 @@ export function Scheduler({ userRole, userId }: SchedulerProps) {
     }
   };
 
-  const handleAssignStaff = (event: Event) => {
+  const handleAssignStaff = async (event: Event) => {
     setSelectedEvent(event);
     setIsAssignDialogOpen(true);
+    
+    // Fetch unavailability data for the event date range
+    setLoadingUnavailability(true);
+    try {
+      const unavailData = await unavailabilityService.getAllUnavailability();
+      setAllUnavailability(unavailData);
+    } catch (err) {
+      console.error('Failed to fetch unavailability:', err);
+      // Continue without filtering if fetch fails
+    } finally {
+      setLoadingUnavailability(false);
+    }
   };
 
   const handleConfirmAssignment = async (staffId: string) => {
@@ -701,8 +716,31 @@ export function Scheduler({ userRole, userId }: SchedulerProps) {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 max-h-96 overflow-y-auto overscroll-contain" style={{ willChange: 'scroll-position' }}>
+            {loadingUnavailability && (
+              <div className="flex items-center justify-center py-4">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary mr-2" />
+                <span className="text-sm text-muted-foreground">Checking staff availability...</span>
+              </div>
+            )}
             {availableStaffFormatted
-              .filter(s => s.availability !== 'unavailable')
+              .filter(s => {
+                // Filter out staff with general unavailability status
+                if (s.availability === 'unavailable') return false;
+                
+                // Filter out staff on leave for the event date
+                if (selectedEvent?.rawEvent?.date && allUnavailability.length > 0) {
+                  const eventDate = new Date(selectedEvent.rawEvent.date);
+                  const unavailableStaffIds = unavailabilityService.getUnavailableStaffIds(allUnavailability, eventDate);
+                  
+                  // Check both staff ID and raw staff profile ID
+                  const staffProfileId = s.rawStaff?.id || s.rawStaff?.staffProfile?.id;
+                  if (unavailableStaffIds.has(s.id) || unavailableStaffIds.has(staffProfileId)) {
+                    return false;
+                  }
+                }
+                
+                return true;
+              })
               .map((staff) => (
                 <div
                   key={staff.id}

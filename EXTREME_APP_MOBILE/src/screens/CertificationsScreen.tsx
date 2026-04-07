@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { ScreenLayout } from '../components';
 import { Colors } from '../theme';
 import { getCertifications, Certification } from '../services/extraScreens.service';
+import { useAuth } from '../context/AuthContext';
 
 type CertTab = 'all' | 'expiring' | 'pending';
 
@@ -19,6 +20,7 @@ const STATUS_CONFIG: Record<string, { bg: string; text: string; icon: keyof type
 };
 
 export default function CertificationsScreen() {
+  const { user } = useAuth();
   const [certs, setCerts] = useState<Certification[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -26,7 +28,7 @@ export default function CertificationsScreen() {
 
   const load = async (quiet = false) => {
     if (!quiet) setLoading(true);
-    try { setCerts(await getCertifications()); } catch {}
+    try { setCerts(await getCertifications(user?.id)); } catch {}
     setLoading(false);
     setRefreshing(false);
   };

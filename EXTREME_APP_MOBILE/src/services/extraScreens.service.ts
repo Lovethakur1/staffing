@@ -9,7 +9,7 @@ import api from '../config/api';
 export interface Timesheet {
   id: string;
   weekEnding: string;
-  status: 'draft' | 'submitted' | 'approved' | 'paid' | 'rejected';
+  status: 'draft' | 'submitted' | 'approved' | 'paid' | 'rejected' | 'pending';
   totalHours: number;
   regularHours: number;
   grossPay: number;
@@ -20,16 +20,20 @@ export interface Timesheet {
 export async function getTimesheets(): Promise<Timesheet[]> {
   const res = await api.get('/finance/timesheets');
   const raw = Array.isArray(res.data) ? res.data : (res.data?.data || []);
-  return raw.map((ts: any) => ({
-    id: ts.id,
-    weekEnding: ts.shift?.date || (ts.clockInTime ? ts.clockInTime.split('T')[0] : ''),
-    status: (ts.status || 'draft').toLowerCase() as Timesheet['status'],
-    totalHours: ts.totalHours || 0,
-    regularHours: ts.regularHours || 0,
-    grossPay: ts.grossPay || 0,
-    staffName: ts.staff?.name || '',
-    eventName: ts.shift?.event?.title || '',
-  }));
+  return raw.map((ts: any) => {
+    const hours = ts.totalHours || 0;
+    const rate = ts.shift?.hourlyRate || 0;
+    return {
+      id: ts.id,
+      weekEnding: ts.shift?.date ? new Date(ts.shift.date).toLocaleDateString() : (ts.clockInTime ? ts.clockInTime.split('T')[0] : ''),
+      status: (ts.status || 'draft').toLowerCase() as Timesheet['status'],
+      totalHours: hours,
+      regularHours: ts.regularHours || hours,
+      grossPay: ts.grossPay || (hours * rate),
+      staffName: ts.staff?.name || '',
+      eventName: ts.shift?.event?.title || '',
+    };
+  });
 }
 
 export async function updateTimesheetStatus(id: string, status: string): Promise<void> {
@@ -49,16 +53,16 @@ export interface PayrollRun {
 }
 
 export async function getPayrollRuns(): Promise<PayrollRun[]> {
-  const res = await api.get('/finance/payroll-runs');
+  const res = await api.get('/staff/me/payroll');
   const raw = Array.isArray(res.data) ? res.data : (res.data?.data || []);
   return raw.map((r: any) => ({
-    id: r.id,
-    period: `${r.periodStart?.split('T')[0] ?? '—'} → ${r.periodEnd?.split('T')[0] ?? '—'}`,
-    staffCount: r._count?.items ?? 0,
-    totalAmount: r.totalAmount ?? 0,
-    processedBy: r.processor?.name || '—',
+    id: r.id || r.payrollRunId || '',
+    period: r.period || `${r.periodStart?.split('T')[0] ?? '—'} → ${r.periodEnd?.split('T')[0] ?? '—'}`,
+    staffCount: 1,
+    totalAmount: r.netPay ?? r.grossPay ?? r.totalAmount ?? 0,
+    processedBy: r.processor?.name || r.processedBy || 'Payroll',
     status: (r.status || 'draft').toLowerCase(),
-    createdAt: r.createdAt?.split('T')[0] || '',
+    createdAt: r.createdAt?.split('T')[0] || r.periodEnd?.split('T')[0] || '',
   }));
 }
 
@@ -77,9 +81,16 @@ export interface Certification {
   documentUrl?: string;
 }
 
-export async function getCertifications(): Promise<Certification[]> {
-  const res = await api.get('/staff/certifications');
-  const raw = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+export async function getCertifications(userId?: string): Promise<Certification[]> {
+  let raw: any[];
+  if (userId) {
+    const res = await api.get(`/staff/${userId}/certifications`);
+    raw = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+  } else {
+    // Fall back to dashboard which always includes certifications for the current user
+    const res = await api.get('/staff/me/dashboard');
+    raw = res.data?.certifications || [];
+  }
   return raw.map((c: any) => {
     const expiry = c.expiryDate ? new Date(c.expiryDate) : null;
     const now = new Date();
@@ -87,14 +98,14 @@ export async function getCertifications(): Promise<Certification[]> {
       ? Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
       : 0;
     let status: Certification['status'] = 'valid';
-    if (!c.verifiedDate && !c.verifiedBy) status = 'pending-verification';
+    if (!c.verified) status = 'pending-verification';
     else if (daysUntil < 0) status = 'expired';
     else if (daysUntil < 60) status = 'expiring-soon';
     return {
       id: c.id,
       staffId: c.staffId || '',
       staffName: c.staff?.user?.name || c.staffName || '',
-      certType: c.type || c.certType || '',
+      certType: c.name || c.type || c.certType || '',
       certNumber: c.certNumber || c.number || '',
       issueDate: c.issueDate || c.createdAt || '',
       expiryDate: c.expiryDate || '',
@@ -121,7 +132,7 @@ export interface StaffDocument {
 }
 
 export async function getMyDocuments(userId: string): Promise<StaffDocument[]> {
-  const res = await api.get(`/staff/documents?userId=${userId}`);
+  const res = await api.get(`/staff/${userId}/documents`);
   const raw = Array.isArray(res.data) ? res.data : (res.data?.data || []);
   return raw.map((d: any) => ({
     id: d.id,
@@ -153,12 +164,12 @@ export interface StaffReview {
 }
 
 export async function getMyReviews(userId: string): Promise<StaffReview[]> {
-  const res = await api.get(`/staff/${userId}/reviews`);
+  const res = await api.get(`/reviews/staff/${userId}`);
   const raw = Array.isArray(res.data) ? res.data : (res.data?.data || []);
   return raw.map((r: any) => ({
     id: r.id,
     rating: r.rating || 0,
-    review: r.review || r.comment || '',
+    review: r.feedback || r.review || r.comment || '',
     clientName: r.client?.user?.name || r.clientName || '',
     eventName: r.event?.title || r.eventName || '',
     date: r.date || r.createdAt || '',
@@ -178,19 +189,32 @@ export interface StaffAnalyticsSummary {
   avgRating: number;
   punctualityRate: number;
   completionRate: number;
+  skills: string[];
+  certTotal: number;
+  certValid: number;
 }
 
 export async function getStaffAnalytics(): Promise<StaffAnalyticsSummary | null> {
   try {
-    const res = await api.get('/analytics/dashboard');
+    // Use staff dashboard endpoint which contains all stats for the current user
+    const res = await api.get('/staff/me/dashboard');
     const d = res.data;
+    const stats = d?.stats || {};
+    const shifts = d?.shifts || {};
+    const completedShifts = shifts.recent?.filter((s: any) => s.status === 'COMPLETED') || [];
+    const totalHours = completedShifts.reduce((sum: number, s: any) => sum + (s.totalHours || 0), 0);
+    const certs = Array.isArray(d?.certifications) ? d.certifications : [];
+    const certValid = certs.filter((c: any) => c.verified && (!c.expiryDate || new Date(c.expiryDate) > new Date())).length;
     return {
-      totalShifts: d.totalShifts ?? d.totalEvents ?? 0,
-      totalHours: d.totalHours ?? 0,
-      totalEarnings: d.totalEarnings ?? d.totalPay ?? 0,
-      avgRating: d.avgRating ?? d.rating ?? 0,
-      punctualityRate: d.punctualityRate ?? 0,
-      completionRate: d.completionRate ?? 0,
+      totalShifts: stats.completedShifts ?? stats.totalEvents ?? 0,
+      totalHours: totalHours,
+      totalEarnings: stats.totalEarnings ?? 0,
+      avgRating: stats.rating ?? 0,
+      punctualityRate: stats.completedShifts > 0 ? Math.round((stats.completedShifts / Math.max(stats.completedShifts + stats.pendingRequests, 1)) * 100) : 0,
+      completionRate: stats.completedShifts > 0 ? Math.round((stats.completedShifts / Math.max(stats.completedShifts + stats.pendingRequests, 1)) * 100) : 0,
+      skills: d?.profile?.skills || [],
+      certTotal: certs.length,
+      certValid,
     };
   } catch {
     return null;

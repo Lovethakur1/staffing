@@ -602,9 +602,11 @@ export const updateDocument = asyncHandler(async (req: Request, res: Response) =
 /**
  * GET /api/staff/me/dashboard
  * Get comprehensive dashboard data for the logged-in staff member
+ * Returns empty data for managers without staff profiles
  */
 export const getStaffDashboard = asyncHandler(async (req: AuthRequest, res: Response) => {
   const userId = req.user!.userId;
+  const userRole = req.user!.role;
 
   // Get staff profile
   const staffProfile = await prisma.staffProfile.findUnique({
@@ -620,7 +622,29 @@ export const getStaffDashboard = asyncHandler(async (req: AuthRequest, res: Resp
     },
   });
 
+  // For managers without staff profiles, return empty dashboard data
   if (!staffProfile) {
+    const managerRoles = ['ADMIN', 'SUB_ADMIN', 'MANAGER', 'SCHEDULER'];
+    if (managerRoles.includes(userRole)) {
+      res.json({
+        profile: null,
+        stats: {
+          todaysShifts: 0,
+          upcomingShifts: 0,
+          pendingRequests: 0,
+          completedShifts: 0,
+          rating: 0,
+          totalEvents: 0,
+          totalEarnings: 0,
+          thisMonthEarnings: 0,
+        },
+        shifts: { today: [], upcoming: [], pending: [], recent: [] },
+        payroll: [],
+        documents: [],
+        certifications: [],
+      });
+      return;
+    }
     res.status(404).json({ error: 'Staff profile not found.' });
     return;
   }

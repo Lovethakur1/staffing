@@ -3,6 +3,7 @@ import prisma from '../config/database';
 import { asyncHandler } from '../utils/helpers';
 import { AuthRequest } from '../middleware/auth';
 import { calculateAndSaveStaffRating } from '../services/rating.service';
+import { sendNotification } from '../services/notification.service';
 
 /**
  * POST /api/reviews
@@ -78,6 +79,20 @@ export const createReview = asyncHandler(async (req: AuthRequest, res: Response)
 
   // Dynamically recalculate staff rating
   const newRating = await calculateAndSaveStaffRating(staffId);
+
+  // Notify staff about new review
+  try {
+    const eventInfo = eventId
+      ? await prisma.event.findUnique({ where: { id: eventId }, select: { title: true } })
+      : null;
+    await sendNotification({
+      userId: staffId,
+      title: 'New Client Review',
+      message: `You received a ${rating}★ review${eventInfo ? ` for "${eventInfo.title}"` : ''}.${feedback ? ' "' + feedback.substring(0, 80) + '"' : ''}`,
+      type: 'review',
+      category: 'feedback',
+    });
+  } catch {}
 
   res.status(201).json({ message: 'Review submitted successfully', review, newTotalRating: newRating });
 });

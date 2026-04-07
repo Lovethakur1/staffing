@@ -46,10 +46,11 @@ export default function AnalyticsScreen() {
         const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
         return { year: d.getFullYear(), month: d.getMonth(), label: d.toLocaleDateString('en-GB', { month: 'short' }) };
       });
+      const earningStatuses = ['approved', 'paid', 'pending', 'submitted', 'completed'];
       const earnings = months.map(m =>
         sheets.filter(t => {
           const d = new Date(t.weekEnding);
-          return d.getFullYear() === m.year && d.getMonth() === m.month && (t.status === 'approved' || t.status === 'paid');
+          return d.getFullYear() === m.year && d.getMonth() === m.month && earningStatuses.includes(t.status);
         }).reduce((s, t) => s + t.grossPay, 0)
       );
       setMonthlyEarnings(earnings);

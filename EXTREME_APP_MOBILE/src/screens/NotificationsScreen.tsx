@@ -1,13 +1,17 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  RefreshControl, ActivityIndicator,
+  RefreshControl, ActivityIndicator, Alert,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../config/api';
 import { Colors } from '../theme';
 import { ScreenLayout } from '../components';
+import { RootStackParamList } from '../types';
+
+type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 interface Notification {
   id: string;
@@ -16,9 +20,11 @@ interface Notification {
   type: string;
   unread: boolean;
   createdAt: string;
+  data?: any;
 }
 
 export default function NotificationsScreen() {
+  const nav = useNavigation<Nav>();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -65,6 +71,27 @@ export default function NotificationsScreen() {
     }
   };
 
+  const clearAllNotifications = () => {
+    Alert.alert(
+      'Clear All Notifications',
+      'Are you sure you want to delete all notifications? This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear All', style: 'destructive', onPress: async () => {
+            try {
+              await api.delete('/notifications/all');
+              setNotifications([]);
+              setUnreadCount(0);
+            } catch (err) {
+              console.error('Failed to clear notifications:', err);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   function getIconForType(type: string): keyof typeof Ionicons.glyphMap {
     switch (type?.toLowerCase()) {
       case 'msg':
@@ -86,6 +113,50 @@ export default function NotificationsScreen() {
       case 'payment': return Colors.success;
       case 'review': return Colors.warning;
       default: return Colors.textSecondary;
+    }
+  }
+
+  function navigateToNotification(notif: Notification) {
+    if (notif.unread) markAsRead(notif.id);
+    const type = notif.type?.toLowerCase();
+    const data = notif.data || {};
+    switch (type) {
+      case 'shift':
+      case 'event':
+      case 'schedule':
+        if (data.shiftId) { nav.navigate('ShiftWorkflow', { shiftId: data.shiftId }); return; }
+        nav.navigate('Main', { screen: 'MyShifts' } as any);
+        return;
+      case 'payment':
+        nav.navigate('Payroll');
+        return;
+      case 'timesheet':
+        nav.navigate('Timesheets');
+        return;
+      case 'review':
+      case 'feedback':
+        nav.navigate('Performance');
+        return;
+      case 'message':
+      case 'msg':
+        if (data.conversationId && data.senderName) {
+          nav.navigate('ChatDetail', { conversationId: data.conversationId, conversationName: data.senderName });
+          return;
+        }
+        nav.navigate('Main', { screen: 'Inbox' } as any);
+        return;
+      case 'support':
+      case 'ticket':
+        nav.navigate('HelpSupport');
+        return;
+      case 'training':
+        nav.navigate('TrainingPortal');
+        return;
+      case 'compliance':
+        nav.navigate('Certifications');
+        return;
+      default:
+        nav.navigate('Main', { screen: 'Dashboard' } as any);
     }
   }
 
@@ -120,11 +191,19 @@ export default function NotificationsScreen() {
             <Text style={st.pageTitle}>Notifications</Text>
             <Text style={st.pageSubtitle}>{unreadCount} unread alerts</Text>
           </View>
-          {unreadCount > 0 && (
-            <TouchableOpacity onPress={markAllAsRead} style={st.markAllBtn}>
-              <Text style={st.markAllText}>Mark all as read</Text>
-            </TouchableOpacity>
-          )}
+          <View style={st.headerActions}>
+            {unreadCount > 0 && (
+              <TouchableOpacity onPress={markAllAsRead} style={st.markAllBtn}>
+                <Text style={st.markAllText}>Mark all read</Text>
+              </TouchableOpacity>
+            )}
+            {notifications.length > 0 && (
+              <TouchableOpacity onPress={clearAllNotifications} style={st.clearAllBtn}>
+                <Ionicons name="trash-outline" size={14} color={Colors.error || '#EF4444'} />
+                <Text style={st.clearAllText}>Clear all</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         {notifications.length === 0 ? (
@@ -137,7 +216,7 @@ export default function NotificationsScreen() {
             <TouchableOpacity
               key={notif.id}
               style={[st.notifCard, notif.unread && st.notifCardUnread]}
-              onPress={() => notif.unread && markAsRead(notif.id)}
+              onPress={() => navigateToNotification(notif)}
             >
               <View style={[st.iconWrap, { backgroundColor: getIconColorForType(notif.type) + '15' }]}>
                 <Ionicons name={getIconForType(notif.type)} size={20} color={getIconColorForType(notif.type)} />
@@ -165,8 +244,11 @@ const st = StyleSheet.create({
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, marginBottom: 16 },
   pageTitle: { fontSize: 22, fontWeight: '700', color: Colors.textPrimary },
   pageSubtitle: { fontSize: 13, color: Colors.textSecondary, marginTop: 2 },
-  markAllBtn: { backgroundColor: Colors.primary + '15', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
-  markAllText: { fontSize: 12, fontWeight: '600', color: Colors.primary },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  markAllBtn: { backgroundColor: Colors.primary + '15', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20 },
+  markAllText: { fontSize: 11, fontWeight: '600', color: Colors.primary },
+  clearAllBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#FEF2F2', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20 },
+  clearAllText: { fontSize: 11, fontWeight: '600', color: '#EF4444' },
   emptyWrap: { alignItems: 'center', paddingVertical: 60 },
   emptyText: { fontSize: 14, color: Colors.textMuted, marginTop: 12 },
   notifCard: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0' },

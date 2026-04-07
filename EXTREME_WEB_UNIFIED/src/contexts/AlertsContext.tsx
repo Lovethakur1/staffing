@@ -1,4 +1,6 @@
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode, useRef } from "react";
+import { io, Socket } from "socket.io-client";
+import api from "../services/api";
 
 export interface Alert {
   id: string;
@@ -30,192 +32,142 @@ interface AlertsContextType {
 
 const AlertsContext = createContext<AlertsContextType | undefined>(undefined);
 
-// Mock alerts data - comprehensive admin alerts
-const initialAlerts: Alert[] = [
-  {
-    id: 'alert-1',
-    eventId: 'evt-001',
-    eventName: 'Wedding Reception - Johnson',
-    title: 'Staff Member Not Arrived',
-    description: 'Sarah Martinez (Bartender) has not checked in yet. Event started 15 minutes ago.',
-    time: '15 min ago',
-    type: 'event',
-    severity: 'critical',
-    unread: true,
-    actionRequired: true,
-    actions: [
-      { label: 'Contact Staff', variant: 'default', action: 'contact-staff' },
-      { label: 'Find Replacement', variant: 'outline', action: 'find-replacement' },
-      { label: 'View Event', variant: 'outline', action: 'view-event' }
-    ]
-  },
-  {
-    id: 'alert-2',
-    eventId: 'evt-003',
-    eventName: 'Corporate Gala - TechCorp',
-    title: 'Last Minute Cancellation',
-    description: 'Michael Chen (Server) cancelled 2 hours before event start. Replacement needed urgently.',
-    time: '45 min ago',
-    type: 'staff',
-    severity: 'critical',
-    unread: true,
-    actionRequired: true,
-    actions: [
-      { label: 'Find Replacement', variant: 'destructive', action: 'find-replacement' },
-      { label: 'Contact Client', variant: 'outline', action: 'contact-client' },
-      { label: 'View Event', variant: 'outline', action: 'view-event' }
-    ]
-  },
-  {
-    id: 'alert-3',
-    eventId: 'evt-012',
-    eventName: 'Birthday Party - Smith',
-    title: 'Payment Verification Required',
-    description: 'Final payment of $2,450 is pending verification. Event is in 3 days.',
-    time: '2 hours ago',
-    type: 'payment',
-    severity: 'warning',
-    unread: true,
-    actionRequired: true,
-    actions: [
-      { label: 'Verify Payment', variant: 'default', action: 'verify-payment' },
-      { label: 'Contact Client', variant: 'outline', action: 'contact-client' },
-      { label: 'View Event', variant: 'outline', action: 'view-event' }
-    ]
-  },
-  {
-    id: 'alert-4',
-    eventId: 'evt-007',
-    eventName: 'Charity Fundraiser - Hope Foundation',
-    title: 'Staff Overtime Alert',
-    description: 'Emma Davis has worked 45 hours this week. Approaching overtime threshold.',
-    time: '3 hours ago',
-    type: 'compliance',
-    severity: 'warning',
-    unread: true,
-    actionRequired: false,
-    actions: [
-      { label: 'View Schedule', variant: 'outline', action: 'view-schedule' },
-      { label: 'Adjust Hours', variant: 'outline', action: 'adjust-hours' }
-    ]
-  },
-  {
-    id: 'alert-5',
-    eventId: 'evt-015',
-    eventName: 'Product Launch - Innovation Inc',
-    title: 'Insufficient Staff Coverage',
-    description: 'Only 8 of 12 required staff positions filled. Event is tomorrow.',
-    time: '5 hours ago',
-    type: 'event',
-    severity: 'warning',
-    unread: true,
-    actionRequired: true,
-    actions: [
-      { label: 'Post Job Opening', variant: 'default', action: 'post-job' },
-      { label: 'Contact Available Staff', variant: 'outline', action: 'contact-staff' },
-      { label: 'View Event', variant: 'outline', action: 'view-event' }
-    ]
-  },
-  {
-    id: 'alert-6',
-    title: 'Multiple Pending Timesheets',
-    description: '23 timesheets from last week are pending approval. Payroll deadline in 24 hours.',
-    time: '6 hours ago',
-    type: 'payment',
-    severity: 'warning',
-    unread: false,
-    actionRequired: true,
-    actions: [
-      { label: 'Review Timesheets', variant: 'default', action: 'review-timesheets' },
-      { label: 'Bulk Approve', variant: 'outline', action: 'bulk-approve' }
-    ]
-  },
-  {
-    id: 'alert-7',
-    eventId: 'evt-009',
-    eventName: 'Anniversary Dinner - Martinez',
-    title: 'Low Client Rating Received',
-    description: 'Client rated service 2/5 stars. Immediate follow-up recommended.',
-    time: '1 day ago',
-    type: 'event',
-    severity: 'warning',
-    unread: false,
-    actionRequired: true,
-    actions: [
-      { label: 'View Feedback', variant: 'default', action: 'view-feedback' },
-      { label: 'Contact Client', variant: 'outline', action: 'contact-client' },
-      { label: 'View Event', variant: 'outline', action: 'view-event' }
-    ]
-  },
-  {
-    id: 'alert-8',
-    title: 'Certificate Expiring Soon',
-    description: '5 staff members have food handler certificates expiring within 30 days.',
-    time: '1 day ago',
-    type: 'compliance',
-    severity: 'warning',
-    unread: false,
-    actionRequired: true,
-    actions: [
-      { label: 'View Staff List', variant: 'default', action: 'view-staff' },
-      { label: 'Send Reminders', variant: 'outline', action: 'send-reminders' }
-    ]
-  },
-  {
-    id: 'alert-9',
-    title: 'System Backup Required',
-    description: 'Weekly system backup needs to be initiated and verified.',
-    time: '2 days ago',
-    type: 'system',
-    severity: 'info',
-    unread: false,
-    actionRequired: true,
-    actions: [
-      { label: 'Run Backup', variant: 'default', action: 'run-backup' },
-      { label: 'View Backup History', variant: 'outline', action: 'view-history' }
-    ]
-  },
-  {
-    id: 'alert-10',
-    eventId: 'evt-018',
-    eventName: 'Conference - Business Summit',
-    title: 'Equipment Request Pending',
-    description: 'Client requested additional sound equipment. Requires approval and vendor coordination.',
-    time: '3 days ago',
-    type: 'event',
-    severity: 'info',
-    unread: false,
-    actionRequired: false,
-    actions: [
-      { label: 'Approve Request', variant: 'default', action: 'approve-request' },
-      { label: 'Contact Vendor', variant: 'outline', action: 'contact-vendor' },
-      { label: 'View Event', variant: 'outline', action: 'view-event' }
-    ]
+function timeAgo(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diffSec = Math.floor((now - then) / 1000);
+  if (diffSec < 60) return 'Just now';
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin} min ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr} hour${diffHr > 1 ? 's' : ''} ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay < 7) return `${diffDay} day${diffDay > 1 ? 's' : ''} ago`;
+  return new Date(dateStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
+function mapPriorityToSeverity(priority: string): 'critical' | 'warning' | 'info' {
+  switch (priority) {
+    case 'high': return 'critical';
+    case 'medium': return 'warning';
+    default: return 'info';
   }
-];
+}
+
+function mapType(type: string): Alert['type'] {
+  const valid: Alert['type'][] = ['event', 'staff', 'payment', 'compliance', 'system', 'critical'];
+  const t = type?.toLowerCase() as Alert['type'];
+  return valid.includes(t) ? t : 'system';
+}
+
+function buildActions(type: string, data?: any): Alert['actions'] {
+  switch (type) {
+    case 'event':
+    case 'shift':
+      return [
+        { label: 'View Event', variant: 'default', action: 'view-event' },
+      ];
+    case 'payment':
+      return [
+        { label: 'View Payment', variant: 'default', action: 'view-payment' },
+      ];
+    case 'staff':
+      return [
+        { label: 'View Staff', variant: 'default', action: 'view-staff' },
+      ];
+    case 'support':
+      return [
+        { label: 'View Ticket', variant: 'default', action: 'view-ticket' },
+      ];
+    default:
+      return [];
+  }
+}
+
+function mapNotificationToAlert(n: any): Alert {
+  const nType = (n.type || 'system').toLowerCase();
+  return {
+    id: n.id,
+    eventId: n.data?.eventId,
+    eventName: n.data?.eventName || n.data?.eventTitle,
+    title: n.title || '',
+    description: n.message || '',
+    time: n.createdAt ? timeAgo(n.createdAt) : '',
+    type: mapType(nType),
+    severity: mapPriorityToSeverity(n.priority || 'medium'),
+    unread: n.unread ?? true,
+    actionRequired: n.actionRequired ?? false,
+    actions: buildActions(nType, n.data),
+  };
+}
 
 export function AlertsProvider({ children }: { children: ReactNode }) {
-  const [alerts, setAlerts] = useState<Alert[]>(initialAlerts);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const socketRef = useRef<Socket | null>(null);
+
+  const fetchAlerts = useCallback(async () => {
+    try {
+      // Fetch notifications that are high priority or action-required — these qualify as alerts
+      const res = await api.get('/notifications?take=50');
+      const raw = res.data?.data || res.data || [];
+      // Filter for alert-worthy notifications: high priority, action required, or alert type
+      const alertItems = (raw as any[]).filter(
+        (n: any) =>
+          n.priority === 'high' ||
+          n.actionRequired === true ||
+          n.type === 'alert' ||
+          n.type === 'critical'
+      );
+      setAlerts(alertItems.map(mapNotificationToAlert));
+    } catch {
+      // Not logged in or API unavailable
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAlerts();
+
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    const socket = io('http://localhost:5000', {
+      auth: { token },
+      transports: ['websocket', 'polling'],
+    });
+    socketRef.current = socket;
+
+    socket.on('notification:new', (data: any) => {
+      // Only surface high-priority / action-required as alerts
+      if (data.priority === 'high' || data.actionRequired || data.type === 'alert' || data.type === 'critical') {
+        setAlerts(prev => [mapNotificationToAlert(data), ...prev]);
+      }
+    });
+
+    const interval = setInterval(fetchAlerts, 60000);
+
+    return () => {
+      socket.disconnect();
+      socketRef.current = null;
+      clearInterval(interval);
+    };
+  }, []);
 
   const unreadCount = alerts.filter(a => a.unread).length;
   const criticalCount = alerts.filter(a => a.severity === 'critical' && a.unread).length;
 
-  const markAsRead = (id: string) => {
-    setAlerts(prev =>
-      prev.map(alert =>
-        alert.id === id ? { ...alert, unread: false } : alert
-      )
-    );
+  const markAsRead = async (id: string) => {
+    setAlerts(prev => prev.map(a => a.id === id ? { ...a, unread: false } : a));
+    try { await api.put(`/notifications/${id}/read`); } catch {}
   };
 
-  const markAllAsRead = () => {
-    setAlerts(prev =>
-      prev.map(alert => ({ ...alert, unread: false }))
-    );
+  const markAllAsRead = async () => {
+    setAlerts(prev => prev.map(a => ({ ...a, unread: false })));
+    try { await api.put('/notifications/read-all'); } catch {}
   };
 
-  const dismissAlert = (id: string) => {
-    setAlerts(prev => prev.filter(alert => alert.id !== id));
+  const dismissAlert = async (id: string) => {
+    setAlerts(prev => prev.filter(a => a.id !== id));
+    try { await api.delete(`/notifications/${id}`); } catch {}
   };
 
   const addAlert = (newAlert: Omit<Alert, 'id'>) => {

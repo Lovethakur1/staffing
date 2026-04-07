@@ -10,6 +10,7 @@ import {
 } from "./ui/dropdown-menu";
 import { XtremeLogo } from "./XtremeLogo";
 import { useAppState } from "../contexts/AppStateContext";
+import { useNotifications } from "../contexts/NotificationsContext";
 import { Badge } from "./ui/badge";
 
 interface HeaderProps {
@@ -30,6 +31,7 @@ export function Header({ currentUser, onLogout }: HeaderProps) {
     endBreak, 
     checkOutShift 
   } = useAppState();
+  const { unreadCount } = useNotifications();
 
   const getRoleColor = (role: string) => {
     switch (role) {
@@ -107,9 +109,11 @@ export function Header({ currentUser, onLogout }: HeaderProps) {
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" className="relative">
             <Bell className="h-5 w-5" />
-            <span className="absolute -top-1 -right-1 w-3 h-3 bg-primary rounded-full text-[10px] flex items-center justify-center text-white">
-              3
-            </span>
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-primary rounded-full text-[10px] flex items-center justify-center text-white px-1">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
           </Button>
           
           <DropdownMenu>

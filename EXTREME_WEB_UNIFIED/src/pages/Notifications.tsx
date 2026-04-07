@@ -17,15 +17,50 @@ import {
   Settings,
   ExternalLink
 } from "lucide-react";
-import { useNotifications } from "../contexts/NotificationsContext";
+import { useNotifications, Notification } from "../contexts/NotificationsContext";
+import { useNavigation } from "../contexts/NavigationContext";
 
 interface NotificationsProps {
   userRole: string;
   userId: string;
 }
 
+function getTargetPage(notification: Notification, userRole: string): { page: string; params?: Record<string, any> } | null {
+  const type = notification.type?.toLowerCase();
+  const data = notification.data || {};
+  switch (type) {
+    case 'shift':
+    case 'event':
+    case 'schedule':
+      if (data.eventId) {
+        return { page: userRole === 'admin' ? 'admin-event-detail' : 'shifts-schedule', params: { eventId: data.eventId } };
+      }
+      return { page: 'shifts-schedule' };
+    case 'payment':
+      return { page: userRole === 'admin' ? 'financial-hub' : 'payroll' };
+    case 'review':
+    case 'feedback':
+      return { page: userRole === 'admin' ? 'client-feedback' : 'performance' };
+    case 'message':
+    case 'msg':
+      return { page: 'messages', params: data.conversationId ? { conversationId: data.conversationId } : undefined };
+    case 'support':
+    case 'ticket':
+      return { page: 'help-support' };
+    case 'timesheet':
+      return { page: 'timesheets' };
+    case 'training':
+      return { page: 'training' };
+    case 'compliance':
+      return { page: 'certifications' };
+    default:
+      return null;
+  }
+}
+
 export function Notifications({ userRole }: NotificationsProps) {
   const [filter, setFilter] = useState<'all' | 'unread' | 'read'>('all');
+  const { setCurrentPage } = useNavigation();
 
   const { 
     notifications: allNotifications, 
@@ -163,11 +198,16 @@ export function Notifications({ userRole }: NotificationsProps) {
                       return (
                         <div 
                           key={notification.id} 
-                          className={`group p-3 sm:p-4 border rounded-lg transition-all duration-200 hover:shadow-md border-l-4 ${
+                          className={`group p-3 sm:p-4 border rounded-lg transition-all duration-200 hover:shadow-md border-l-4 cursor-pointer ${
                             notification.unread 
                               ? 'bg-accent/30 border-l-primary border-primary/20 hover:border-primary/30' 
                               : 'bg-background border-l-transparent hover:border-l-muted-foreground/20'
                           }`}
+                          onClick={() => {
+                            if (notification.unread) markAsRead(notification.id);
+                            const target = getTargetPage(notification, userRole);
+                            if (target) setCurrentPage(target.page, target.params);
+                          }}
                         >
                           <div className="flex items-start gap-2 sm:gap-3">
                             <div className={`w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0 rounded-full flex items-center justify-center transition-colors ${getNotificationColor(notification.type)}`}>
@@ -208,7 +248,12 @@ export function Notifications({ userRole }: NotificationsProps) {
                               
                               <div className="flex items-center justify-between flex-wrap gap-2">
                                 {notification.actionRequired && (
-                                  <Button size="sm" variant="default" className="text-xs h-7">
+                                  <Button size="sm" variant="default" className="text-xs h-7" onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (notification.unread) markAsRead(notification.id);
+                                    const target = getTargetPage(notification, userRole);
+                                    if (target) setCurrentPage(target.page, target.params);
+                                  }}>
                                     <ExternalLink className="w-3 h-3 mr-1" />
                                     <span className="hidden sm:inline">Take Action</span>
                                     <span className="sm:hidden">Action</span>
@@ -262,7 +307,12 @@ export function Notifications({ userRole }: NotificationsProps) {
                       return (
                         <div 
                           key={notification.id} 
-                          className="group p-3 sm:p-4 border rounded-lg transition-all duration-200 hover:shadow-md border-l-4 bg-accent/30 border-l-primary border-primary/20 hover:border-primary/30"
+                          className="group p-3 sm:p-4 border rounded-lg transition-all duration-200 hover:shadow-md border-l-4 bg-accent/30 border-l-primary border-primary/20 hover:border-primary/30 cursor-pointer"
+                          onClick={() => {
+                            markAsRead(notification.id);
+                            const target = getTargetPage(notification, userRole);
+                            if (target) setCurrentPage(target.page, target.params);
+                          }}
                         >
                           <div className="flex items-start gap-2 sm:gap-3">
                             <div className={`w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0 rounded-full flex items-center justify-center transition-colors ${getNotificationColor(notification.type)}`}>
@@ -301,7 +351,12 @@ export function Notifications({ userRole }: NotificationsProps) {
                               
                               <div className="flex items-center justify-between flex-wrap gap-2">
                                 {notification.actionRequired && (
-                                  <Button size="sm" variant="default" className="text-xs h-7">
+                                  <Button size="sm" variant="default" className="text-xs h-7" onClick={(e) => {
+                                    e.stopPropagation();
+                                    markAsRead(notification.id);
+                                    const target = getTargetPage(notification, userRole);
+                                    if (target) setCurrentPage(target.page, target.params);
+                                  }}>
                                     <ExternalLink className="w-3 h-3 mr-1" />
                                     <span className="hidden sm:inline">Take Action</span>
                                     <span className="sm:hidden">Action</span>
@@ -353,7 +408,11 @@ export function Notifications({ userRole }: NotificationsProps) {
                       return (
                         <div 
                           key={notification.id} 
-                          className="group p-3 sm:p-4 border rounded-lg transition-all duration-200 hover:shadow-sm border-l-4 bg-background border-l-transparent hover:border-l-muted-foreground/20 opacity-80 hover:opacity-100"
+                          className="group p-3 sm:p-4 border rounded-lg transition-all duration-200 hover:shadow-sm border-l-4 bg-background border-l-transparent hover:border-l-muted-foreground/20 opacity-80 hover:opacity-100 cursor-pointer"
+                          onClick={() => {
+                            const target = getTargetPage(notification, userRole);
+                            if (target) setCurrentPage(target.page, target.params);
+                          }}
                         >
                           <div className="flex items-start gap-2 sm:gap-3">
                             <div className={`w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0 rounded-full flex items-center justify-center transition-colors ${getNotificationColor(notification.type)} opacity-75`}>

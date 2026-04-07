@@ -53,8 +53,13 @@ export const listInvoices = asyncHandler(async (req: AuthRequest, res: Response)
  * GET /api/invoices/:id
  */
 export const getInvoice = asyncHandler(async (req: Request, res: Response) => {
-  const invoice = await prisma.invoice.findUnique({
-    where: { id: req.params.id },
+  const param = req.params.id;
+  
+  // Support lookup by invoiceNumber (INV-...) or by UUID
+  const isInvoiceNumber = param.startsWith('INV-');
+  
+  const invoice = await prisma.invoice.findFirst({
+    where: isInvoiceNumber ? { invoiceNumber: param } : { id: param },
     include: {
       client: { include: { user: { select: { name: true, email: true, phone: true } } } },
       event: { select: { id: true, title: true, venue: true, date: true } },

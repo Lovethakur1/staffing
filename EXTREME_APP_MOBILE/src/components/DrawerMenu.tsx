@@ -16,19 +16,19 @@ import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Colors } from '../theme';
 import { useAuth } from '../context/AuthContext';
-import { RootStackParamList, MainTabParamList } from '../types';
+import { RootStackParamList, MainTabParamList, ManagerTabParamList } from '../types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const DRAWER_WIDTH = Math.min(SCREEN_WIDTH * 0.82, 320);
 const logoImg = require('../../assets/logo.png');
 
-type TabName = keyof MainTabParamList;
+type TabName = keyof MainTabParamList | keyof ManagerTabParamList;
 type RootNavProp = NativeStackNavigationProp<RootStackParamList>;
 
 interface DrawerMenuProps {
   isOpen: boolean;
-  activeTab: TabName;
-  onNavigate: (tab: TabName) => void;
+  activeTab: TabName | string;
+  onNavigate: (tab: any) => void;
   onClose: () => void;
   navigation: RootNavProp;
 }
@@ -51,6 +51,8 @@ export function DrawerMenu({ isOpen, activeTab, onNavigate, onClose, navigation 
   const { user, logout } = useAuth();
   const slideAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
+  
+  const isManager = user?.role === 'MANAGER';
 
   useEffect(() => {
     if (isOpen) {
@@ -103,7 +105,8 @@ export function DrawerMenu({ isOpen, activeTab, onNavigate, onClose, navigation 
     }, 150);
   };
 
-  const navSections: NavSection[] = [
+  // Staff navigation sections
+  const staffNavSections: NavSection[] = [
     {
       title: 'MAIN NAVIGATION',
       items: [
@@ -135,12 +138,6 @@ export function DrawerMenu({ isOpen, activeTab, onNavigate, onClose, navigation 
       ],
     },
     {
-      title: 'COMMUNICATION',
-      items: [
-        { label: 'Messages', icon: 'mail-outline', tab: 'Inbox' },
-      ],
-    },
-    {
       title: 'SUPPORT & RESOURCES',
       items: [
         { label: 'Analytics', icon: 'bar-chart-outline', screen: 'Analytics' },
@@ -150,6 +147,66 @@ export function DrawerMenu({ isOpen, activeTab, onNavigate, onClose, navigation 
       ],
     },
   ];
+
+  // Manager navigation sections
+  const managerNavSections: NavSection[] = [
+    {
+      title: 'MAIN NAVIGATION',
+      items: [
+        { label: 'Home', icon: 'home-outline', tab: 'ManagerDashboard' },
+        { label: 'My Shifts', icon: 'calendar-outline', tab: 'ManagerMyShifts' },
+        { label: 'Inbox', icon: 'chatbubble-outline', tab: 'ManagerInbox' },
+        { label: 'Profile', icon: 'person-outline', tab: 'ManagerProfile' },
+      ],
+    },
+    {
+      title: 'MANAGEMENT',
+      items: [
+        { label: 'Events', icon: 'calendar-outline', screen: 'ManagerEvents' },
+        { label: 'Staff', icon: 'people-outline', screen: 'ManagerStaff' },
+        { label: 'Timesheets', icon: 'document-text-outline', screen: 'ManagerTimesheets' },
+        { label: 'Incidents', icon: 'warning-outline', screen: 'ManagerIncidents' },
+      ],
+    },
+    {
+      title: 'REPORTS & ANALYTICS',
+      items: [
+        { label: 'Reports', icon: 'bar-chart-outline', screen: 'ManagerReports' },
+        { label: 'Analytics', icon: 'stats-chart-outline', screen: 'Analytics' },
+      ],
+    },
+    {
+      title: 'MY TIME & PAY',
+      items: [
+        { label: 'My Timesheets', icon: 'document-text-outline', screen: 'Timesheets' },
+        { label: 'My Payroll', icon: 'cash-outline', screen: 'Payroll' },
+      ],
+    },
+    {
+      title: 'TRAINING & DEVELOPMENT',
+      items: [
+        { label: 'Training Portal', icon: 'school-outline', screen: 'TrainingPortal' },
+        { label: 'My Certifications', icon: 'ribbon-outline', screen: 'Certifications' },
+      ],
+    },
+    {
+      title: 'PERFORMANCE & DOCS',
+      items: [
+        { label: 'Performance', icon: 'trending-up-outline', screen: 'Performance' },
+        { label: 'Documents', icon: 'folder-outline', screen: 'Documents' },
+      ],
+    },
+    {
+      title: 'SUPPORT & RESOURCES',
+      items: [
+        { label: 'Resources', icon: 'library-outline', screen: 'Resources' },
+        { label: 'Help & Support', icon: 'headset-outline', screen: 'HelpSupport' },
+        { label: 'Documentation', icon: 'book-outline', screen: 'Documentation' },
+      ],
+    },
+  ];
+
+  const navSections = isManager ? managerNavSections : staffNavSections;
 
   const roleName = (user?.role || 'STAFF').charAt(0) + (user?.role || 'STAFF').slice(1).toLowerCase();
   const initials = (user?.name || 'U')

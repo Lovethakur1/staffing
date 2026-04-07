@@ -13,6 +13,8 @@
 !/EXTREME_WEB_UNIFIED/
 !/EXTREME_WEB_UNIFIED/**
 
+dailyreport.txt
+
 # Also allow Git configuration files so they are saved
 !/.gitignore
 !/.gitattributes

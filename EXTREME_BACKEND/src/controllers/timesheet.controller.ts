@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { asyncHandler, parsePagination } from '../utils/helpers';
+import { sendNotification, sendBulkNotification, sendRoleNotification } from '../services/notification.service';
 
 // ═══════════════════════════════════════════════════════════════════
 // Timesheets
@@ -120,6 +121,30 @@ export const updateTimesheet = asyncHandler(async (req: AuthRequest, res: Respon
       shift: { select: { id: true, event: { select: { title: true } } } },
     },
   });
+
+  // Notify staff when timesheet status changes
+  try {
+    const eventTitle = ts.shift?.event?.title || 'your shift';
+    if (status === 'APPROVED') {
+      await sendNotification({
+        userId: ts.staff.id,
+        title: 'Timesheet Approved',
+        message: `Your timesheet for "${eventTitle}" has been approved.`,
+        type: 'payment',
+        category: 'finance',
+      });
+    } else if (status === 'REJECTED') {
+      await sendNotification({
+        userId: ts.staff.id,
+        title: 'Timesheet Rejected',
+        message: `Your timesheet for "${eventTitle}" was rejected. ${notes ? 'Reason: ' + notes : 'Check with your manager.'}`,
+        type: 'payment',
+        category: 'finance',
+        priority: 'high',
+        actionRequired: true,
+      });
+    }
+  } catch {}
 
   res.json(ts);
 });
@@ -278,6 +303,20 @@ export const createPayrollRun = asyncHandler(async (req: AuthRequest, res: Respo
     },
   });
 
+  // Notify each staff member in the payroll run
+  try {
+    const period = `${start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} – ${end.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`;
+    const staffIds = items.map((item: any) => item.staffId).filter(Boolean);
+    if (staffIds.length > 0) {
+      await sendBulkNotification(staffIds, {
+        title: 'Payslip Ready',
+        message: `Your payslip for ${period} is ready. Check your Payroll page.`,
+        type: 'payment',
+        category: 'finance',
+      });
+    }
+  } catch {}
+
   res.status(201).json(payrollRun);
 });
 
@@ -298,6 +337,24 @@ export const updatePayrollRun = asyncHandler(async (req: Request, res: Response)
       items: true,
     },
   });
+
+  // Notify staff when payroll is paid out
+  try {
+    if (status === 'PAID' || status === 'COMPLETED') {
+      const staffIds = run.items.map((item: any) => item.staffId).filter(Boolean);
+      if (staffIds.length > 0) {
+        await sendBulkNotification(staffIds, {
+          title: status === 'PAID' ? 'Payment Sent' : 'Payroll Processed',
+          message: status === 'PAID'
+            ? 'Your payment has been processed. Funds will arrive within 2-3 business days.'
+            : 'Your payroll has been processed and is pending payment.',
+          type: 'payment',
+          category: 'finance',
+          priority: 'high',
+        });
+      }
+    }
+  } catch {}
 
   res.json(run);
 });

@@ -5,11 +5,12 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AppHeader } from './AppHeader';
 import { DrawerMenu } from './DrawerMenu';
 import { useAuth } from '../context/AuthContext';
-import { RootStackParamList, MainTabParamList } from '../types';
+import { useSocket } from '../context/SocketContext';
+import { RootStackParamList, MainTabParamList, ManagerTabParamList } from '../types';
 import api from '../config/api';
 
 type RootNavProp = NativeStackNavigationProp<RootStackParamList>;
-type TabName = keyof MainTabParamList;
+type TabName = keyof MainTabParamList | keyof ManagerTabParamList;
 
 interface ScreenLayoutProps {
   children: React.ReactNode;
@@ -24,6 +25,7 @@ interface ScreenLayoutProps {
  */
 export function ScreenLayout({ children, activeTab, notificationCount = 0 }: ScreenLayoutProps) {
   const { user } = useAuth();
+  const { unreadNotifCount } = useSocket();
   const navigation = useNavigation<RootNavProp>();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [globalUnread, setGlobalUnread] = useState(0);
@@ -43,19 +45,29 @@ export function ScreenLayout({ children, activeTab, notificationCount = 0 }: Scr
     }, [])
   );
 
+  // Combine: API-fetched count + socket real-time count
+  const totalUnread = notificationCount > 0 ? notificationCount : Math.max(globalUnread, unreadNotifCount);
+
+  // Check if user is a manager
+  const isManager = user?.role === 'MANAGER';
+
   const handleNavigateTab = useCallback(
     (tab: TabName) => {
-      // Navigate to the Main screen and specify the nested tab
-      (navigation as any).navigate('Main', { screen: tab });
+      // Navigate to the appropriate tab navigator based on role
+      if (isManager) {
+        (navigation as any).navigate('ManagerMain', { screen: tab });
+      } else {
+        (navigation as any).navigate('Main', { screen: tab });
+      }
     },
-    [navigation]
+    [navigation, isManager]
   );
 
   return (
     <View style={styles.root}>
       <AppHeader
         userName={user?.name}
-        notificationCount={notificationCount > 0 ? notificationCount : globalUnread}
+        notificationCount={totalUnread}
         onMenuPress={() => setDrawerOpen(true)}
         onNotificationPress={() => navigation.navigate('Notifications')}
       />
