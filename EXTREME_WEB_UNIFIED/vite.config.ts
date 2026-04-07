@@ -62,7 +62,6 @@
     },
     server: {
       port: 4000,
-      open: true,
       proxy: {
         '/api': {
           target: 'https://conception-pokies-nonalphabetically.ngrok-free.dev',
