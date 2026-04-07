@@ -57,7 +57,7 @@
       outDir: 'build',
     },
     server: {
-      port: 3000,
+      port: 4000,
       open: true,
       proxy: {
         '/api': {
