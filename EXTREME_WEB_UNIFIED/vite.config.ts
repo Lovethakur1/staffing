@@ -59,6 +59,22 @@
     preview: {
       port: 4000,
       host: true,
+      proxy: {
+        '/api': {
+          target: 'https://conception-pokies-nonalphabetically.ngrok-free.dev',
+          changeOrigin: true,
+          secure: false,
+          headers: {
+            'ngrok-skip-browser-warning': 'true',
+          },
+        },
+        '/socket.io': {
+          target: 'https://conception-pokies-nonalphabetically.ngrok-free.dev',
+          changeOrigin: true,
+          secure: false,
+          ws: true,
+        },
+      },
     },
     server: {
       port: 4000,
