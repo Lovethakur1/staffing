@@ -2,7 +2,7 @@ import * as React from "react";
 import { Card, CardContent } from "./card";
 import { Badge } from "./badge";
 import { Button } from "./button";
-import { cn } from "../../lib/utils";
+import { cn } from "./utils";
 
 interface ResponsiveCardGridProps<T> {
   data: T[];

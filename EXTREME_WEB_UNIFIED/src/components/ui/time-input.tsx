@@ -5,6 +5,7 @@ import { Clock } from "lucide-react";
 
 interface TimeInputProps {
   value?: string; // Format: "14:30" or "2:30 PM"
+  defaultValue?: string;
   onChange?: (value: string) => void;
   placeholder?: string;
   required?: boolean;

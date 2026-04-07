@@ -54,6 +54,7 @@ import { reviewService } from "../services/review.service";
 interface EventStaffDetailsProps {
   userRole: string;
   userId: string;
+  eventId?: string;
 }
 
 interface StaffRating {

@@ -202,7 +202,7 @@ export function Analytics({ userRole, userId }: AnalyticsProps) {
         </Card>
       ) : (
       <div className="adaptive-stats-grid">
-        {analyticsData.metrics.map((metric, index) => (
+        {analyticsData.metrics.map((metric: any, index: number) => (
           <Card key={index} className="p-4 sm:p-6">
             <CardHeader className="pb-2 px-0">
               <CardTitle className="text-xs sm:text-sm text-muted-foreground">
@@ -292,7 +292,7 @@ export function Analytics({ userRole, userId }: AnalyticsProps) {
                     paddingAngle={5}
                     dataKey="value"
                   >
-                    {categoryData.map((entry, index) => (
+                    {categoryData.map((entry: any, index: number) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
@@ -301,7 +301,7 @@ export function Analytics({ userRole, userId }: AnalyticsProps) {
               </ResponsiveContainer>
             </div>
             <div className="flex flex-wrap gap-2 sm:gap-3 mt-4">
-              {categoryData.map((item) => (
+              {categoryData.map((item: any) => (
                 <div key={item.name} className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
                   <span className="text-xs sm:text-sm text-foreground">{item.name}</span>
@@ -333,7 +333,7 @@ export function Analytics({ userRole, userId }: AnalyticsProps) {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {eventCategoryAnalytics.map((category, index) => (
+              {eventCategoryAnalytics.map((category: any, index: number) => (
                 <Card key={index} className="p-6 hover:shadow-lg transition-shadow">
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center gap-3">

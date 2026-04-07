@@ -103,70 +103,70 @@ export function FinancialManagement({ clientId }: FinancialManagementProps) {
   // Define columns for invoices table
   const invoiceColumns = [
     {
-      accessorKey: "invoiceNumber",
-      header: "Invoice",
-      cell: ({ row }: any) => (
+      key: "invoiceNumber",
+      title: "Invoice",
+      render: (_value: any, row: any) => (
         <div className="flex items-center gap-2">
-          {getUrgencyIcon(row.original.status, row.original.dueDate)}
+          {getUrgencyIcon(row.status, row.dueDate)}
           <div>
-            <p className="font-medium">#{row.original.invoiceNumber}</p>
-            <p className="text-sm text-muted-foreground">{row.original.eventTitle}</p>
+            <p className="font-medium">#{row.invoiceNumber}</p>
+            <p className="text-sm text-muted-foreground">{row.eventTitle}</p>
           </div>
         </div>
       )
     },
     {
-      accessorKey: "issueDate",
-      header: "Issue Date",
-      cell: ({ row }: any) => (
+      key: "issueDate",
+      title: "Issue Date",
+      render: (_value: any, row: any) => (
         <div className="text-sm">
-          <p>{row.original.issueDate}</p>
-          <p className="text-muted-foreground">Due: {row.original.dueDate}</p>
+          <p>{row.issueDate}</p>
+          <p className="text-muted-foreground">Due: {row.dueDate}</p>
         </div>
       )
     },
     {
-      accessorKey: "amount",
-      header: "Amount",
-      cell: ({ row }: any) => (
+      key: "amount",
+      title: "Amount",
+      render: (_value: any, row: any) => (
         <div className="text-right">
-          <p className="font-medium">{formatCurrency(row.original.amount)}</p>
-          {row.original.tipAmount > 0 && (
-            <p className="text-sm text-muted-foreground">+{formatCurrency(row.original.tipAmount)} tip</p>
+          <p className="font-medium">{formatCurrency(row.amount)}</p>
+          {row.tipAmount > 0 && (
+            <p className="text-sm text-muted-foreground">+{formatCurrency(row.tipAmount)} tip</p>
           )}
         </div>
       )
     },
     {
-      accessorKey: "status",
-      header: "Status",
-      cell: ({ row }: any) => (
-        <Badge className={getStatusColor(row.original.status)}>
-          {row.original.status.charAt(0).toUpperCase() + row.original.status.slice(1)}
+      key: "status",
+      title: "Status",
+      render: (_value: any, row: any) => (
+        <Badge className={getStatusColor(row.status)}>
+          {row.status.charAt(0).toUpperCase() + row.status.slice(1)}
         </Badge>
       )
     },
     {
-      accessorKey: "actions",
-      header: "Actions",
-      cell: ({ row }: any) => (
+      key: "actions",
+      title: "Actions",
+      render: (_value: any, row: any) => (
         <div className="flex items-center gap-2">
           <Button
             size="sm"
             variant="outline"
             onClick={() => {
-              setSelectedInvoice(row.original);
+              setSelectedInvoice(row);
               setShowInvoiceDialog(true);
             }}
           >
             <Eye className="h-4 w-4 mr-2" />
             View
           </Button>
-          {row.original.status === 'pending' && (
+          {row.status === 'pending' && (
             <Button
               size="sm"
               onClick={() => {
-                setSelectedInvoice(row.original);
+                setSelectedInvoice(row);
                 setShowPaymentDialog(true);
               }}
             >

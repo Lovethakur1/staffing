@@ -337,6 +337,7 @@ export function EventRequestDetail({ userRole, userId }: EventRequestDetailProps
 
   const handleApprove = async () => {
     if (!validateForm()) return;
+    if (!request) return;
     setIsCreating(true);
     try {
       await eventService.updateEvent(request.id, { 
@@ -399,6 +400,7 @@ export function EventRequestDetail({ userRole, userId }: EventRequestDetailProps
       toast.error("Please add admin notes explaining the rejection reason");
       return;
     }
+    if (!request) return;
     try {
       await eventService.updateEvent(request.id, { 
         status: 'CANCELLED',

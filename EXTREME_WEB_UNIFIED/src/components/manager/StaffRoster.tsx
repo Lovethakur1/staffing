@@ -69,6 +69,7 @@ export function StaffRoster({ managerId, events }: StaffRosterProps) {
   const managedStaff: StaffMember[] = useMemo(() => 
     mockStaff.map((staff, index) => ({
       ...staff,
+      role: staff.role || staff.skills?.[0] || 'General Staff',
       currentStatus: staff.isActive ? 'on-shift' : 'off-duty' as any,
       currentLocation: staff.isActive ? {
         lat: 40.7128 + (index * 0.001 - 0.005),

@@ -436,7 +436,7 @@ export function AdminEventDetail({ userRole = 'admin' }: AdminEventDetailProps) 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
 
-  const filteredStaff = staffMembers.filter(staff => {
+  const filteredStaff = staffMembers.filter((staff: any) => {
     const nameMatch = staff.name.toLowerCase().includes(searchTerm.toLowerCase());
     const statusMatch = filterStatus === 'all' || staff.status === filterStatus;
     return nameMatch && statusMatch;
@@ -658,7 +658,7 @@ export function AdminEventDetail({ userRole = 'admin' }: AdminEventDetailProps) 
         )}
 
         {/* Critical Alerts */}
-        {staffMembers.filter(s => s.status === 'not-arrived').length > 0 && (
+        {staffMembers.filter((s: any) => s.status === 'not-arrived').length > 0 && (
           <Card className="border-destructive/50 bg-destructive/5">
             <CardContent className="pt-6">
               <div className="flex items-start gap-3">
@@ -666,7 +666,7 @@ export function AdminEventDetail({ userRole = 'admin' }: AdminEventDetailProps) 
                 <div className="flex-1">
                   <h3 className="font-medium text-destructive mb-1">Critical Alert: Staff Not Arrived</h3>
                   <p className="text-muted-foreground mb-3">
-                    {staffMembers.filter(s => s.status === 'not-arrived').length} staff member(s) have not checked in yet. Event started 15 minutes ago.
+                    {staffMembers.filter((s: any) => s.status === 'not-arrived').length} staff member(s) have not checked in yet. Event started 15 minutes ago.
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <Button size="sm" variant="destructive">
@@ -842,7 +842,7 @@ export function AdminEventDetail({ userRole = 'admin' }: AdminEventDetailProps) 
                   <div className="flex items-start gap-3">
                     <Avatar className="h-12 w-12">
                       <AvatarFallback className="bg-primary text-primary-foreground">
-                        {event.client.split(' ').map(n => n[0]).join('')}
+                        {event.client.split(' ').map((n: string) => n[0]).join('')}
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-1">
@@ -942,7 +942,7 @@ export function AdminEventDetail({ userRole = 'admin' }: AdminEventDetailProps) 
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {filteredStaff.map((staff) => (
+                  {filteredStaff.map((staff: any) => (
                     <div
                       key={staff.id}
                       className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors group"
@@ -986,7 +986,7 @@ export function AdminEventDetail({ userRole = 'admin' }: AdminEventDetailProps) 
                             </span>
                           </div>
                           <div className="flex flex-wrap gap-1 mt-2">
-                            {staff.certifications.map((cert, idx) => (
+                            {staff.certifications.map((cert: string, idx: number) => (
                               <Badge key={idx} variant="secondary" className="text-xs">
                                 <Shield className="w-3 h-3 mr-1" />
                                 {cert}
@@ -1341,7 +1341,7 @@ export function AdminEventDetail({ userRole = 'admin' }: AdminEventDetailProps) 
                       </div>
 
                       <div className="flex flex-wrap gap-1 mt-2">
-                        {staff.certifications.slice(0, 2).map((cert, idx) => (
+                        {staff.certifications.slice(0, 2).map((cert: string, idx: number) => (
                           <Badge key={idx} variant="secondary" className="text-xs py-0">
                             {cert}
                           </Badge>

@@ -48,6 +48,8 @@ export interface Staff {
   documents: { type: string; status: 'pending' | 'approved' | 'rejected' }[];
   isActive: boolean;
   joinDate: string;
+  role?: string;
+  specialty?: string;
 }
 
 export interface Shift {
@@ -66,6 +68,7 @@ export interface Shift {
   totalHours?: number;
   totalPay?: number;
   rate?: number; // For compatibility
+  eventTitle?: string;
 }
 
 export interface Rating {

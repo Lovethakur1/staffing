@@ -61,7 +61,7 @@ export function ShiftDetailsDialog({
   }
 
   function getStatusBadge() {
-    switch (shift.status) {
+    switch (shift!.status) {
       case 'pending':
         return <Badge className="bg-warning text-warning-foreground">Pending Response</Badge>;
       case 'confirmed':
@@ -73,7 +73,7 @@ export function ShiftDetailsDialog({
       case 'rejected':
         return <Badge className="bg-destructive text-destructive-foreground">Declined</Badge>;
       default:
-        return <Badge variant="outline">{shift.status}</Badge>;
+        return <Badge variant="outline">{shift!.status}</Badge>;
     }
   }
 

@@ -1,7 +1,7 @@
 import * as React from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./dialog";
 import { Button } from "./button";
-import { cn } from "../../lib/utils";
+import { cn } from "./utils";
 
 interface ResponsiveDialogProps {
   open: boolean;

@@ -10,7 +10,7 @@ export interface Invoice {
   eventDate: string;
   eventLocation: string;
   amount: number;
-  status: 'paid' | 'pending' | 'overdue' | 'draft' | 'cancelled';
+  status: 'paid' | 'pending' | 'overdue' | 'draft' | 'cancelled' | 'sent' | 'awaiting_verification';
   issueDate: string;
   dueDate: string;
   paidDate?: string;

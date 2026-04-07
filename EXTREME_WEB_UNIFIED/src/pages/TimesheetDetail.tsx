@@ -407,7 +407,7 @@ export function TimesheetDetail({ userRole }: TimesheetDetailProps) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {timesheetData.shifts.map((shift) => (
+                {timesheetData.shifts.map((shift: any) => (
                   <TableRow key={shift.id} className="hover:bg-muted/30">
                     <TableCell>
                       <div>

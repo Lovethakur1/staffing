@@ -596,7 +596,7 @@ export function ManagerEventDetail({ userRole, userId, eventId }: ManagerEventDe
             </CardContent></Card>
           }>
             <LiveStaffMap
-              eventId={resolvedEventId}
+              eventId={currentEventId}
               venueLat={apiEvent?.locationLat}
               venueLng={apiEvent?.locationLng}
               venueName={event.venue || event.title}

@@ -142,6 +142,7 @@ export function InvoiceDetail({ userRole }: InvoiceDetailProps) {
   };
 
   const handleDownloadPDF = () => {
+    if (!invoice) return;
     toast.success(`Downloading invoice ${invoice.id} as PDF`);
   };
 
@@ -151,6 +152,7 @@ export function InvoiceDetail({ userRole }: InvoiceDetailProps) {
   };
 
   const handleSendEmail = () => {
+    if (!invoice) return;
     toast.success(`Sending invoice ${invoice.id} to ${invoice.clientEmail}`);
   };
 
@@ -166,7 +168,7 @@ export function InvoiceDetail({ userRole }: InvoiceDetailProps) {
         paymentMethod,
         notes: paymentNotes || undefined,
       } as any);
-      toast.success(`Invoice ${invoice.id} marked as PAID via ${paymentMethod}`);
+      toast.success(`Invoice ${invoice!.id} marked as PAID via ${paymentMethod}`);
       setShowMarkPaidDialog(false);
       setPaymentMethod("");
       setPaymentNotes("");
@@ -179,11 +181,13 @@ export function InvoiceDetail({ userRole }: InvoiceDetailProps) {
   };
 
   const handleSendReminder = () => {
+    if (!invoice) return;
     setShowSendReminderDialog(true);
     setReminderMessage(`Dear ${invoice.clientName},\n\nThis is a friendly reminder that invoice ${invoice.id} for "${invoice.eventName}" in the amount of $${invoice.amount.toLocaleString()} is ${invoice.status === 'overdue' ? 'now overdue' : 'pending payment'}.\n\nDue Date: ${invoice.dueDate}\nAmount Due: $${invoice.amount.toLocaleString()}\n\nPlease remit payment at your earliest convenience.\n\nThank you for your business!\n\nBest regards,\nElite Event Staffing`);
   };
 
   const handleConfirmSendReminder = () => {
+    if (!invoice) return;
     toast.success(`Payment reminder sent to ${invoice.clientName} at ${invoice.clientEmail}`);
     setShowSendReminderDialog(false);
     setReminderMessage("");
@@ -200,7 +204,7 @@ export function InvoiceDetail({ userRole }: InvoiceDetailProps) {
         status: 'CANCELLED',
         notes: cancellationReason,
       });
-      toast.success(`Invoice ${invoice.id} has been CANCELLED`);
+      toast.success(`Invoice ${invoice!.id} has been CANCELLED`);
       setShowCancelDialog(false);
       setCancellationReason("");
       fetchInvoice();
@@ -289,14 +293,17 @@ export function InvoiceDetail({ userRole }: InvoiceDetailProps) {
   };
 
   const handleResendInvoice = () => {
+    if (!invoice) return;
     toast.success(`Invoice ${invoice.id} resent to ${invoice.clientEmail}`);
   };
 
   const handleDuplicate = () => {
+    if (!invoice) return;
     toast.success(`Created duplicate of invoice ${invoice.id}`);
   };
 
   const handleApplyLateFee = () => {
+    if (!invoice) return;
     toast.success(`Late fee of $250 applied to invoice ${invoice.id}`);
   };
 

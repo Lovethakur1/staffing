@@ -8,6 +8,9 @@ interface RouteMapProps {
   className?: string;
   provider?: 'google' | 'leaflet' | 'mock' | 'figma'; 
   onClose?: () => void;
+  showControls?: boolean;
+  simulateNavigation?: boolean;
+  onReachDestination?: () => void;
 }
 
 export function RouteMap({ provider = 'leaflet', ...props }: RouteMapProps) {

@@ -71,61 +71,61 @@ export function ComprehensiveClientDashboard({ clientId }: ComprehensiveClientDa
   // Define columns for the bookings table
   const bookingColumns = [
     {
-      accessorKey: "title",
-      header: "Event",
-      cell: ({ row }: any) => (
+      key: "title",
+      title: "Event",
+      render: (_value: any, row: any) => (
         <div className="space-y-1">
-          <p className="font-medium">{row.original.title}</p>
-          <p className="text-sm text-muted-foreground">{row.original.eventType}</p>
+          <p className="font-medium">{row.title}</p>
+          <p className="text-sm text-muted-foreground">{row.eventType}</p>
         </div>
       )
     },
     {
-      accessorKey: "date",
-      header: "Date & Time",
-      cell: ({ row }: any) => (
+      key: "date",
+      title: "Date & Time",
+      render: (_value: any, row: any) => (
         <div className="space-y-1">
-          <p className="font-medium">{row.original.date}</p>
-          <p className="text-sm text-muted-foreground">{row.original.startTime} - {row.original.endTime}</p>
+          <p className="font-medium">{row.date}</p>
+          <p className="text-sm text-muted-foreground">{row.startTime} - {row.endTime}</p>
         </div>
       )
     },
     {
-      accessorKey: "location",
-      header: "Location",
-      cell: ({ row }: any) => (
+      key: "location",
+      title: "Location",
+      render: (_value: any, row: any) => (
         <div className="flex items-center gap-2">
           <MapPin className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm">{row.original.location}</span>
+          <span className="text-sm">{row.location}</span>
         </div>
       )
     },
     {
-      accessorKey: "staffRequired",
-      header: "Staff",
-      cell: ({ row }: any) => (
+      key: "staffRequired",
+      title: "Staff",
+      render: (_value: any, row: any) => (
         <div className="flex items-center gap-2">
           <Users className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm">{row.original.assignedStaff.length}/{row.original.staffRequired}</span>
+          <span className="text-sm">{row.assignedStaff.length}/{row.staffRequired}</span>
         </div>
       )
     },
     {
-      accessorKey: "budget",
-      header: "Budget",
-      cell: ({ row }: any) => (
+      key: "budget",
+      title: "Budget",
+      render: (_value: any, row: any) => (
         <div className="flex items-center gap-2">
           <DollarSign className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium">${row.original.budget.toLocaleString()}</span>
+          <span className="font-medium">${row.budget.toLocaleString()}</span>
         </div>
       )
     },
     {
-      accessorKey: "status",
-      header: "Status",
-      cell: ({ row }: any) => (
-        <Badge className={getStatusColor(row.original.status)}>
-          {row.original.status.charAt(0).toUpperCase() + row.original.status.slice(1)}
+      key: "status",
+      title: "Status",
+      render: (_value: any, row: any) => (
+        <Badge className={getStatusColor(row.status)}>
+          {row.status.charAt(0).toUpperCase() + row.status.slice(1)}
         </Badge>
       )
     }

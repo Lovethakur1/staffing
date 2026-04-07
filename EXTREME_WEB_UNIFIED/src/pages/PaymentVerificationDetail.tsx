@@ -326,7 +326,7 @@ export function PaymentVerificationDetail({ userRole }: PaymentVerificationDetai
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {payment.breakdown.map((item, index) => (
+                      {payment.breakdown.map((item: any, index: number) => (
                         <TableRow key={index}>
                           <TableCell className="font-medium">{item.item}</TableCell>
                           <TableCell className="text-right">{item.quantity}</TableCell>
@@ -391,7 +391,7 @@ export function PaymentVerificationDetail({ userRole }: PaymentVerificationDetai
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {payment.attachmentDetails.map((doc) => (
+                  {payment.attachmentDetails.map((doc: any) => (
                     <div key={doc.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-slate-50 transition-colors">
                       <div className="flex items-center gap-3">
                         {doc.type.includes('image') ? (

@@ -52,6 +52,8 @@ export interface DataTableProps<T = any> {
   title?: string;
   subtitle?: string;
   searchable?: boolean;
+  searchPlaceholder?: string;
+  searchKey?: string;
   exportable?: boolean;
   refreshable?: boolean;
   onRefresh?: () => void;
