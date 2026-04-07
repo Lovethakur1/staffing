@@ -130,7 +130,7 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
     const token = localStorage.getItem('token');
     if (!token) return;
 
-    const socket = io('http://localhost:5000', {
+    const socket = io(import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000', {
       auth: { token },
       transports: ['websocket', 'polling'],
     });

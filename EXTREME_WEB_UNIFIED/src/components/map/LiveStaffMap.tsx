@@ -426,7 +426,7 @@ export default function LiveStaffMap({
     }
 
     const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-    const socketUrl = apiUrl.replace('/api', '');
+    const socketUrl = import.meta.env.VITE_SOCKET_URL || apiUrl.replace('/api', '');
     console.log('[LiveStaffMap] Connecting socket to:', socketUrl);
 
     const socket = io(socketUrl, {

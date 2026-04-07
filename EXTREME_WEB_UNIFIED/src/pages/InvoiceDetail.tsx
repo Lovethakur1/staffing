@@ -497,13 +497,13 @@ export function InvoiceDetail({ userRole }: InvoiceDetailProps) {
                   {rawInvoice.paymentProofUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
                     <div className="space-y-2">
                       <img
-                        src={`http://localhost:5000${rawInvoice.paymentProofUrl}`}
+                        src={`${import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000'}${rawInvoice.paymentProofUrl}`}
                         alt="Payment proof"
                         className="max-h-96 rounded-md border object-contain mx-auto"
                       />
                       <div className="flex justify-center">
                         <Button variant="outline" size="sm" asChild>
-                          <a href={`http://localhost:5000${rawInvoice.paymentProofUrl}`} target="_blank" rel="noopener noreferrer">
+                          <a href={`${import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000'}${rawInvoice.paymentProofUrl}`} target="_blank" rel="noopener noreferrer">
                             <Eye className="h-4 w-4 mr-2" />
                             View Full Size
                           </a>
@@ -513,13 +513,13 @@ export function InvoiceDetail({ userRole }: InvoiceDetailProps) {
                   ) : rawInvoice.paymentProofUrl.match(/\.pdf$/i) ? (
                     <div className="space-y-2">
                       <iframe
-                        src={`http://localhost:5000${rawInvoice.paymentProofUrl}`}
+                        src={`${import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000'}${rawInvoice.paymentProofUrl}`}
                         className="w-full h-96 rounded-md border"
                         title="Payment proof PDF"
                       />
                       <div className="flex justify-center">
                         <Button variant="outline" size="sm" asChild>
-                          <a href={`http://localhost:5000${rawInvoice.paymentProofUrl}`} target="_blank" rel="noopener noreferrer">
+                          <a href={`${import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000'}${rawInvoice.paymentProofUrl}`} target="_blank" rel="noopener noreferrer">
                             <Eye className="h-4 w-4 mr-2" />
                             Open PDF
                           </a>
@@ -536,7 +536,7 @@ export function InvoiceDetail({ userRole }: InvoiceDetailProps) {
                         <div className="text-xs text-muted-foreground">Click to view the uploaded proof file</div>
                       </div>
                       <Button variant="outline" size="sm" asChild>
-                        <a href={`http://localhost:5000${rawInvoice.paymentProofUrl}`} target="_blank" rel="noopener noreferrer">
+                        <a href={`${import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000'}${rawInvoice.paymentProofUrl}`} target="_blank" rel="noopener noreferrer">
                           <Eye className="h-4 w-4 mr-2" />
                           View File
                         </a>
@@ -900,7 +900,7 @@ export function InvoiceDetail({ userRole }: InvoiceDetailProps) {
                       )}
                       {rawInvoice.paymentProofUrl && (
                         <Button variant="outline" size="sm" className="w-full mt-2" asChild>
-                          <a href={`http://localhost:5000${rawInvoice.paymentProofUrl}`} target="_blank" rel="noopener noreferrer">
+                          <a href={`${import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000'}${rawInvoice.paymentProofUrl}`} target="_blank" rel="noopener noreferrer">
                             <Eye className="h-4 w-4 mr-2" />
                             View Payment Proof
                           </a>
