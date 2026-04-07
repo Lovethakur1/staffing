@@ -56,6 +56,10 @@
       target: 'esnext',
       outDir: 'build',
     },
+    preview: {
+      port: 4000,
+      host: true,
+    },
     server: {
       port: 4000,
       open: true,
