@@ -1,17 +1,18 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Input } from "../ui/input";
 import { Calendar, Clock, MapPin, Users, DollarSign, Star, Plus, Search, Filter, MessageSquare, Heart, CreditCard, FileText, TrendingUp, Bell } from "lucide-react";
-import { mockEvents, mockStaff, mockClients, mockInvoices, Event, Staff, Invoice } from "../../data/mockData";
+import { mockEvents, mockClients, mockInvoices, Event, Invoice } from "../../data/mockData";
 import { EnhancedBookingForm } from "./EnhancedBookingForm";
 import { StaffDirectoryRatings } from "./StaffDirectoryRatings";
 import { FinancialManagement } from "./FinancialManagement";
 import { CommunicationCenter } from "./CommunicationCenter";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { DataTable } from "../ui/data-table";
+import { staffService } from "../../services/staff.service";
 
 interface ComprehensiveClientDashboardProps {
   clientId: string;
@@ -22,6 +23,13 @@ export function ComprehensiveClientDashboard({ clientId }: ComprehensiveClientDa
   const [activeTab, setActiveTab] = useState("overview");
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [staffList, setStaffList] = useState<any[]>([]);
+
+  useEffect(() => {
+    staffService.getStaffList({ take: 200 }).then((res: any) => {
+      setStaffList(Array.isArray(res) ? res : (res?.data || []));
+    }).catch(() => {});
+  }, []);
 
   // Get client data
   const client = mockClients.find(c => c.id === clientId);
@@ -399,39 +407,39 @@ export function ComprehensiveClientDashboard({ clientId }: ComprehensiveClientDa
             <p className="text-muted-foreground">Your most trusted and preferred staff members</p>
           </div>
           <div className="responsive-grid-2">
-            {mockStaff.filter(staff => staff.rating >= 4.5).map((staff) => (
+            {staffList.filter(staff => (parseFloat(staff.rating) || 0) >= 4.5).map((staff) => (
               <Card key={staff.id} className="border-0 shadow-lg hover:shadow-xl transition-all duration-300">
                 <CardContent className="pt-6">
                   <div className="flex justify-between items-start mb-4">
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
-                        <h4 className="text-lg font-semibold">{staff.name}</h4>
+                        <h4 className="text-lg font-semibold">{staff.user?.name || staff.name || "Staff"}</h4>
                         <Heart className="h-4 w-4 fill-red-500 text-red-500" />
                       </div>
                       <div className="flex items-center gap-2">
                         <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                        <span className="font-medium">{staff.rating}</span>
-                        <span className="text-sm text-muted-foreground">({staff.totalEvents} events)</span>
+                        <span className="font-medium">{parseFloat(staff.rating) || 0}</span>
+                        {staff.totalEvents && <span className="text-sm text-muted-foreground">({staff.totalEvents} events)</span>}
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-lg font-semibold text-primary">${staff.hourlyRate}/hr</p>
+                      <p className="text-lg font-semibold text-primary">${parseFloat(staff.hourlyRate) || 0}/hr</p>
                     </div>
                   </div>
-                  
+
                   <div className="flex flex-wrap gap-1 mb-4">
-                    {staff.skills.slice(0, 3).map((skill) => (
+                    {(Array.isArray(staff.skills) ? staff.skills : []).slice(0, 3).map((skill: string) => (
                       <Badge key={skill} variant="secondary" className="text-xs">
                         {skill}
                       </Badge>
                     ))}
-                    {staff.skills.length > 3 && (
+                    {(Array.isArray(staff.skills) ? staff.skills : []).length > 3 && (
                       <Badge variant="secondary" className="text-xs">
-                        +{staff.skills.length - 3} more
+                        +{(Array.isArray(staff.skills) ? staff.skills : []).length - 3} more
                       </Badge>
                     )}
                   </div>
-                  
+
                   <div className="flex gap-2">
                     <Button size="sm" className="flex-1">
                       Book Again

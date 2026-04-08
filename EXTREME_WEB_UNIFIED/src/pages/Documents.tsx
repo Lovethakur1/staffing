@@ -1,18 +1,19 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../components/ui/dialog";
 import { Progress } from "../components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { 
-  Upload, 
-  File, 
-  CheckCircle, 
-  XCircle, 
+import {
+  Upload,
+  File,
+  CheckCircle,
+  XCircle,
   Clock,
   Download,
   Eye,
@@ -25,6 +26,8 @@ import {
   ChevronRight
 } from "lucide-react";
 import { staffService } from "../services/staff.service";
+import api from "../services/api";
+import { toast } from "sonner";
 
 interface DocumentsProps {
   userRole: string;
@@ -35,31 +38,103 @@ export function Documents({ userRole, userId }: DocumentsProps) {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [documents, setDocuments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadDocType, setUploadDocType] = useState('');
+  const [uploadName, setUploadName] = useState('');
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const CATEGORY_MAP: Record<string, string> = {
+    'id': 'ID',
+    'certification': 'CERTIFICATION',
+    'background': 'BACKGROUND_CHECK',
+    'tax': 'TAX_FORM',
+    'contract': 'CONTRACT',
+    'other': 'OTHER',
+  };
 
   useEffect(() => {
-    const fetchDocuments = async () => {
-      try {
-        const res = await staffService.getDocuments(userId);
-        const docs = Array.isArray(res) ? res : (res?.data || []);
-        setDocuments(docs.map((d: any) => ({
-          id: d.id,
-          name: d.name || d.title || 'Document',
-          type: d.type || 'other',
-          fileName: d.fileName || d.fileUrl || '',
-          uploadDate: d.uploadDate || d.createdAt || '',
-          status: (d.status || 'pending').toLowerCase(),
-          expiryDate: d.expiryDate || null,
-          required: d.required ?? false,
-          description: d.description || '',
-          rejectionReason: d.rejectionReason || undefined,
-        })));
-      } catch {
-        // Failed to load documents
-      }
-      setLoading(false);
-    };
     fetchDocuments();
   }, [userId]);
+
+  const fetchDocuments = async () => {
+    try {
+      const res = await staffService.getDocuments(userId);
+      const docs = Array.isArray(res) ? res : (res?.data || []);
+      setDocuments(docs.map((d: any) => ({
+        id: d.id,
+        name: d.name || d.title || 'Document',
+        type: (d.category || d.type || 'other').toLowerCase(),
+        fileName: d.fileName || d.fileUrl?.split('/').pop() || '',
+        fileUrl: d.fileUrl || '',
+        uploadDate: d.uploadDate || d.createdAt || '',
+        status: (d.status || 'pending').toLowerCase(),
+        expiryDate: d.expiryDate || d.expiresAt || null,
+        required: d.required ?? false,
+        description: d.description || d.notes || '',
+        rejectionReason: d.rejectionReason || (d.notes && d.status === 'REJECTED' ? d.notes : undefined),
+      })));
+    } catch {
+      // Failed to load documents
+    }
+    setLoading(false);
+  };
+
+  const handleUpload = async () => {
+    if (!uploadFile) { toast.error('Please select a file'); return; }
+    if (!uploadDocType) { toast.error('Please select a document type'); return; }
+    if (!uploadName.trim()) { toast.error('Please enter a document name'); return; }
+
+    setIsUploading(true);
+    setUploadProgress(10);
+
+    try {
+      // Step 1: Upload file to server
+      const formData = new FormData();
+      formData.append('file', uploadFile);
+      setUploadProgress(30);
+      const uploadRes = await api.post('/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: (e) => {
+          if (e.total) setUploadProgress(Math.round((e.loaded / e.total) * 60) + 30);
+        },
+      });
+      const { url, size, mimeType } = uploadRes.data;
+      setUploadProgress(90);
+
+      // Step 2: Create document record
+      await staffService.createDocument({
+        name: uploadName.trim(),
+        category: CATEGORY_MAP[uploadDocType] || 'OTHER',
+        fileUrl: url,
+        fileSize: size,
+        mimeType: mimeType || uploadFile.type,
+      });
+
+      setUploadProgress(100);
+      toast.success('Document uploaded successfully! Pending admin review.');
+      setUploadOpen(false);
+      setUploadDocType('');
+      setUploadName('');
+      setUploadFile(null);
+      setUploadProgress(0);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      await fetchDocuments();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Upload failed. Please try again.');
+      setUploadProgress(0);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const getFileUrl = (fileUrl: string) => {
+    if (!fileUrl) return '#';
+    if (fileUrl.startsWith('http')) return fileUrl;
+    const base = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000';
+    return `${base}${fileUrl}`;
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -129,9 +204,9 @@ export function Documents({ userRole, userId }: DocumentsProps) {
           >
             {completionRate.toFixed(0)}% Complete
           </Badge>
-          <Dialog>
+          <Dialog open={uploadOpen} onOpenChange={(v) => { if (!isUploading) setUploadOpen(v); }}>
             <DialogTrigger asChild>
-              <Button>
+              <Button onClick={() => setUploadOpen(true)}>
                 <Upload className="h-4 w-4 mr-2" />
                 Upload Document
               </Button>
@@ -141,24 +216,43 @@ export function Documents({ userRole, userId }: DocumentsProps) {
                 <DialogTitle>Upload New Document</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium">Document Type</label>
-                  <select className="w-full mt-1 p-2 border rounded">
-                    <option>Select document type</option>
-                    <option>ID/License</option>
-                    <option>Certification</option>
-                    <option>Background Check</option>
-                    <option>Tax Form</option>
-                    <option>Other</option>
-                  </select>
+                <div className="space-y-1">
+                  <Label>Document Name</Label>
+                  <Input
+                    placeholder="e.g. Driver's License, TIPS Certification"
+                    value={uploadName}
+                    onChange={(e) => setUploadName(e.target.value)}
+                    disabled={isUploading}
+                  />
                 </div>
-                <div>
-                  <label className="text-sm font-medium">File</label>
-                  <Input type="file" className="mt-1" accept=".pdf,.jpg,.png" />
+                <div className="space-y-1">
+                  <Label>Document Type</Label>
+                  <Select value={uploadDocType} onValueChange={setUploadDocType} disabled={isUploading}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select document type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="id">ID / License</SelectItem>
+                      <SelectItem value="certification">Certification</SelectItem>
+                      <SelectItem value="background">Background Check</SelectItem>
+                      <SelectItem value="tax">Tax Form</SelectItem>
+                      <SelectItem value="contract">Contract</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div>
-                  <label className="text-sm font-medium">Description</label>
-                  <Input placeholder="Brief description of the document" className="mt-1" />
+                <div className="space-y-1">
+                  <Label>File <span className="text-muted-foreground text-xs">(PDF, JPG, PNG — max 10MB)</span></Label>
+                  <Input
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                    ref={fileInputRef}
+                    onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                    disabled={isUploading}
+                  />
+                  {uploadFile && (
+                    <p className="text-xs text-muted-foreground">{uploadFile.name} ({(uploadFile.size / 1024).toFixed(1)} KB)</p>
+                  )}
                 </div>
                 {uploadProgress > 0 && (
                   <div>
@@ -169,7 +263,9 @@ export function Documents({ userRole, userId }: DocumentsProps) {
                     <Progress value={uploadProgress} />
                   </div>
                 )}
-                <Button className="w-full">Upload Document</Button>
+                <Button className="w-full" onClick={handleUpload} disabled={isUploading || !uploadFile || !uploadDocType || !uploadName.trim()}>
+                  {isUploading ? 'Uploading...' : 'Upload Document'}
+                </Button>
               </div>
             </DialogContent>
           </Dialog>
@@ -416,14 +512,16 @@ export function Documents({ userRole, userId }: DocumentsProps) {
                       <TableCell>{getStatusBadge(doc.status)}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <Button variant="ghost" size="sm">
+                          <Button variant="ghost" size="sm" onClick={() => doc.fileUrl && window.open(getFileUrl(doc.fileUrl), '_blank')}>
                             <Eye className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="sm">
-                            <Download className="h-4 w-4" />
-                          </Button>
-                          {doc.status === "rejected" && (
+                          <a href={doc.fileUrl ? getFileUrl(doc.fileUrl) : '#'} download={doc.name} target="_blank" rel="noopener noreferrer">
                             <Button variant="ghost" size="sm">
+                              <Download className="h-4 w-4" />
+                            </Button>
+                          </a>
+                          {doc.status === "rejected" && (
+                            <Button variant="ghost" size="sm" onClick={() => setUploadOpen(true)}>
                               <Upload className="h-4 w-4" />
                             </Button>
                           )}

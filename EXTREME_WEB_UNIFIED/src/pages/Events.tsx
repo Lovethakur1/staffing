@@ -747,7 +747,7 @@ export function Events({ userRole, userId }: EventsProps) {
             <p className="text-slate-600 mb-4">
               Try adjusting your filters or create a new event
             </p>
-            <Button className="bg-sangria hover:bg-merlot">
+            <Button className="bg-sangria hover:bg-merlot" onClick={() => setCurrentPage('create-event')}>
               <Plus className="w-4 h-4 mr-2" />
               Create Event
             </Button>

@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { asyncHandler, parsePagination } from '../utils/helpers';
+import { sendNotification, sendRoleNotification } from '../services/notification.service';
 
 // ═══════════════════════════════════════════════════════════════════
 // Staff Profiles
@@ -561,9 +562,11 @@ export const listDocuments = asyncHandler(async (req: Request, res: Response) =>
 export const createDocument = asyncHandler(async (req: AuthRequest, res: Response) => {
   const { userId, name, category, fileUrl, fileSize, mimeType, expiresAt, notes } = req.body;
 
+  const ownerId = userId || req.user!.userId;
+
   const doc = await prisma.document.create({
     data: {
-      userId: userId || req.user!.userId,
+      userId: ownerId,
       name,
       category,
       fileUrl,
@@ -572,7 +575,19 @@ export const createDocument = asyncHandler(async (req: AuthRequest, res: Respons
       expiresAt: expiresAt ? new Date(expiresAt) : undefined,
       notes,
     },
+    include: { user: { select: { name: true } } },
   });
+
+  // Notify all admins that a new document needs verification
+  sendRoleNotification('ADMIN', {
+    title: 'Document Uploaded — Needs Verification',
+    message: `${(doc as any).user?.name || 'A staff member'} uploaded "${name}" (${category || 'Document'}) and it is pending review.`,
+    type: 'document',
+    category: 'hr',
+    priority: 'high',
+    actionRequired: true,
+    data: { documentId: doc.id, staffUserId: ownerId },
+  }).catch(() => {}); // fire-and-forget, don't block response
 
   res.status(201).json(doc);
 });
@@ -589,8 +604,26 @@ export const updateDocument = asyncHandler(async (req: Request, res: Response) =
       ...(status && { status }),
       ...(notes !== undefined && { notes }),
       ...(verifiedAt && { verifiedAt: new Date(verifiedAt) }),
+      ...(status === 'VERIFIED' && !verifiedAt && { verifiedAt: new Date() }),
     },
   });
+
+  // Notify the staff member of verification result
+  if (status === 'VERIFIED' || status === 'REJECTED') {
+    const isVerified = status === 'VERIFIED';
+    sendNotification({
+      userId: doc.userId,
+      title: isVerified ? 'Document Verified' : 'Document Rejected',
+      message: isVerified
+        ? `Your document "${doc.name}" has been verified and approved.`
+        : `Your document "${doc.name}" was rejected.${notes ? ' Reason: ' + notes : ''}`,
+      type: 'document',
+      category: 'hr',
+      priority: isVerified ? 'medium' : 'high',
+      actionRequired: !isVerified,
+      data: { documentId: doc.id },
+    }).catch(() => {});
+  }
 
   res.json(doc);
 });

@@ -25,6 +25,9 @@ export interface EventPayload {
     platformFee?: number;
     additionalFees?: number;
     adminNotes?: string;
+    isMultiDay?: boolean;
+    endDate?: string;
+    eventDates?: Array<{ date: string; startTime: string; endTime: string }>;
 }
 
 export const eventService = {

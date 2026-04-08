@@ -123,6 +123,7 @@ export interface StaffDocument {
   name: string;
   type: string;
   fileName: string;
+  fileUrl: string;
   uploadDate: string;
   status: 'approved' | 'pending' | 'rejected' | 'expired';
   expiryDate: string | null;
@@ -137,15 +138,51 @@ export async function getMyDocuments(userId: string): Promise<StaffDocument[]> {
   return raw.map((d: any) => ({
     id: d.id,
     name: d.name || d.title || 'Document',
-    type: d.type || 'other',
-    fileName: d.fileName || d.fileUrl || '',
+    type: (d.category || d.type || 'other').toLowerCase(),
+    fileName: d.fileName || d.fileUrl?.split('/').pop() || '',
+    fileUrl: d.fileUrl || '',
     uploadDate: d.uploadDate || d.createdAt || '',
     status: (d.status || 'pending').toLowerCase() as StaffDocument['status'],
-    expiryDate: d.expiryDate || null,
+    expiryDate: d.expiryDate || d.expiresAt || null,
     required: d.required ?? false,
-    description: d.description || '',
-    rejectionReason: d.rejectionReason || undefined,
+    description: d.description || d.notes || '',
+    rejectionReason: d.rejectionReason || (d.notes && d.status === 'REJECTED' ? d.notes : undefined),
   }));
+}
+
+/**
+ * Step 1: Upload the raw file to the server.
+ * Returns the fileUrl, size, and mimeType from the server.
+ */
+export async function uploadFileToServer(file: {
+  uri: string;
+  name: string;
+  mimeType?: string;
+}): Promise<{ url: string; size: number; mimeType: string }> {
+  const formData = new FormData();
+  formData.append('file', {
+    uri: file.uri,
+    name: file.name,
+    type: file.mimeType || 'application/octet-stream',
+  } as any);
+
+  const res = await api.post('/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return res.data; // { url, originalName, filename, size, mimeType }
+}
+
+/**
+ * Step 2: Create a document record linked to the uploaded file.
+ */
+export async function createDocumentRecord(data: {
+  name: string;
+  category: string;
+  fileUrl: string;
+  fileSize?: number;
+  mimeType?: string;
+}): Promise<void> {
+  await api.post('/staff/documents', data);
 }
 
 // ─── STAFF REVIEWS ────────────────────────────────────────────────────────────

@@ -217,6 +217,7 @@ model Event {
   eventType           String? // Corporate, Wedding, Concert, etc.
   venue               String?
   date                DateTime
+  endDate             DateTime?
   startTime           String
   endTime             String
   location            String
@@ -237,6 +238,7 @@ model Event {
   platformFee         Float       @default(0)
   additionalFees      Float       @default(0)
   adminNotes          String?     @db.Text
+  isMultiDay          Boolean     @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -246,6 +248,17 @@ model Event {
   incidents     IncidentReport[]
   conversations Conversation[]
   clientReviews ClientReview[]
+  eventDates    EventDate[]
+}
+
+model EventDate {
+  id        String   @id @default(uuid())
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  date      DateTime
+  startTime String
+  endTime   String
+  createdAt DateTime @default(now())
 }
 
 model Shift {

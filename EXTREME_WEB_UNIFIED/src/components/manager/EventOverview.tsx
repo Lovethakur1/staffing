@@ -3,10 +3,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { Input } from "../ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "../ui/dialog";
-import { 
+import {
   Calendar,
   Search,
   MapPin,
@@ -21,7 +20,6 @@ import {
   AlertTriangle,
   Filter
 } from "lucide-react";
-import { mockUsers } from "../../data/mockData";
 
 interface EventOverviewProps {
   managerId: string;
@@ -32,55 +30,81 @@ export function EventOverview({ managerId, events }: EventOverviewProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
-  const [isEventDialogOpen, setIsEventDialogOpen] = useState(false);
 
-  const filteredEvents = useMemo(() => 
+  const filteredEvents = useMemo(() =>
     events.filter(event => {
-      const matchesSearch = event.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           event.location.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesStatus = statusFilter === "all" || event.status === statusFilter;
+      const title = (event.title || event.eventName || '').toLowerCase();
+      const location = (event.venue || event.location || '').toLowerCase();
+      const matchesSearch = title.includes(searchTerm.toLowerCase()) ||
+                            location.includes(searchTerm.toLowerCase());
+      const eventStatus = (event.status || '').toLowerCase();
+      const matchesStatus = statusFilter === "all" || eventStatus === statusFilter.toLowerCase();
       return matchesSearch && matchesStatus;
     }), [events, searchTerm, statusFilter]
   );
 
   const getStatusColor = (status: string) => {
-    switch (status) {
+    const s = (status || '').toLowerCase();
+    switch (s) {
       case 'confirmed': return 'bg-primary/10 text-primary border-primary/20';
       case 'pending': return 'bg-amber-50 text-amber-700 border-amber-200';
       case 'completed': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
       case 'cancelled': return 'bg-red-50 text-red-700 border-red-200';
-      case 'in-progress': return 'bg-blue-50 text-blue-700 border-blue-200';
+      case 'in-progress':
+      case 'in_progress': return 'bg-blue-50 text-blue-700 border-blue-200';
       default: return 'bg-gray-50 text-gray-700 border-gray-200';
     }
   };
 
-  const getClientName = (clientId: string) => {
-    const client = mockUsers.find(user => user.id === clientId);
-    return client?.name || 'Unknown Client';
+  const getClientName = (event: any) => {
+    return event.client?.user?.name
+      || event.client?.companyName
+      || event.clientName
+      || 'Unknown Client';
+  };
+
+  const getClientEmail = (event: any) => {
+    return event.client?.user?.email || event.clientEmail || '';
+  };
+
+  const getClientPhone = (event: any) => {
+    return event.client?.user?.phone || event.contactOnSitePhone || '';
   };
 
   const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'confirmed': return <CheckCircle className="h-4 w-4" />;
-      case 'in-progress': return <Clock className="h-4 w-4" />;
-      case 'pending': return <AlertTriangle className="h-4 w-4" />;
-      default: return <Clock className="h-4 w-4" />;
-    }
+    const s = (status || '').toLowerCase();
+    if (s === 'confirmed') return <CheckCircle className="h-4 w-4" />;
+    if (s === 'in-progress' || s === 'in_progress') return <Clock className="h-4 w-4" />;
+    return <AlertTriangle className="h-4 w-4" />;
   };
 
   const getEventProgress = (event: any) => {
     const now = new Date();
     const eventDate = new Date(event.date);
-    const eventEndTime = new Date(eventDate.getTime() + (8 * 60 * 60 * 1000)); // Assume 8-hour events
-
+    const eventEndTime = new Date(eventDate.getTime() + (8 * 60 * 60 * 1000));
     if (now < eventDate) return { status: 'upcoming', progress: 0 };
     if (now > eventEndTime) return { status: 'completed', progress: 100 };
-    
     const totalDuration = eventEndTime.getTime() - eventDate.getTime();
     const elapsed = now.getTime() - eventDate.getTime();
-    const progress = Math.min(100, Math.max(0, (elapsed / totalDuration) * 100));
-    
-    return { status: 'in-progress', progress: Math.round(progress) };
+    return { status: 'in-progress', progress: Math.min(100, Math.round((elapsed / totalDuration) * 100)) };
+  };
+
+  const getStaffCount = (event: any) => {
+    const active = (event.shifts || []).filter((s: any) => s.status !== 'REJECTED');
+    return active.length;
+  };
+
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return 'TBA';
+    try { return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
+    catch { return dateStr; }
+  };
+
+  const formatTime = (event: any) => {
+    const start = event.startTime || '';
+    const end = event.endTime || '';
+    if (!start && !end) return 'Time TBA';
+    return `${start} - ${end}`;
   };
 
   return (
@@ -89,9 +113,7 @@ export function EventOverview({ managerId, events }: EventOverviewProps) {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-semibold text-foreground">Event Overview</h2>
-          <p className="text-muted-foreground">
-            Manage all events under your supervision
-          </p>
+          <p className="text-muted-foreground">Manage all events under your supervision</p>
         </div>
       </div>
 
@@ -106,81 +128,78 @@ export function EventOverview({ managerId, events }: EventOverviewProps) {
             className="pl-10"
           />
         </div>
-        
-        <div className="flex gap-2">
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[150px]">
-              <Filter className="h-4 w-4 mr-2" />
-              <SelectValue placeholder="All Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="confirmed">Confirmed</SelectItem>
-              <SelectItem value="in-progress">In Progress</SelectItem>
-              <SelectItem value="completed">Completed</SelectItem>
-              <SelectItem value="cancelled">Cancelled</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-[150px]">
+            <Filter className="h-4 w-4 mr-2" />
+            <SelectValue placeholder="All Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="pending">Pending</SelectItem>
+            <SelectItem value="confirmed">Confirmed</SelectItem>
+            <SelectItem value="in-progress">In Progress</SelectItem>
+            <SelectItem value="completed">Completed</SelectItem>
+            <SelectItem value="cancelled">Cancelled</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
-      {/* Events Grid View */}
+      {/* Events Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         {filteredEvents.map((event) => {
           const eventProgress = getEventProgress(event);
-          const staffingComplete = event.assignedStaff.length >= event.staffRequired;
-          
+          const staffAssigned = getStaffCount(event);
+          const staffRequired = event.staffRequired || 0;
+          const staffingComplete = staffRequired > 0 && staffAssigned >= staffRequired;
+          const venue = event.venue || event.location || 'TBA';
+          const budget = parseFloat(event.budget) || 0;
+
           return (
             <Card key={event.id} className="hover:shadow-md transition-shadow">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div className="flex-1 min-w-0">
-                    <CardTitle className="text-lg truncate">{event.title}</CardTitle>
-                    <p className="text-sm text-muted-foreground">{getClientName(event.clientId)}</p>
+                    <CardTitle className="text-lg truncate">{event.title || event.eventName || 'Event'}</CardTitle>
+                    <p className="text-sm text-muted-foreground">{getClientName(event)}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     {getStatusIcon(event.status)}
                     <Badge className={getStatusColor(event.status)}>
-                      {event.status}
+                      {(event.status || 'unknown').toLowerCase()}
                     </Badge>
                   </div>
                 </div>
               </CardHeader>
-              
+
               <CardContent className="space-y-4">
-                {/* Event Details */}
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-sm">
                     <Calendar className="h-4 w-4 text-muted-foreground" />
-                    <span>{event.date}</span>
+                    <span>{formatDate(event.date)}</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm">
                     <Clock className="h-4 w-4 text-muted-foreground" />
-                    <span>{event.time}</span>
+                    <span>{formatTime(event)}</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm">
                     <MapPin className="h-4 w-4 text-muted-foreground" />
-                    <span className="truncate">{event.location}</span>
+                    <span className="truncate">{venue}</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm">
                     <Users className="h-4 w-4 text-muted-foreground" />
                     <span className={staffingComplete ? "text-emerald-600" : "text-amber-600"}>
-                      {event.assignedStaff.length}/{event.staffRequired} staff
+                      {staffAssigned}/{staffRequired} staff
                     </span>
-                    {staffingComplete ? (
-                      <CheckCircle className="h-4 w-4 text-emerald-600" />
-                    ) : (
-                      <AlertTriangle className="h-4 w-4 text-amber-600" />
-                    )}
+                    {staffingComplete
+                      ? <CheckCircle className="h-4 w-4 text-emerald-600" />
+                      : <AlertTriangle className="h-4 w-4 text-amber-600" />}
                   </div>
                   <div className="flex items-center gap-2 text-sm">
                     <DollarSign className="h-4 w-4 text-muted-foreground" />
-                    <span>${event.budget.toLocaleString()}</span>
+                    <span>${budget.toLocaleString()}</span>
                   </div>
                 </div>
 
-                {/* Event Progress */}
                 {eventProgress.status === 'in-progress' && (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-sm">
@@ -188,7 +207,7 @@ export function EventOverview({ managerId, events }: EventOverviewProps) {
                       <span className="font-medium">{eventProgress.progress}%</span>
                     </div>
                     <div className="w-full bg-muted rounded-full h-2">
-                      <div 
+                      <div
                         className="bg-primary h-2 rounded-full transition-all duration-300"
                         style={{ width: `${eventProgress.progress}%` }}
                       />
@@ -196,13 +215,12 @@ export function EventOverview({ managerId, events }: EventOverviewProps) {
                   </div>
                 )}
 
-                {/* Action Buttons */}
                 <div className="flex gap-2 pt-2">
                   <Dialog>
                     <DialogTrigger asChild>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
+                      <Button
+                        variant="outline"
+                        size="sm"
                         className="flex-1"
                         onClick={() => setSelectedEvent(event)}
                       >
@@ -214,43 +232,41 @@ export function EventOverview({ managerId, events }: EventOverviewProps) {
                       <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
                           {getStatusIcon(event.status)}
-                          {event.title}
+                          {event.title || event.eventName}
                         </DialogTitle>
                         <DialogDescription>
-                          View comprehensive event details including client information, requirements, and emergency contacts.
+                          View comprehensive event details including client information and requirements.
                         </DialogDescription>
                       </DialogHeader>
                       {selectedEvent && (
                         <div className="space-y-6 py-4">
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {/* Event Information */}
                             <div className="space-y-4">
                               <div>
                                 <h3 className="font-semibold mb-3">Event Information</h3>
                                 <div className="space-y-2 text-sm">
                                   <div className="flex items-center gap-2">
                                     <Calendar className="h-4 w-4 text-muted-foreground" />
-                                    <span>{selectedEvent.date}</span>
+                                    <span>{formatDate(selectedEvent.date)}</span>
                                   </div>
                                   <div className="flex items-center gap-2">
                                     <Clock className="h-4 w-4 text-muted-foreground" />
-                                    <span>{selectedEvent.time}</span>
+                                    <span>{formatTime(selectedEvent)}</span>
                                   </div>
                                   <div className="flex items-center gap-2">
                                     <MapPin className="h-4 w-4 text-muted-foreground" />
-                                    <span>{selectedEvent.location}</span>
+                                    <span>{selectedEvent.venue || selectedEvent.location || 'TBA'}</span>
                                   </div>
                                   <div className="flex items-center gap-2">
                                     <Users className="h-4 w-4 text-muted-foreground" />
-                                    <span>{selectedEvent.assignedStaff.length}/{selectedEvent.staffRequired} staff assigned</span>
+                                    <span>{getStaffCount(selectedEvent)}/{selectedEvent.staffRequired || 0} staff assigned</span>
                                   </div>
                                   <div className="flex items-center gap-2">
                                     <DollarSign className="h-4 w-4 text-muted-foreground" />
-                                    <span>${selectedEvent.budget.toLocaleString()} budget</span>
+                                    <span>${(parseFloat(selectedEvent.budget) || 0).toLocaleString()} budget</span>
                                   </div>
                                 </div>
                               </div>
-
                               <div>
                                 <h3 className="font-semibold mb-3">Event Description</h3>
                                 <p className="text-sm text-muted-foreground">
@@ -259,50 +275,46 @@ export function EventOverview({ managerId, events }: EventOverviewProps) {
                               </div>
                             </div>
 
-                            {/* Client Information */}
                             <div className="space-y-4">
                               <div>
                                 <h3 className="font-semibold mb-3">Client Information</h3>
                                 <div className="space-y-2 text-sm">
                                   <div className="flex items-center gap-2">
                                     <Users className="h-4 w-4 text-muted-foreground" />
-                                    <span>{getClientName(selectedEvent.clientId)}</span>
+                                    <span>{getClientName(selectedEvent)}</span>
                                   </div>
-                                  <div className="flex items-center gap-2">
-                                    <Mail className="h-4 w-4 text-muted-foreground" />
-                                    <span>client@example.com</span>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <Phone className="h-4 w-4 text-muted-foreground" />
-                                    <span>+1 (555) 123-4567</span>
-                                  </div>
+                                  {getClientEmail(selectedEvent) && (
+                                    <div className="flex items-center gap-2">
+                                      <Mail className="h-4 w-4 text-muted-foreground" />
+                                      <span>{getClientEmail(selectedEvent)}</span>
+                                    </div>
+                                  )}
+                                  {getClientPhone(selectedEvent) && (
+                                    <div className="flex items-center gap-2">
+                                      <Phone className="h-4 w-4 text-muted-foreground" />
+                                      <span>{getClientPhone(selectedEvent)}</span>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
-
                               <div>
                                 <h3 className="font-semibold mb-3">Special Requirements</h3>
                                 <p className="text-sm text-muted-foreground">
-                                  {selectedEvent.requirements || "No special requirements."}
+                                  {selectedEvent.specialRequirements || "No special requirements."}
                                 </p>
                               </div>
-
-                              <div>
-                                <h3 className="font-semibold mb-3">Emergency Contacts</h3>
-                                <div className="space-y-2 text-sm">
-                                  <div className="p-3 bg-muted rounded-lg">
-                                    <p className="font-medium">Venue Manager</p>
-                                    <p className="text-muted-foreground">+1 (555) 987-6543</p>
-                                  </div>
-                                  <div className="p-3 bg-muted rounded-lg">
-                                    <p className="font-medium">Client Emergency</p>
-                                    <p className="text-muted-foreground">+1 (555) 456-7890</p>
+                              {(selectedEvent.contactOnSite || selectedEvent.contactOnSitePhone) && (
+                                <div>
+                                  <h3 className="font-semibold mb-3">On-Site Contact</h3>
+                                  <div className="p-3 bg-muted rounded-lg text-sm">
+                                    {selectedEvent.contactOnSite && <p className="font-medium">{selectedEvent.contactOnSite}</p>}
+                                    {selectedEvent.contactOnSitePhone && <p className="text-muted-foreground">{selectedEvent.contactOnSitePhone}</p>}
                                   </div>
                                 </div>
-                              </div>
+                              )}
                             </div>
                           </div>
 
-                          {/* Action Buttons */}
                           <div className="flex justify-between pt-4 border-t">
                             <Button variant="outline">
                               <Navigation className="h-4 w-4 mr-2" />
@@ -323,7 +335,7 @@ export function EventOverview({ managerId, events }: EventOverviewProps) {
                       )}
                     </DialogContent>
                   </Dialog>
-                  
+
                   <Button variant="outline" size="sm">
                     <Navigation className="h-4 w-4" />
                   </Button>
@@ -334,16 +346,13 @@ export function EventOverview({ managerId, events }: EventOverviewProps) {
         })}
       </div>
 
-      {/* Empty State */}
       {filteredEvents.length === 0 && (
         <Card>
           <CardContent className="py-12">
             <div className="text-center">
               <Calendar className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-50" />
               <h3 className="font-semibold mb-2">No Events Found</h3>
-              <p className="text-muted-foreground">
-                No events match your current search criteria
-              </p>
+              <p className="text-muted-foreground">No events match your current search criteria</p>
             </div>
           </CardContent>
         </Card>

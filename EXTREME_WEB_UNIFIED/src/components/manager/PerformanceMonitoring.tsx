@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
@@ -28,8 +28,9 @@ import {
   FileText,
   Bookmark
 } from "lucide-react";
-import { mockStaff, mockEvents } from "../../data/mockData";
+import { mockEvents } from "../../data/mockData";
 import { toast } from "sonner";
+import { staffService } from "../../services/staff.service";
 
 interface PerformanceMonitoringProps {
   managerId: string;
@@ -65,6 +66,20 @@ export function PerformanceMonitoring({ managerId, events }: PerformanceMonitori
   const [isRatingDialogOpen, setIsRatingDialogOpen] = useState(false);
   const [selectedStaff, setSelectedStaff] = useState<any>(null);
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
+  const [staffList, setStaffList] = useState<any[]>([]);
+
+  useEffect(() => {
+    staffService.getStaffList({ take: 200 }).then((res: any) => {
+      const raw = Array.isArray(res) ? res : (res?.data || []);
+      setStaffList(raw.map((s: any) => ({
+        ...s,
+        name: s.user?.name || s.name || "Staff",
+        role: s.specialty || s.user?.role || "General Staff",
+        skills: Array.isArray(s.skills) ? s.skills : [],
+        rating: parseFloat(s.rating) || 0,
+      })));
+    }).catch(() => {});
+  }, []);
 
   // Mock performance ratings
   const [performanceRatings, setPerformanceRatings] = useState<PerformanceRating[]>([
@@ -147,10 +162,12 @@ export function PerformanceMonitoring({ managerId, events }: PerformanceMonitori
     isPrivate: true
   });
 
-  const managedStaff = useMemo(() => 
-    mockStaff.filter(staff => 
-      events.some(event => event.assignedStaff.includes(staff.id))
-    ), [events]
+  const managedStaff = useMemo(() =>
+    staffList.filter(staff =>
+      events.length === 0 || events.some(event =>
+        (event.shifts || []).some((s: any) => s.staffId === staff.id)
+      )
+    ), [events, staffList]
   );
 
   const todaysEvents = useMemo(() => 

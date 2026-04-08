@@ -120,6 +120,7 @@ export const getEvent = asyncHandler(async (req: Request, res: Response) => {
         orderBy: { createdAt: 'desc' },
         take: 50
       },
+      eventDates: { orderBy: { date: 'asc' } },
       _count: {
         select: { shifts: true, incidents: true, conversations: true }
       }
@@ -145,6 +146,7 @@ export const createEvent = asyncHandler(async (req: AuthRequest, res: Response) 
     staffRequired, guestCount, budget, deposit, tips, specialRequirements,
     dressCode, contactOnSite, contactOnSitePhone,
     staffCosts, travelFee, platformFee, additionalFees, adminNotes,
+    isMultiDay, endDate, eventDates,
   } = req.body;
 
   let finalClientId = clientId;
@@ -202,10 +204,34 @@ export const createEvent = asyncHandler(async (req: AuthRequest, res: Response) 
       platformFee: platformFee != null ? Number(platformFee) : 0,
       additionalFees: additionalFees != null ? Number(additionalFees) : 0,
       adminNotes: adminNotes || '',
+      isMultiDay: isMultiDay ? true : false,
+      ...(endDate && { endDate: new Date(endDate) }),
+      // Auto-generate EventDate entries for multi-day (one per day in range)
+      ...(isMultiDay && date && endDate && (() => {
+        const dates: { date: Date; startTime: string; endTime: string }[] = [];
+        const start = new Date(date);
+        const end = new Date(endDate);
+        const cur = new Date(start);
+        while (cur <= end) {
+          dates.push({ date: new Date(cur), startTime: startTime || '09:00', endTime: endTime || '17:00' });
+          cur.setDate(cur.getDate() + 1);
+        }
+        return dates.length > 0 ? { eventDates: { create: dates } } : {};
+      })()),
+      ...(isMultiDay && Array.isArray(eventDates) && eventDates.length > 0 && !endDate && {
+        eventDates: {
+          create: eventDates.map((d: { date: string; startTime: string; endTime: string }) => ({
+            date: new Date(d.date),
+            startTime: d.startTime,
+            endTime: d.endTime,
+          })),
+        },
+      }),
     },
     include: {
       client: { include: { user: { select: { name: true } } } },
       manager: { select: { id: true, name: true } },
+      eventDates: { orderBy: { date: 'asc' } },
     },
   });
 
@@ -228,6 +254,7 @@ export const updateEvent = asyncHandler(async (req: Request, res: Response) => {
     budget, deposit, tips, specialRequirements, managerId,
     dressCode, contactOnSite, contactOnSitePhone,
     staffCosts, travelFee, platformFee, additionalFees, adminNotes,
+    isMultiDay, endDate, eventDates,
   } = req.body;
 
   // Validation: Ensure manager exists if managerId is provided
@@ -292,14 +319,27 @@ export const updateEvent = asyncHandler(async (req: Request, res: Response) => {
       ...(platformFee !== undefined && { platformFee: Number(platformFee) }),
       ...(additionalFees !== undefined && { additionalFees: Number(additionalFees) }),
       ...(adminNotes !== undefined && { adminNotes }),
+      ...(isMultiDay !== undefined && { isMultiDay: Boolean(isMultiDay) }),
+      ...(endDate !== undefined && { endDate: endDate ? new Date(endDate) : null }),
+      // Replace all eventDates when provided
+      ...(Array.isArray(eventDates) && {
+        eventDates: {
+          deleteMany: {},
+          create: eventDates.map((d: { date: string; startTime: string; endTime: string }) => ({
+            date: new Date(d.date),
+            startTime: d.startTime,
+            endTime: d.endTime,
+          })),
+        },
+      }),
     },
     include: {
-      client: { 
-        include: { 
-          user: { 
-            select: { id: true, name: true, email: true, phone: true } 
-          } 
-        } 
+      client: {
+        include: {
+          user: {
+            select: { id: true, name: true, email: true, phone: true }
+          }
+        }
       },
       manager: { select: { id: true, name: true, email: true } },
       shifts: {
@@ -316,6 +356,7 @@ export const updateEvent = asyncHandler(async (req: Request, res: Response) => {
         orderBy: { createdAt: 'desc' },
         take: 50
       },
+      eventDates: { orderBy: { date: 'asc' } },
       _count: {
         select: { shifts: true, incidents: true, conversations: true }
       }

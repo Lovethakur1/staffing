@@ -40,11 +40,14 @@ import {
   Car,
   Save,
   X,
-  ChevronRight
+  ChevronRight,
+  Eye
 } from "lucide-react";
 import { useNavigation } from "../contexts/NavigationContext";
 import { toast } from "sonner";
 import { staffService } from "../services/staff.service";
+import { shiftService } from "../services/shift.service";
+import api from "../services/api";
 
 interface StaffDetailProps {
   userRole: string;
@@ -135,14 +138,109 @@ export function StaffDetail({ userRole, userId, staffId }: StaffDetailProps) {
   const [staff, setStaff] = useState<StaffMember | null>(null);
   const [formData, setFormData] = useState<StaffMember | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [staffDocuments, setStaffDocuments] = useState<any[]>([]);
+  const [docActionLoading, setDocActionLoading] = useState<string | null>(null);
 
-  // Fetch staff profile
+  // Fetch staff profile + all tab data
   useEffect(() => {
     const fetchStaff = async () => {
       try {
         if (!currentStaffId) return;
         setIsLoading(true);
         const s = await staffService.getStaffProfile(currentStaffId);
+
+        const userId = s.user?.id || s.userId || '';
+        const hourlyRate = s.hourlyRate || 25;
+
+        // Fetch shifts, timesheets, documents in parallel
+        const [shifts, timesheetRes, docsRes] = await Promise.allSettled([
+          userId ? shiftService.getShifts({ staffId: userId, take: 50 }) : Promise.resolve([]),
+          userId ? api.get('/timesheets', { params: { staffId: userId, take: 50 } }).then(r => r.data) : Promise.resolve([]),
+          staffService.getDocuments(currentStaffId),
+        ]);
+
+        // --- Event History ---
+        const shiftsData: any[] = shifts.status === 'fulfilled' ? (shifts.value || []) : [];
+        const recentEvents = shiftsData.map((shift: any) => {
+          const event = shift.event || {};
+          const hoursWorked = shift.hoursWorked || shift.totalHours || (() => {
+            if (shift.clockInTime && shift.clockOutTime) {
+              return Math.round((new Date(shift.clockOutTime).getTime() - new Date(shift.clockInTime).getTime()) / 3600000 * 10) / 10;
+            }
+            return shift.guaranteedHours || 0;
+          })();
+          return {
+            id: shift.id,
+            name: event.title || event.name || 'Event',
+            date: shift.date || event.date || shift.createdAt,
+            venue: event.venue || event.location || '',
+            hours: hoursWorked,
+            earnings: Math.round(hoursWorked * hourlyRate * 100) / 100,
+            rating: shift.rating || event.rating || 0,
+          };
+        });
+
+        // --- Payroll ---
+        const timesheetRaw = timesheetRes.status === 'fulfilled' ? timesheetRes.value : [];
+        const timesheetArr: any[] = Array.isArray(timesheetRaw) ? timesheetRaw : (timesheetRaw?.data || []);
+        // Group by month
+        const monthMap: Record<string, { hours: number; gross: number }> = {};
+        timesheetArr.forEach((ts: any) => {
+          const d = new Date(ts.date || ts.weekStart || ts.createdAt);
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+          if (!monthMap[key]) monthMap[key] = { hours: 0, gross: 0 };
+          const h = ts.totalHours || ts.hoursWorked || ts.hours || 0;
+          monthMap[key].hours += h;
+          monthMap[key].gross += ts.totalPay || ts.grossPay || (h * hourlyRate);
+        });
+        const payHistory = Object.entries(monthMap)
+          .sort((a, b) => b[0].localeCompare(a[0]))
+          .slice(0, 12)
+          .map(([key, val]) => {
+            const [year, month] = key.split('-');
+            const label = new Date(Number(year), Number(month) - 1).toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+            const gross = Math.round(val.gross * 100) / 100;
+            return {
+              period: label,
+              hours: Math.round(val.hours * 10) / 10,
+              grossPay: gross,
+              netPay: Math.round(gross * 0.75 * 100) / 100, // ~25% taxes estimate
+              status: 'Paid',
+            };
+          });
+
+        // --- Documents ---
+        const docsRaw = docsRes.status === 'fulfilled' ? docsRes.value : null;
+        const docsArr: any[] = Array.isArray(docsRaw) ? docsRaw : (docsRaw?.data || docsRaw?.documents || []);
+        const hasDoc = (type: string) => docsArr.some((d: any) =>
+          (d.type || d.documentType || d.category || '').toLowerCase().includes(type.toLowerCase()) && d.status !== 'REJECTED'
+        );
+        const documents = docsArr.length > 0
+          ? { contract: hasDoc('contract'), background: hasDoc('background'), i9: hasDoc('i9'), w4: hasDoc('w4') }
+          : (s.documents || { contract: false, background: false, i9: false, w4: false });
+
+        setStaffDocuments(docsArr);
+
+        // --- Performance (from shift data) ---
+        const completedShifts = shiftsData.filter((sh: any) => sh.status === 'COMPLETED' || sh.clockOutTime);
+        const onTimeCount = completedShifts.filter((sh: any) => sh.arrivedOnTime || sh.punctualityRating >= 4).length;
+        const performance = completedShifts.length > 0 ? {
+          punctuality: Math.round((onTimeCount / completedShifts.length) * 100) || (s.performance?.punctuality ?? 85),
+          professionalism: s.performance?.professionalism ?? Math.round(((s.rating || 4.5) / 5) * 100),
+          quality: s.performance?.quality ?? Math.round(((s.rating || 4.5) / 5) * 100),
+        } : (s.performance || { punctuality: 85, professionalism: 85, quality: 85 });
+
+        // --- Stats from real shift data ---
+        const completedEventIds = new Set(shiftsData.filter((sh: any) => sh.status === 'COMPLETED' || sh.clockOutTime).map((sh: any) => sh.eventId));
+        const eventsCompleted = completedEventIds.size || s.eventsCompleted || s.totalEvents || 0;
+        const hoursWorked = shiftsData.reduce((sum: number, sh: any) => {
+          const h = sh.hoursWorked || sh.totalHours || (() => {
+            if (sh.clockInTime && sh.clockOutTime)
+              return (new Date(sh.clockOutTime).getTime() - new Date(sh.clockInTime).getTime()) / 3600000;
+            return sh.guaranteedHours || 0;
+          })();
+          return sum + h;
+        }, 0) || s.hoursWorked || 0;
 
         // Map backend StaffProfile/User to our StaffMember state interface
         const mapped: StaffMember = {
@@ -154,14 +252,14 @@ export function StaffDetail({ userRole, userId, staffId }: StaffDetailProps) {
           status: (s.isActive === false ? 'inactive' : 'active') as StaffMember['status'],
           location: s.location || s.address || '',
           hireDate: s.hireDate || s.createdAt || new Date().toISOString(),
-          hourlyRate: s.hourlyRate || 25,
+          hourlyRate,
           rating: s.rating || 4.5,
-          eventsCompleted: s.eventsCompleted || s.totalEvents || 0,
-          hoursWorked: s.hoursWorked || 0,
+          eventsCompleted,
+          hoursWorked: Math.round(hoursWorked * 10) / 10,
           availability: s.availability || [],
           certifications: s.skills || s.certifications || [],
-          documents: s.documents || { contract: true, background: true, i9: true, w4: true },
-          performance: s.performance || { punctuality: 90, professionalism: 90, quality: 90 },
+          documents,
+          performance,
           emergencyContact: s.emergencyContact ? {
             name: s.emergencyContact,
             relationship: 'Emergency Contact',
@@ -176,8 +274,8 @@ export function StaffDetail({ userRole, userId, staffId }: StaffDetailProps) {
           state: s.user?.state || '',
           zipCode: s.user?.zipCode || '',
           country: s.user?.country || '',
-          recentEvents: [],
-          payHistory: [],
+          recentEvents,
+          payHistory,
           notes: s.notes || ''
         };
 
@@ -200,6 +298,31 @@ export function StaffDetail({ userRole, userId, staffId }: StaffDetailProps) {
   // Check if user has full non-financial access
   const hasFullAccess = userRole === 'admin' || userRole === 'manager' || userRole === 'subadmin';
 
+  const handleDocAction = async (docId: string, status: 'VERIFIED' | 'REJECTED', notes?: string) => {
+    setDocActionLoading(docId);
+    try {
+      await staffService.updateDocument(docId, {
+        status,
+        ...(notes && { notes }),
+        ...(status === 'VERIFIED' && { verifiedAt: new Date().toISOString() }),
+      });
+      toast.success(status === 'VERIFIED' ? 'Document verified!' : 'Document rejected.');
+      // Update local state
+      setStaffDocuments(prev => prev.map(d => d.id === docId ? { ...d, status } : d));
+    } catch {
+      toast.error('Failed to update document status');
+    } finally {
+      setDocActionLoading(null);
+    }
+  };
+
+  const getDocFileUrl = (fileUrl: string) => {
+    if (!fileUrl) return '#';
+    if (fileUrl.startsWith('http')) return fileUrl;
+    const base = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000';
+    return `${base}${fileUrl}`;
+  };
+
   useEffect(() => {
     setFormData(staff);
   }, [staff]);
@@ -219,18 +342,16 @@ export function StaffDetail({ userRole, userId, staffId }: StaffDetailProps) {
       // Also update user-level fields (name, phone, dob, gender, city, state, zipCode, country)
       const userRes = await staffService.getStaffProfile(staff.id);
       if (userRes?.user?.id) {
-        await import('../services/api').then(({ default: api }) =>
-          api.put(`/users/${userRes.user.id}`, {
-            name: formData.name,
-            phone: formData.phone,
-            dob: formData.dob || null,
-            gender: formData.gender || null,
-            city: formData.city || null,
-            state: formData.state || null,
-            zipCode: formData.zipCode || null,
-            country: formData.country || null,
-          })
-        );
+        await api.put(`/users/${userRes.user.id}`, {
+          name: formData.name,
+          phone: formData.phone,
+          dob: formData.dob || null,
+          gender: formData.gender || null,
+          city: formData.city || null,
+          state: formData.state || null,
+          zipCode: formData.zipCode || null,
+          country: formData.country || null,
+        });
       }
 
       setStaff(formData);
@@ -1079,7 +1200,13 @@ export function StaffDetail({ userRole, userId, staffId }: StaffDetailProps) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {staff.recentEvents.map((event) => (
+                  {staff.recentEvents.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={isAdmin ? 6 : 5} className="text-center text-muted-foreground py-8">
+                        No event history found
+                      </TableCell>
+                    </TableRow>
+                  ) : staff.recentEvents.map((event) => (
                     <TableRow
                       key={event.id}
                       className="cursor-pointer hover:bg-muted/50 transition-colors group"
@@ -1129,7 +1256,13 @@ export function StaffDetail({ userRole, userId, staffId }: StaffDetailProps) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {staff.payHistory.map((pay, index) => (
+                    {staff.payHistory.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                          No payroll records found
+                        </TableCell>
+                      </TableRow>
+                    ) : staff.payHistory.map((pay, index) => (
                       <TableRow key={index}>
                         <TableCell className="font-medium">{pay.period}</TableCell>
                         <TableCell>{pay.hours}h</TableCell>
@@ -1154,136 +1287,91 @@ export function StaffDetail({ userRole, userId, staffId }: StaffDetailProps) {
           <TabsContent value="documents" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Document Status</CardTitle>
+                <CardTitle className="flex items-center justify-between">
+                  <span>Uploaded Documents</span>
+                  {staffDocuments.filter(d => d.status === 'PENDING').length > 0 && (
+                    <Badge className="bg-yellow-100 text-yellow-700">
+                      {staffDocuments.filter(d => d.status === 'PENDING').length} Pending Review
+                    </Badge>
+                  )}
+                </CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  Required documentation and certifications
+                  Documents uploaded by staff — {isAdmin || hasFullAccess ? 'verify or reject each document below' : 'review status below'}
                 </p>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      {isEditing ? (
-                        <Checkbox
-                          checked={formData.documents.contract}
-                          onCheckedChange={(checked: boolean) => updateNestedField('documents', 'contract', checked)}
-                        />
-                      ) : (
-                        staff.documents.contract ? (
-                          <CheckCircle className="h-6 w-6 text-green-600" />
-                        ) : (
-                          <AlertCircle className="h-6 w-6 text-red-600" />
-                        )
-                      )}
-                      <div>
-                        <p className="font-medium">Employment Contract</p>
-                        <p className="text-sm text-muted-foreground">
-                          {staff.documents.contract ? 'Signed and stored' : 'Pending signature'}
-                        </p>
-                      </div>
-                    </div>
-                    {!isEditing && staff.documents.contract && (
-                      <Button variant="outline" size="sm">
-                        <Download className="h-4 w-4 mr-2" />
-                        Download
-                      </Button>
-                    )}
+                {staffDocuments.length === 0 ? (
+                  <div className="text-center py-10 text-muted-foreground">
+                    <FileText className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                    <p>No documents uploaded yet</p>
                   </div>
-
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      {isEditing ? (
-                        <Checkbox
-                          checked={formData.documents.background}
-                          onCheckedChange={(checked: boolean) => updateNestedField('documents', 'background', checked)}
-                        />
-                      ) : (
-                        staff.documents.background ? (
-                          <CheckCircle className="h-6 w-6 text-green-600" />
-                        ) : (
-                          <AlertCircle className="h-6 w-6 text-red-600" />
-                        )
-                      )}
-                      <div>
-                        <p className="font-medium">Background Check</p>
-                        <p className="text-sm text-muted-foreground">
-                          {staff.documents.background ? 'Completed and passed' : 'In progress'}
-                        </p>
-                      </div>
-                    </div>
-                    {!isEditing && staff.documents.background && (
-                      <Button variant="outline" size="sm">
-                        <Download className="h-4 w-4 mr-2" />
-                        Download
-                      </Button>
-                    )}
+                ) : (
+                  <div className="space-y-3">
+                    {staffDocuments.map((doc: any) => {
+                      const isPending = doc.status === 'PENDING';
+                      const isVerified = doc.status === 'VERIFIED';
+                      const isRejected = doc.status === 'REJECTED';
+                      const isLoading = docActionLoading === doc.id;
+                      return (
+                        <div key={doc.id} className={`flex items-start justify-between gap-4 p-4 border rounded-lg ${isPending ? 'border-yellow-300 bg-yellow-50' : isRejected ? 'border-red-200 bg-red-50' : 'border-green-200 bg-green-50'}`}>
+                          <div className="flex items-start gap-3 flex-1 min-w-0">
+                            {isVerified ? (
+                              <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 shrink-0" />
+                            ) : isRejected ? (
+                              <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 shrink-0" />
+                            ) : (
+                              <Clock className="h-5 w-5 text-yellow-600 mt-0.5 shrink-0" />
+                            )}
+                            <div className="min-w-0">
+                              <p className="font-medium truncate">{doc.name}</p>
+                              <p className="text-xs text-muted-foreground capitalize">{(doc.category || doc.type || '').replace(/_/g, ' ')}</p>
+                              <p className="text-xs text-muted-foreground">Uploaded {new Date(doc.createdAt || doc.uploadDate).toLocaleDateString()}</p>
+                              {doc.notes && isRejected && (
+                                <p className="text-xs text-red-600 mt-1">Reason: {doc.notes}</p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Badge
+                              className={isVerified ? 'bg-green-100 text-green-700' : isRejected ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}
+                            >
+                              {isVerified ? 'Verified' : isRejected ? 'Rejected' : 'Pending'}
+                            </Badge>
+                            {doc.fileUrl && (
+                              <a href={getDocFileUrl(doc.fileUrl)} target="_blank" rel="noopener noreferrer">
+                                <Button variant="outline" size="sm">
+                                  <Eye className="h-4 w-4 mr-1" />
+                                  View
+                                </Button>
+                              </a>
+                            )}
+                            {(isAdmin || hasFullAccess) && (isPending || isRejected) && (
+                              <Button
+                                size="sm"
+                                className="bg-green-600 hover:bg-green-700 text-white"
+                                disabled={isLoading}
+                                onClick={() => handleDocAction(doc.id, 'VERIFIED')}
+                              >
+                                {isLoading ? '...' : 'Verify'}
+                              </Button>
+                            )}
+                            {(isAdmin || hasFullAccess) && (isPending || isVerified) && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-red-300 text-red-600 hover:bg-red-50"
+                                disabled={isLoading}
+                                onClick={() => handleDocAction(doc.id, 'REJECTED', 'Document rejected by admin')}
+                              >
+                                {isLoading ? '...' : 'Reject'}
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      {isEditing ? (
-                        <Checkbox
-                          checked={formData.documents.i9}
-                          onCheckedChange={(checked: boolean) => updateNestedField('documents', 'i9', checked)}
-                        />
-                      ) : (
-                        staff.documents.i9 ? (
-                          <CheckCircle className="h-6 w-6 text-green-600" />
-                        ) : (
-                          <AlertCircle className="h-6 w-6 text-red-600" />
-                        )
-                      )}
-                      <div>
-                        <p className="font-medium">I-9 Form</p>
-                        <p className="text-sm text-muted-foreground">
-                          {staff.documents.i9 ? 'Completed and verified' : 'Pending completion'}
-                        </p>
-                      </div>
-                    </div>
-                    {!isEditing && staff.documents.i9 && (
-                      <Button variant="outline" size="sm">
-                        <Download className="h-4 w-4 mr-2" />
-                        Download
-                      </Button>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      {isEditing ? (
-                        <Checkbox
-                          checked={formData.documents.w4}
-                          onCheckedChange={(checked: boolean) => updateNestedField('documents', 'w4', checked)}
-                        />
-                      ) : (
-                        staff.documents.w4 ? (
-                          <CheckCircle className="h-6 w-6 text-green-600" />
-                        ) : (
-                          <AlertCircle className="h-6 w-6 text-red-600" />
-                        )
-                      )}
-                      <div>
-                        <p className="font-medium">W-4 Tax Form</p>
-                        <p className="text-sm text-muted-foreground">
-                          {staff.documents.w4 ? 'On file' : 'Missing - needs upload'}
-                        </p>
-                      </div>
-                    </div>
-                    {!isEditing && (
-                      staff.documents.w4 ? (
-                        <Button variant="outline" size="sm">
-                          <Download className="h-4 w-4 mr-2" />
-                          Download
-                        </Button>
-                      ) : (
-                        <Button variant="outline" size="sm">
-                          <Upload className="h-4 w-4 mr-2" />
-                          Upload
-                        </Button>
-                      )
-                    )}
-                  </div>
-                </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

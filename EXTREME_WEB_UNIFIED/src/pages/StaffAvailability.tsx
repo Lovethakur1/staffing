@@ -70,9 +70,12 @@ export function StaffAvailability({ userRole = 'admin', userId }: StaffAvailabil
       ]);
       
       const shifts = shiftsRes?.data || [];
-      
+
+      // Extract staff array from response (API returns { data: [], pagination: {} })
+      const staffList: any[] = Array.isArray(staffRes) ? staffRes : (staffRes?.data || []);
+
       // Transform staff data to match expected interface
-      const transformed: StaffAvailabilityData[] = staffRes.map((staff: any) => {
+      const transformed: StaffAvailabilityData[] = staffList.map((staff: any) => {
         const user = staff.user || {};
         const name = user.name || staff.name || 'Staff Member';
         const initials = name.split(' ').map((n: string) => n[0]).join('').toUpperCase();

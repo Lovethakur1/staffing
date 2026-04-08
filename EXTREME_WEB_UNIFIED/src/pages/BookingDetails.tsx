@@ -70,7 +70,7 @@ export function BookingDetails({ userRole, userId }: BookingDetailsProps) {
               tips: e.tips || 0,
               startTime: e.startTime || '',
               endTime: e.endTime || '',
-              assignedStaff: e.shifts?.map((s: any) => s.staff) || [],
+              assignedStaff: (e.shifts || []).map((s: any) => s.staff).filter(Boolean),
               staffRequired: e.staffRequired || 0,
             });
           } else {
@@ -171,7 +171,14 @@ export function BookingDetails({ userRole, userId }: BookingDetailsProps) {
       await api.post('/shifts', shiftData);
       toast.success('Staff assigned successfully!');
 
-      const newStaff = availableStaff.find(s => s.id === staffId);
+      // Build a User-shaped object to match what e.shifts[].staff returns from API
+      const profile = availableStaff.find(s => (s.user?.id || s.userId) === staffId);
+      const newStaff = profile ? {
+        id: staffId,
+        name: profile.user?.name || profile.name || 'Staff',
+        email: profile.user?.email || profile.email || '',
+        phone: profile.user?.phone || profile.phone || '',
+      } : { id: staffId, name: 'Staff', email: '', phone: '' };
       setBooking((prev: any) => ({
         ...prev,
         assignedStaff: [...prev.assignedStaff, newStaff],

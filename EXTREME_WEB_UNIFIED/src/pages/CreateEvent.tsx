@@ -8,7 +8,7 @@ import { Badge } from "../components/ui/badge";
 import { Separator } from "../components/ui/separator";
 import { Checkbox } from "../components/ui/checkbox";
 import { Avatar, AvatarFallback } from "../components/ui/avatar";
-import { TooltipWrapper, IconTooltip, InfoTooltip } from "../components/ui/tooltip-wrapper";
+import { IconTooltip } from "../components/ui/tooltip-wrapper";
 import {
   Select,
   SelectContent,
@@ -42,16 +42,18 @@ import {
   UserPlus,
   ShieldCheck,
   Clock,
-  TrendingUp,
   Package,
   Lock,
   UserX,
   AlertTriangle,
+  PlusCircle,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useNavigation } from "../contexts/NavigationContext";
 import { toast } from "sonner";
 import { eventService } from "../services/event.service";
+import { clientService } from "../services/client.service";
+import { staffService } from "../services/staff.service";
 
 interface CreateEventProps {
   userRole: string;
@@ -98,6 +100,7 @@ interface EventRequest {
     managers: number;
   };
   favoriteStaff: string[];
+  excludedStaff?: string[];
   specialStaffingRequirements: string;
   specialRequirements: string;
   equipmentNeeded: string[];
@@ -110,134 +113,14 @@ interface EventRequest {
   additionalNotes: string;
 }
 
-// Mock event request data
-const mockEventRequest: EventRequest = {
-  id: "req-001",
-  requestNumber: "REQ-2024-001",
-  clientId: "client-001",
-  clientName: "Sarah Johnson",
-  clientEmail: "sarah.j@techcorp.com",
-  clientPhone: "+1 (555) 123-4567",
-  clientCompany: "TechCorp Industries",
-  eventName: "Annual Corporate Gala 2024",
-  eventType: "Corporate Event",
-  isMultiDay: false,
-  startDate: "2024-12-15",
-  endDate: "2024-12-15",
-  startTime: "18:00",
-  endTime: "23:00",
-  venue: "Grand Ballroom Hotel",
-  address: "123 Main Street",
-  city: "New York",
-  state: "NY",
-  zipCode: "10001",
-  estimatedGuests: 250,
-  budget: 25000,
-  staffNeeded: {
-    servers: 15,
-    bartenders: 5,
-    coordinators: 2,
-    managers: 1
-  },
-  favoriteStaff: ["staff-001", "staff-002", "staff-005"],
-  specialStaffingRequirements: "Experienced staff only, formal attire required",
-  specialRequirements: "Premium bar service, formal dress code required, valet parking coordination",
-  equipmentNeeded: ["Sound System", "Lighting", "Projector"],
-  paymentMethod: "Corporate Account",
-  paymentTiming: "50% Deposit + 50% Before Event",
-  requiresFormalContract: true,
-  depositRequired: true,
-  emergencyContactName: "Michael Johnson",
-  emergencyContactPhone: "+1 (555) 987-6543",
-  additionalNotes: "VIP guests will arrive at 17:30, need special attention"
-};
-
-// Client's excluded staff (from client blacklist)
-const mockExcludedStaff = ["staff-003", "staff-007"]; // These staff are blacklisted by this client
-
-// Mock available staff
-const mockAvailableStaff: StaffMember[] = [
-  {
-    id: "staff-001",
-    name: "Michael Chen",
-    role: "Server",
-    rating: 4.9,
-    hourlyRate: 35,
-    certifications: ["Food Safety", "Alcohol Service"],
-    availability: "Available",
-    isFavorite: true
-  },
-  {
-    id: "staff-002",
-    name: "Jessica Martinez",
-    role: "Bartender",
-    rating: 4.8,
-    hourlyRate: 40,
-    certifications: ["Mixology Certified", "Alcohol Service"],
-    availability: "Available",
-    isFavorite: true
-  },
-  {
-    id: "staff-003",
-    name: "David Thompson",
-    role: "Server",
-    rating: 4.7,
-    hourlyRate: 32,
-    certifications: ["Food Safety"],
-    availability: "Available"
-  },
-  {
-    id: "staff-004",
-    name: "Emily Rodriguez",
-    role: "Event Coordinator",
-    rating: 4.9,
-    hourlyRate: 50,
-    certifications: ["Event Planning", "Safety Certified"],
-    availability: "Available"
-  },
-  {
-    id: "staff-005",
-    name: "Amanda Wilson",
-    role: "Server",
-    rating: 4.8,
-    hourlyRate: 34,
-    certifications: ["Food Safety", "Customer Service Excellence"],
-    availability: "Available",
-    isFavorite: true
-  },
-  {
-    id: "staff-006",
-    name: "Robert Garcia",
-    role: "Manager",
-    rating: 4.9,
-    hourlyRate: 55,
-    certifications: ["Event Management", "Safety Certified", "First Aid"],
-    availability: "Available"
-  },
-  {
-    id: "staff-007",
-    name: "Christopher Brown",
-    role: "Bartender",
-    rating: 4.8,
-    hourlyRate: 38,
-    certifications: ["Alcohol Service"],
-    availability: "Available"
-  },
-  {
-    id: "staff-008",
-    name: "Sarah Parker",
-    role: "Event Coordinator",
-    rating: 4.7,
-    hourlyRate: 48,
-    certifications: ["Event Planning"],
-    availability: "Available"
-  }
-];
 
 export function CreateEvent({ userRole, userId }: CreateEventProps) {
   const { setCurrentPage, pageParams } = useNavigation();
 
+  
   const fromRequestId = pageParams?.fromRequestId;
+  const isManualMode = !fromRequestId;
+
   const [eventRequest, setEventRequest] = useState<EventRequest | null>(null);
   const [selectedStaff, setSelectedStaff] = useState<string[]>([]);
   const [onGroundManager, setOnGroundManager] = useState("");
@@ -247,8 +130,67 @@ export function CreateEvent({ userRole, userId }: CreateEventProps) {
   const [hasBreaks, setHasBreaks] = useState(false);
   const [breakCount, setBreakCount] = useState(1);
   const [breakDuration, setBreakDuration] = useState(15);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Load event request data
+  // Manual creation form state
+  const [clients, setClients] = useState<{ id: string; name: string; company: string }[]>([]);
+  const [availableStaff, setAvailableStaff] = useState<StaffMember[]>([]);
+  const [staffLoading, setStaffLoading] = useState(false);
+  const [manualForm, setManualForm] = useState({
+    title: "",
+    clientId: "",
+    eventType: "Corporate Event",
+    dateType: "single" as "single" | "multi",
+    date: "",
+    endDate: "",
+    startTime: "",
+    endTime: "",
+    venue: "",
+    location: "",
+    estimatedGuests: 0,
+    budget: 0,
+    staffRequired: 1,
+    specialRequirements: "",
+    contactOnSite: "",
+    contactOnSitePhone: "",
+    dressCode: "",
+    description: "",
+  });
+
+  // Fetch clients for manual mode dropdown
+  useEffect(() => {
+    if (isManualMode) {
+      clientService.getClients({ limit: 100 }).then((res: any) => {
+        const list = Array.isArray(res) ? res : (res?.data || res?.clients || []);
+        setClients(list.map((c: any) => ({
+          id: c.id,
+          name: c.user?.name || c.name || "Client",
+          company: c.company || "",
+        })));
+      }).catch(() => {
+        // silently fail, admin can still type
+      });
+    }
+  }, [isManualMode]);
+
+  // Fetch real staff from API
+  useEffect(() => {
+    setStaffLoading(true);
+    staffService.getStaffList({ take: 200 }).then((res: any) => {
+      const list: any[] = Array.isArray(res) ? res : (res?.data || []);
+      setAvailableStaff(list.map((s: any) => ({
+        id: s.id,
+        name: s.user?.name || s.name || "Staff",
+        role: s.specialty || s.user?.role || "Staff",
+        rating: parseFloat(s.rating) || 0,
+        hourlyRate: parseFloat(s.hourlyRate) || 0,
+        certifications: Array.isArray(s.certifications) ? s.certifications.map((c: any) => typeof c === "string" ? c : c.name || c.type || "") : (Array.isArray(s.skills) ? s.skills : []),
+        availability: s.availabilityStatus === "AVAILABLE" ? "Available" : (s.availabilityStatus || "Available"),
+      })));
+    }).catch(() => {}).finally(() => setStaffLoading(false));
+  }, []);
+
+  // Load event request data (auto-populated mode)
   useEffect(() => {
     if (fromRequestId) {
       const fetchEvent = async () => {
@@ -313,6 +255,71 @@ export function CreateEvent({ userRole, userId }: CreateEventProps) {
     );
   };
 
+  const handleManualCreate = async () => {
+    if (!manualForm.title.trim()) {
+      toast.error("Please enter an event name");
+      return;
+    }
+    if (!manualForm.clientId) {
+      toast.error("Please select a client");
+      return;
+    }
+    if (!manualForm.date && manualForm.dateType === "single") {
+      toast.error("Please select an event date");
+      return;
+    }
+    if (manualForm.dateType === "multi") {
+      if (!manualForm.date) { toast.error("Please select a start date"); return; }
+      if (!manualForm.endDate) { toast.error("Please select an end date"); return; }
+      if (new Date(manualForm.endDate) <= new Date(manualForm.date)) {
+        toast.error("End date must be after start date");
+        return;
+      }
+    }
+    if (!manualForm.venue.trim()) {
+      toast.error("Please enter a venue");
+      return;
+    }
+    if (!onGroundManager) {
+      toast.error("Please assign an on-ground manager");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const isMultiDay = manualForm.dateType === "multi";
+      const payload = {
+        clientId: manualForm.clientId,
+        title: manualForm.title,
+        description: manualForm.description,
+        eventType: manualForm.eventType,
+        venue: manualForm.venue,
+        date: manualForm.date,
+        startTime: manualForm.startTime || "09:00",
+        endTime: manualForm.endTime || "17:00",
+        location: manualForm.location || manualForm.venue,
+        staffRequired: manualForm.staffRequired,
+        budget: manualForm.budget,
+        specialRequirements: manualForm.specialRequirements,
+        dressCode: manualForm.dressCode,
+        contactOnSite: manualForm.contactOnSite,
+        contactOnSitePhone: manualForm.contactOnSitePhone,
+        adminNotes,
+        managerId: onGroundManager,
+        isMultiDay,
+        ...(isMultiDay && manualForm.endDate && { endDate: manualForm.endDate }),
+      };
+      const created = await eventService.createEvent(payload);
+      setCreatedEventId(created?.id || `EVT-${Date.now()}`);
+      setShowSuccessDialog(true);
+      toast.success("Event created successfully!");
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || "Failed to create event.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleCreateEvent = async () => {
     if (selectedStaff.length === 0) {
       toast.error("Please assign at least one staff member");
@@ -347,10 +354,10 @@ export function CreateEvent({ userRole, userId }: CreateEventProps) {
 
     let total = 0;
     selectedStaff.forEach(staffId => {
-      const staff = mockAvailableStaff.find(s => s.id === staffId);
+      const staff = availableStaff.find(s => s.id === staffId);
       if (staff) {
         const hours = calculateEventHours();
-        total += staff.hourlyRate * Math.max(hours, 5); // 5-hour minimum
+        total += staff.hourlyRate * Math.max(hours, 5);
       }
     });
     return total;
@@ -388,34 +395,623 @@ export function CreateEvent({ userRole, userId }: CreateEventProps) {
     eventRequest.staffNeeded.coordinators + eventRequest.staffNeeded.managers
     : 0;
 
-  const favoriteStaff = mockAvailableStaff.filter(s =>
+  const favoriteStaff = availableStaff.filter(s =>
     eventRequest?.favoriteStaff.includes(s.id)
   );
 
-  // Get excluded staff details
-  const excludedStaff = mockAvailableStaff.filter(s =>
-    mockExcludedStaff.includes(s.id)
+  const excludedStaff = availableStaff.filter(s =>
+    eventRequest?.excludedStaff?.includes(s.id)
   );
 
+  // ─── MANUAL CREATION MODE ──────────────────────────────────────────────────
+  if (isManualMode) {
+    const manualCreatedEventName = manualForm.title || "New Event";
+    return (
+      <div className="space-y-6 w-full">
+        {/* Header */}
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setCurrentPage('events')}
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Events
+            </Button>
+            <div>
+              <h1>Create New Event</h1>
+              <p className="text-sm text-muted-foreground">
+                Fill in the event details to create a new event
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setCurrentPage('events')}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-[#5E1916] hover:bg-[#4E0707]"
+              onClick={handleManualCreate}
+              disabled={isSubmitting}
+            >
+              <PlusCircle className="h-4 w-4 mr-2" />
+              {isSubmitting ? "Creating..." : "Create Event"}
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left Column */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Event Information */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <CalendarIcon className="h-5 w-5" />
+                  Event Information
+                </CardTitle>
+                <CardDescription>Basic details about the event</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <Label htmlFor="title">Event Name *</Label>
+                    <Input
+                      id="title"
+                      placeholder="e.g. Annual Corporate Gala 2025"
+                      value={manualForm.title}
+                      onChange={e => setManualForm(p => ({ ...p, title: e.target.value }))}
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="eventType">Event Type *</Label>
+                    <Select
+                      value={manualForm.eventType}
+                      onValueChange={val => setManualForm(p => ({ ...p, eventType: val }))}
+                    >
+                      <SelectTrigger id="eventType">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Corporate Event">Corporate Event</SelectItem>
+                        <SelectItem value="Wedding">Wedding</SelectItem>
+                        <SelectItem value="Birthday Party">Birthday Party</SelectItem>
+                        <SelectItem value="Conference">Conference</SelectItem>
+                        <SelectItem value="Gala">Gala</SelectItem>
+                        <SelectItem value="Private Party">Private Party</SelectItem>
+                        <SelectItem value="Concert">Concert</SelectItem>
+                        <SelectItem value="Exhibition">Exhibition</SelectItem>
+                        <SelectItem value="Charity Event">Charity Event</SelectItem>
+                        <SelectItem value="General">General</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="estimatedGuests">Estimated Guests</Label>
+                    <Input
+                      id="estimatedGuests"
+                      type="number"
+                      min="0"
+                      placeholder="e.g. 200"
+                      value={manualForm.estimatedGuests || ""}
+                      onChange={e => setManualForm(p => ({ ...p, estimatedGuests: parseInt(e.target.value) || 0 }))}
+                    />
+                  </div>
+
+                  {/* Event Duration - radio toggle matching the image */}
+                  <div className="col-span-2">
+                    <Label className="text-base font-medium">Event Duration</Label>
+                    <div className="flex items-center gap-6 mt-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="dateType"
+                          value="single"
+                          checked={manualForm.dateType === "single"}
+                          onChange={() => setManualForm(p => ({ ...p, dateType: "single", endDate: "" }))}
+                          className="w-4 h-4 accent-[#5E1916] cursor-pointer"
+                        />
+                        <span className="text-sm font-medium">Single Day Event</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="dateType"
+                          value="multi"
+                          checked={manualForm.dateType === "multi"}
+                          onChange={() => setManualForm(p => ({ ...p, dateType: "multi" }))}
+                          className="w-4 h-4 accent-[#5E1916] cursor-pointer"
+                        />
+                        <span className="text-sm font-medium">Multi-Day Event</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {manualForm.dateType === "single" ? (
+                    <>
+                      <div>
+                        <Label htmlFor="date">Date *</Label>
+                        <div className="relative mt-1">
+                          <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                          <Input
+                            id="date"
+                            type="date"
+                            value={manualForm.date}
+                            onChange={e => setManualForm(p => ({ ...p, date: e.target.value }))}
+                            className="pl-9"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <Label>Start Time</Label>
+                            <Input
+                              type="time"
+                              value={manualForm.startTime}
+                              onChange={e => setManualForm(p => ({ ...p, startTime: e.target.value }))}
+                              className="mt-1"
+                            />
+                          </div>
+                          <div>
+                            <Label>End Time</Label>
+                            <Input
+                              type="time"
+                              value={manualForm.endTime}
+                              onChange={e => setManualForm(p => ({ ...p, endTime: e.target.value }))}
+                              className="mt-1"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {/* Start Date + End Date */}
+                      <div>
+                        <Label htmlFor="startDate">Start Date *</Label>
+                        <div className="relative mt-1">
+                          <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                          <Input
+                            id="startDate"
+                            type="date"
+                            placeholder="Pick a date"
+                            value={manualForm.date}
+                            onChange={e => setManualForm(p => ({ ...p, date: e.target.value }))}
+                            className="pl-9"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <Label htmlFor="endDate">End Date *</Label>
+                        <div className="relative mt-1">
+                          <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                          <Input
+                            id="endDate"
+                            type="date"
+                            placeholder="Pick end date"
+                            value={manualForm.endDate}
+                            min={manualForm.date || undefined}
+                            onChange={e => setManualForm(p => ({ ...p, endDate: e.target.value }))}
+                            className="pl-9"
+                          />
+                        </div>
+                      </div>
+                      {/* Daily Start Time + Daily End Time */}
+                      <div>
+                        <Label>Daily Start Time</Label>
+                        <Input
+                          type="time"
+                          value={manualForm.startTime}
+                          onChange={e => setManualForm(p => ({ ...p, startTime: e.target.value }))}
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label>Daily End Time</Label>
+                        <Input
+                          type="time"
+                          value={manualForm.endTime}
+                          onChange={e => setManualForm(p => ({ ...p, endTime: e.target.value }))}
+                          className="mt-1"
+                        />
+                      </div>
+                      {/* Duration badge */}
+                      {manualForm.date && manualForm.endDate && (() => {
+                        const days = Math.round((new Date(manualForm.endDate).getTime() - new Date(manualForm.date).getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                        return days > 0 ? (
+                          <div className="col-span-2">
+                            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                              <CalendarIcon className="h-3 w-3 mr-1" />
+                              {days} day{days !== 1 ? "s" : ""} total
+                            </Badge>
+                          </div>
+                        ) : null;
+                      })()}
+                    </>
+                  )}
+
+                  <div>
+                    <Label htmlFor="dressCode">Dress Code</Label>
+                    <Input
+                      id="dressCode"
+                      placeholder="e.g. Formal, Smart Casual"
+                      value={manualForm.dressCode}
+                      onChange={e => setManualForm(p => ({ ...p, dressCode: e.target.value }))}
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Venue Information */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <MapPin className="h-5 w-5" />
+                  Venue Information
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label htmlFor="venue">Venue Name *</Label>
+                  <Input
+                    id="venue"
+                    placeholder="e.g. Grand Ballroom Hotel"
+                    value={manualForm.venue}
+                    onChange={e => setManualForm(p => ({ ...p, venue: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="location">Full Address</Label>
+                  <Input
+                    id="location"
+                    placeholder="e.g. 123 Main Street, New York, NY 10001"
+                    value={manualForm.location}
+                    onChange={e => setManualForm(p => ({ ...p, location: e.target.value }))}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Client Information */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Building2 className="h-5 w-5" />
+                  Client Information
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label htmlFor="clientId">Select Client *</Label>
+                  <Select
+                    value={manualForm.clientId}
+                    onValueChange={val => setManualForm(p => ({ ...p, clientId: val }))}
+                  >
+                    <SelectTrigger id="clientId">
+                      <SelectValue placeholder="Choose a client..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clients.length === 0 ? (
+                        <SelectItem value="loading" disabled>Loading clients...</SelectItem>
+                      ) : (
+                        clients.map(c => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.name}{c.company ? ` — ${c.company}` : ""}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Additional Requirements */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Additional Details
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label htmlFor="specialRequirements">Special Requirements</Label>
+                  <Textarea
+                    id="specialRequirements"
+                    placeholder="e.g. Premium bar service, valet parking coordination..."
+                    value={manualForm.specialRequirements}
+                    onChange={e => setManualForm(p => ({ ...p, specialRequirements: e.target.value }))}
+                    rows={3}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="description">Description / Notes</Label>
+                  <Textarea
+                    id="description"
+                    placeholder="Any additional notes about the event..."
+                    value={manualForm.description}
+                    onChange={e => setManualForm(p => ({ ...p, description: e.target.value }))}
+                    rows={3}
+                  />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="contactOnSite">Contact On Site</Label>
+                    <Input
+                      id="contactOnSite"
+                      placeholder="Contact person name"
+                      value={manualForm.contactOnSite}
+                      onChange={e => setManualForm(p => ({ ...p, contactOnSite: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="contactOnSitePhone">Contact Phone</Label>
+                    <Input
+                      id="contactOnSitePhone"
+                      placeholder="+1 (555) 123-4567"
+                      value={manualForm.contactOnSitePhone}
+                      onChange={e => setManualForm(p => ({ ...p, contactOnSitePhone: e.target.value }))}
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Right Column */}
+          <div className="space-y-6">
+            {/* Financial */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <DollarSign className="h-5 w-5" />
+                  Financial Details
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label htmlFor="budget">Client Budget ($)</Label>
+                  <Input
+                    id="budget"
+                    type="number"
+                    min="0"
+                    placeholder="e.g. 25000"
+                    value={manualForm.budget || ""}
+                    onChange={e => setManualForm(p => ({ ...p, budget: parseFloat(e.target.value) || 0 }))}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="staffRequired">Staff Required</Label>
+                  <Input
+                    id="staffRequired"
+                    type="number"
+                    min="1"
+                    placeholder="e.g. 10"
+                    value={manualForm.staffRequired || ""}
+                    onChange={e => setManualForm(p => ({ ...p, staffRequired: parseInt(e.target.value) || 0 }))}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Staff Assignment */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <UserPlus className="h-5 w-5" />
+                  Assign Staff
+                </CardTitle>
+                <CardDescription>Select staff members for this event</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                  {staffLoading ? (
+                    <p className="text-sm text-muted-foreground py-4 text-center">Loading staff...</p>
+                  ) : availableStaff.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-4 text-center">No staff available</p>
+                  ) : availableStaff.map((staff) => (
+                      <div
+                        key={staff.id}
+                        className="flex items-center gap-3 p-3 bg-muted/50 border rounded-lg hover:bg-muted transition-colors"
+                      >
+                        <Checkbox
+                          checked={selectedStaff.includes(staff.id)}
+                          onCheckedChange={() => toggleStaffSelection(staff.id)}
+                        />
+                        <Avatar className="h-8 w-8">
+                          <AvatarFallback>
+                            {staff.name.split(' ').map(n => n[0]).join('')}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm">{staff.name}</p>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span>{staff.role}</span>
+                            <span>•</span>
+                            <span>⭐ {staff.rating}</span>
+                            <span>•</span>
+                            <span>${staff.hourlyRate}/hr</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+                <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-blue-900">Total Selected</span>
+                    <Badge className="bg-blue-600">{selectedStaff.length} staff</Badge>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* On-Ground Manager */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ShieldCheck className="h-5 w-5" />
+                  On-Ground Manager
+                </CardTitle>
+                <CardDescription>Assign event manager (Required)</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Select value={onGroundManager} onValueChange={setOnGroundManager}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select manager..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                  {availableStaff
+                      .filter(s => s.role === "Manager" || s.role === "Event Coordinator" || s.role === "MANAGER")
+                      .map((manager) => (
+                        <SelectItem key={manager.id} value={manager.id}>
+                          {manager.name} - {manager.role}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </CardContent>
+            </Card>
+
+            {/* Staff Breaks */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Clock className="h-5 w-5" />
+                  Staff Breaks
+                </CardTitle>
+                <CardDescription>Configure break policy</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="hasBreaks"
+                    checked={hasBreaks}
+                    onCheckedChange={(checked) => setHasBreaks(checked as boolean)}
+                  />
+                  <Label htmlFor="hasBreaks" className="cursor-pointer text-sm">
+                    Client will provide breaks for staff
+                  </Label>
+                </div>
+                {hasBreaks && (
+                  <div className="space-y-4 pl-6 border-l-2 border-[#5E1916]">
+                    <div className="space-y-2">
+                      <Label htmlFor="breakCount">Number of Breaks</Label>
+                      <Input
+                        id="breakCount"
+                        type="number"
+                        min="1"
+                        max="5"
+                        value={breakCount}
+                        onChange={(e) => setBreakCount(parseInt(e.target.value) || 1)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Break Duration</Label>
+                      <Select
+                        value={breakDuration.toString()}
+                        onValueChange={(value) => setBreakDuration(parseInt(value))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="10">10 minutes</SelectItem>
+                          <SelectItem value="15">15 minutes</SelectItem>
+                          <SelectItem value="20">20 minutes</SelectItem>
+                          <SelectItem value="30">30 minutes</SelectItem>
+                          <SelectItem value="45">45 minutes</SelectItem>
+                          <SelectItem value="60">60 minutes</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Admin Notes */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Admin Notes</CardTitle>
+                <CardDescription>Internal notes (optional)</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Textarea
+                  placeholder="Add any internal notes about this event..."
+                  value={adminNotes}
+                  onChange={(e) => setAdminNotes(e.target.value)}
+                  rows={4}
+                />
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
+        {/* Success Dialog */}
+        <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-green-600">
+                <CheckCircle2 className="h-6 w-6" />
+                Event Created Successfully!
+              </DialogTitle>
+              <DialogDescription>
+                The event has been created and is now active.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-sm font-medium">Event ID:</span>
+                    <span className="text-sm text-muted-foreground">{createdEventId}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm font-medium">Event Name:</span>
+                    <span className="text-sm text-muted-foreground">{manualCreatedEventName}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm font-medium">Staff Assigned:</span>
+                    <span className="text-sm text-muted-foreground">{selectedStaff.length} members</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm font-medium">Status:</span>
+                    <Badge className="bg-green-600">Active</Badge>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setCurrentPage('create-event')}>
+                Create Another
+              </Button>
+              <Button onClick={() => setCurrentPage('events')} className="bg-[#5E1916] hover:bg-[#4E0707]">
+                View All Events
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    );
+  }
+
+  // ─── AUTO-POPULATED MODE (from request) ───────────────────────────────────
   if (!eventRequest) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <AlertCircle className="h-5 w-5 text-yellow-600" />
-              No Event Request Selected
-            </CardTitle>
-            <CardDescription>
-              This page is for creating events from approved client requests.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button onClick={() => setCurrentPage('event-requests-queue')} className="w-full">
-              Go to Event Requests Queue
-            </Button>
-          </CardContent>
-        </Card>
+        <div className="text-center text-muted-foreground">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#5E1916] mx-auto mb-4" />
+          Loading event request...
+        </div>
       </div>
     );
   }
@@ -953,7 +1549,6 @@ export function CreateEvent({ userRole, userId }: CreateEventProps) {
                           <p className="text-sm font-medium text-red-900 mb-1">⚠️ Do Not Assign</p>
                           <p className="text-xs text-red-800">
                             The client {eventRequest.clientName} has specifically excluded these staff members.
-                            They will not appear in the available staff list and cannot be assigned to this event.
                           </p>
                         </div>
                       </div>
@@ -994,8 +1589,10 @@ export function CreateEvent({ userRole, userId }: CreateEventProps) {
               <div className="space-y-3">
                 <Label>Additional Available Staff</Label>
                 <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                  {mockAvailableStaff
-                    .filter(staff => !eventRequest.favoriteStaff.includes(staff.id) && !mockExcludedStaff.includes(staff.id))
+                  {staffLoading ? (
+                    <p className="text-sm text-muted-foreground py-4 text-center">Loading staff...</p>
+                  ) : availableStaff
+                    .filter(staff => !eventRequest.favoriteStaff.includes(staff.id))
                     .map((staff) => (
                       <div
                         key={staff.id}
@@ -1049,8 +1646,8 @@ export function CreateEvent({ userRole, userId }: CreateEventProps) {
                   <SelectValue placeholder="Select manager..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {mockAvailableStaff
-                    .filter(s => s.role === "Manager" || s.role === "Event Coordinator")
+                  {availableStaff
+                    .filter(s => s.role === "Manager" || s.role === "Event Coordinator" || s.role === "MANAGER")
                     .map((manager) => (
                       <SelectItem key={manager.id} value={manager.id}>
                         {manager.name} - {manager.role}

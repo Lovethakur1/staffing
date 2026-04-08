@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -15,8 +15,9 @@ import { Calendar as CalendarComponent } from "../ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 
 import { toast } from "sonner";
-import { mockStaff, Staff } from "../../data/mockData";
+import { Staff } from "../../data/mockData";
 import api from "../../services/api";
+import { staffService } from "../../services/staff.service";
 
 interface EnhancedBookingFormProps {
   isOpen: boolean;
@@ -33,6 +34,13 @@ interface StaffRequest {
 
 export function EnhancedBookingForm({ isOpen, onClose, clientId }: EnhancedBookingFormProps) {
   const [step, setStep] = useState(1);
+  const [staffList, setStaffList] = useState<any[]>([]);
+
+  useEffect(() => {
+    staffService.getStaffList({ take: 200 }).then((res: any) => {
+      setStaffList(Array.isArray(res) ? res : (res?.data || []));
+    }).catch(() => {});
+  }, []);
   const [eventDate, setEventDate] = useState<Date>();
   const [eventData, setEventData] = useState({
     title: "",
@@ -176,8 +184,8 @@ export function EnhancedBookingForm({ isOpen, onClose, clientId }: EnhancedBooki
   };
 
   const getAvailableStaff = (role: string) => {
-    return mockStaff.filter(staff => 
-      staff.skills.some(skill => skill.toLowerCase().includes(role.toLowerCase()))
+    return staffList.filter(s =>
+      (Array.isArray(s.skills) ? s.skills : []).some((skill: string) => skill.toLowerCase().includes(role.toLowerCase()))
     );
   };
 
@@ -454,27 +462,27 @@ export function EnhancedBookingForm({ isOpen, onClose, clientId }: EnhancedBooki
                       <Label className="text-sm font-medium">Preferred Staff (Optional)</Label>
                       <p className="text-xs text-muted-foreground mb-3">Select staff members you've worked with before</p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {getAvailableStaff(request.role).slice(0, 6).map((staff) => (
-                          <div 
-                            key={staff.id}
+                        {getAvailableStaff(request.role).slice(0, 6).map((s) => (
+                          <div
+                            key={s.id}
                             className={`p-3 border rounded-lg cursor-pointer transition-all ${
-                              request.preferredStaff?.includes(staff.id) 
-                                ? 'border-primary bg-primary/5' 
+                              request.preferredStaff?.includes(s.id)
+                                ? 'border-primary bg-primary/5'
                                 : 'border-border hover:border-primary/50'
                             }`}
-                            onClick={() => togglePreferredStaff(index, staff.id)}
+                            onClick={() => togglePreferredStaff(index, s.id)}
                           >
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-2">
                                 <div>
-                                  <p className="text-sm font-medium">{staff.name}</p>
+                                  <p className="text-sm font-medium">{s.user?.name || s.name || "Staff"}</p>
                                   <div className="flex items-center gap-1">
                                     <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                                    <span className="text-xs">{staff.rating}</span>
+                                    <span className="text-xs">{parseFloat(s.rating) || 0}</span>
                                   </div>
                                 </div>
                               </div>
-                              {request.preferredStaff?.includes(staff.id) && (
+                              {request.preferredStaff?.includes(s.id) && (
                                 <Heart className="h-4 w-4 fill-red-500 text-red-500" />
                               )}
                             </div>

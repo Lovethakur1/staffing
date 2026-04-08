@@ -75,9 +75,10 @@ export function StaffSkillsRatings({ userRole = 'admin', userId }: StaffSkillsRa
     setLoading(true);
     try {
       const staffRes = await staffService.getStaffList();
-      
+      const staffList: any[] = Array.isArray(staffRes) ? staffRes : (staffRes?.data || []);
+
       // Transform staff data to match expected interface
-      const transformed: StaffSkillsData[] = staffRes.map((staff: any) => {
+      const transformed: StaffSkillsData[] = staffList.map((staff: any) => {
         const user = staff.user || {};
         const name = user.name || staff.name || 'Staff Member';
         const initials = name.split(' ').map((n: string) => n[0]).join('').toUpperCase();

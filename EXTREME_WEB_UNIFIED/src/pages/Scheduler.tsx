@@ -131,8 +131,8 @@ export function Scheduler({ userRole, userId }: SchedulerProps) {
 
   // Scheduler stats - calculate from real data
   const upcomingEvents = events.filter(e => {
-    const s = e.status?.toLowerCase() || '';
-    return s === 'confirmed' || s === 'pending' || s === 'in-progress' || s === 'in_progress';
+    const s = (e.status || '').toUpperCase();
+    return s !== 'CANCELLED' && s !== 'REJECTED' && s !== 'COMPLETED';
   });
 
   const eventsNeedingStaff = upcomingEvents.filter(e =>

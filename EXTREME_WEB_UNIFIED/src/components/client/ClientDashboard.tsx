@@ -1,12 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Calendar, Clock, MapPin, Users, DollarSign, Star, Plus } from "lucide-react";
-import { mockEvents, mockRatings, mockStaff, Event, Rating } from "../../data/mockData";
+import { mockEvents, mockRatings, Event, Rating } from "../../data/mockData";
 import { EventBookingForm } from "./EventBookingForm";
 import { StaffRatingForm } from "./StaffRatingForm";
+import { staffService } from "../../services/staff.service";
 
 interface ClientDashboardProps {
   clientId: string;
@@ -16,6 +17,13 @@ export function ClientDashboard({ clientId }: ClientDashboardProps) {
   const [showBookingForm, setShowBookingForm] = useState(false);
   const [showRatingForm, setShowRatingForm] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  const [staffList, setStaffList] = useState<any[]>([]);
+
+  useEffect(() => {
+    staffService.getStaffList({ take: 200 }).then((res: any) => {
+      setStaffList(Array.isArray(res) ? res : (res?.data || []));
+    }).catch(() => {});
+  }, []);
 
   const clientEvents = mockEvents.filter(event => event.clientId === clientId);
   const upcomingEvents = clientEvents.filter(event => new Date(event.date) >= new Date());
@@ -32,13 +40,13 @@ export function ClientDashboard({ clientId }: ClientDashboardProps) {
   };
 
   const getStaffRating = (staffId: string) => {
-    const staff = mockStaff.find(s => s.id === staffId);
-    return staff?.rating || 0;
+    const staff = staffList.find(s => s.id === staffId);
+    return parseFloat(staff?.rating) || 0;
   };
 
   const getStaffName = (staffId: string) => {
-    const staff = mockStaff.find(s => s.id === staffId);
-    return staff?.name || 'Unknown';
+    const staff = staffList.find(s => s.id === staffId);
+    return staff?.user?.name || staff?.name || 'Unknown';
   };
 
   return (
@@ -208,22 +216,22 @@ export function ClientDashboard({ clientId }: ClientDashboardProps) {
               <p className="text-muted-foreground">Staff members you've worked with before</p>
             </div>
             <div className="grid gap-6">
-              {mockStaff.map((staff) => (
+              {staffList.map((staff) => (
                 <Card key={staff.id} className="border-0 shadow-lg hover:shadow-xl transition-shadow duration-300">
                   <CardContent className="pt-6">
                     <div className="flex justify-between items-start">
                       <div className="space-y-4">
                         <div>
-                          <h4 className="text-lg font-semibold">{staff.name}</h4>
+                          <h4 className="text-lg font-semibold">{staff.user?.name || staff.name || "Staff"}</h4>
                           <div className="flex flex-wrap gap-2 mt-2">
-                            {staff.skills.slice(0, 3).map((skill) => (
+                            {(Array.isArray(staff.skills) ? staff.skills : []).slice(0, 3).map((skill: string) => (
                               <Badge key={skill} variant="secondary" className="text-xs">
                                 {skill}
                               </Badge>
                             ))}
-                            {staff.skills.length > 3 && (
+                            {(Array.isArray(staff.skills) ? staff.skills : []).length > 3 && (
                               <Badge variant="secondary" className="text-xs">
-                                +{staff.skills.length - 3} more
+                                +{(Array.isArray(staff.skills) ? staff.skills : []).length - 3} more
                               </Badge>
                             )}
                           </div>
@@ -231,14 +239,14 @@ export function ClientDashboard({ clientId }: ClientDashboardProps) {
                         <div className="flex items-center gap-4">
                           <div className="flex items-center gap-2 bg-yellow-50 px-3 py-1 rounded-full">
                             <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                            <span className="text-sm font-medium text-yellow-700">{staff.rating}</span>
+                            <span className="text-sm font-medium text-yellow-700">{parseFloat(staff.rating) || 0}</span>
                           </div>
-                          <span className="text-sm text-muted-foreground">{staff.totalEvents} events completed</span>
+                          {staff.totalEvents && <span className="text-sm text-muted-foreground">{staff.totalEvents} events completed</span>}
                         </div>
                       </div>
                       <div className="text-right space-y-3">
                         <div className="bg-green-50 px-3 py-2 rounded-lg">
-                          <p className="text-lg font-semibold text-green-700">${staff.hourlyRate}</p>
+                          <p className="text-lg font-semibold text-green-700">${parseFloat(staff.hourlyRate) || 0}</p>
                           <p className="text-xs text-green-600">per hour</p>
                         </div>
                         <Button size="sm" className="w-full">

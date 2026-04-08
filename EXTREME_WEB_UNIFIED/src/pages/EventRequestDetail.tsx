@@ -431,10 +431,10 @@ export function EventRequestDetail({ userRole, userId }: EventRequestDetailProps
   const availableStaffForRole: StaffMember[] = realStaff.map(s => ({
     staffId: s.user?.id || s.userId || s.id,
     staffName: s.user?.name || s.name || 'Unknown',
-    rate: s.hourlyRate || 0,
-    rating: s.rating || 0,
-    available: s.availabilityStatus === 'AVAILABLE' || s.availabilityStatus === undefined,
-    role: s.role || 'Staff',
+    rate: parseFloat(s.hourlyRate) || 0,
+    rating: parseFloat(s.rating) || 0,
+    available: s.availabilityStatus !== 'UNAVAILABLE' && s.availabilityStatus !== 'ON_LEAVE',
+    role: s.specialty || s.role || 'Staff',
   }));
 
   const totalStaffNeeded = staffAssignments.reduce((acc, r) => acc + r.quantity, 0);
@@ -1074,18 +1074,28 @@ export function EventRequestDetail({ userRole, userId }: EventRequestDetailProps
           </DialogHeader>
 
           <div className="space-y-2 overflow-y-auto flex-1 px-1">
-            {availableStaffForRole.filter(staff => staff.available).map((staff) => (
+            {isLoadingStaff && (
+              <p className="text-sm text-muted-foreground text-center py-6">Loading staff...</p>
+            )}
+            {!isLoadingStaff && availableStaffForRole.map((staff) => (
               <div
                 key={staff.staffId}
                 className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 cursor-pointer"
                 onClick={() => handleAddStaff(staff)}
               >
                 <div className="flex-1">
-                  <p className="font-medium">{staff.staffName}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium">{staff.staffName}</p>
+                    {!staff.available && (
+                      <span className="text-xs px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded">Busy</span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-3 text-sm text-muted-foreground">
                     <span>⭐ {staff.rating}</span>
                     <span>•</span>
                     <span>${staff.rate}/hr</span>
+                    <span>•</span>
+                    <span>{staff.role}</span>
                   </div>
                 </div>
                 <Button size="sm" variant="outline">
@@ -1095,10 +1105,10 @@ export function EventRequestDetail({ userRole, userId }: EventRequestDetailProps
               </div>
             ))}
 
-            {availableStaffForRole.filter(s => s.available).length === 0 && (
+            {!isLoadingStaff && availableStaffForRole.length === 0 && (
               <div className="text-center py-8 text-gray-500">
                 <Users className="h-12 w-12 mx-auto mb-2 text-gray-400" />
-                <p>No available staff members for this role</p>
+                <p>No staff members found</p>
               </div>
             )}
           </div>

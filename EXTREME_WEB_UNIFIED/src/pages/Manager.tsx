@@ -119,24 +119,26 @@ export function Manager({ userRole, userId }: ManagerProps) {
     phone: "",
     eventsManaged: rawEvents.length,
     avgRating: 4.8,
-    activeEvents: rawEvents.filter((e: any) => e.status === 'CONFIRMED' || e.status === 'IN_PROGRESS').length,
+    activeEvents: rawEvents.filter((e: any) => {
+      const s = (e.status || '').toUpperCase();
+      return s === 'CONFIRMED' || s === 'IN_PROGRESS' || s === 'IN-PROGRESS';
+    }).length,
   };
 
   // Convert API events to AssignedEvent format
   const today = format(new Date(), 'yyyy-MM-dd');
 
-  const assignedEvents: AssignedEvent[] = rawEvents.map((event: any, index: number) => {
-    const staffAssignedCount = event.shifts?.length || 0;
+  const assignedEvents: AssignedEvent[] = rawEvents.map((event: any) => {
+    const staffAssignedCount = (event.shifts || []).filter((s: any) => s.status !== 'REJECTED').length;
     const staffCheckedInCount = Math.floor(staffAssignedCount * 0.9);
 
-    const isFirstEvent = index === 0;
-    const eventDate = isFirstEvent ? today : (event.date || '');
+    const eventDate = event.date ? event.date.substring(0, 10) : '';
+    const evStatus = (event.status || '').toUpperCase();
 
     let eventStatus: 'upcoming' | 'in-progress' | 'completed' = 'upcoming';
-    const evStatus = (event.status || '').toUpperCase();
-    if (evStatus === 'COMPLETED' && !isFirstEvent) {
+    if (evStatus === 'COMPLETED') {
       eventStatus = 'completed';
-    } else if (isFirstEvent || (eventDate === today && evStatus === 'CONFIRMED')) {
+    } else if (evStatus === 'IN_PROGRESS' || evStatus === 'IN-PROGRESS' || (eventDate === today && evStatus === 'CONFIRMED')) {
       eventStatus = 'in-progress';
     }
 

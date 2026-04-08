@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
@@ -24,8 +24,9 @@ import {
   Calendar,
   MessageSquare
 } from "lucide-react";
-import { mockStaff, mockShifts } from "../../data/mockData";
+import { mockShifts } from "../../data/mockData";
 import { toast } from "sonner";
+import { staffService } from "../../services/staff.service";
 
 interface StaffRosterProps {
   managerId: string;
@@ -64,10 +65,26 @@ export function StaffRoster({ managerId, events }: StaffRosterProps) {
   const [roleFilter, setRoleFilter] = useState("all");
   const [selectedStaff, setSelectedStaff] = useState<StaffMember | null>(null);
   const [isStaffDialogOpen, setIsStaffDialogOpen] = useState(false);
+  const [staffList, setStaffList] = useState<any[]>([]);
+
+  useEffect(() => {
+    staffService.getStaffList({ take: 200 }).then((res: any) => {
+      const raw = Array.isArray(res) ? res : (res?.data || []);
+      setStaffList(raw.map((s: any) => ({
+        ...s,
+        name: s.user?.name || s.name || "Staff",
+        email: s.user?.email || s.email || "",
+        role: s.specialty || s.user?.role || "General Staff",
+        skills: Array.isArray(s.skills) ? s.skills : [],
+        rating: parseFloat(s.rating) || 0,
+        hourlyRate: parseFloat(s.hourlyRate) || 0,
+      })));
+    }).catch(() => {});
+  }, []);
 
   // Get all staff assigned to manager's events - memoized to prevent infinite re-renders
-  const managedStaff: StaffMember[] = useMemo(() => 
-    mockStaff.map((staff, index) => ({
+  const managedStaff: StaffMember[] = useMemo(() =>
+    staffList.map((staff, index) => ({
       ...staff,
       role: staff.role || staff.skills?.[0] || 'General Staff',
       currentStatus: staff.isActive ? 'on-shift' : 'off-duty' as any,
@@ -83,9 +100,7 @@ export function StaffRoster({ managerId, events }: StaffRosterProps) {
         phone: `+1 (555) ${100 + index * 10}-${1000 + index * 100}`,
         relationship: ['Spouse', 'Parent', 'Sibling', 'Friend'][index % 4]
       }
-    })).filter(staff => 
-      events.some(event => event.assignedStaff.includes(staff.id))
-    ), [events]
+    })), [events, staffList]
   );
 
   const filteredStaff = useMemo(() => 

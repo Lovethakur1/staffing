@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
@@ -37,8 +37,9 @@ import {
   Users,
   Activity
 } from "lucide-react";
-import { mockStaff, mockEvents, Staff } from "../../data/mockData";
+import { mockEvents, Staff } from "../../data/mockData";
 import { toast } from "sonner";
+import { staffService } from "../../services/staff.service";
 
 interface EnterpriseStaffDirectoryProps {
   clientId: string;
@@ -90,8 +91,26 @@ export function EnterpriseStaffDirectory({ clientId }: EnterpriseStaffDirectoryP
   
   const [viewMode, setViewMode] = useState<'grid' | 'list' | 'table'>('grid');
   const [showFilters, setShowFilters] = useState(false);
-  const [selectedStaff, setSelectedStaff] = useState<Staff | null>(null);
+  const [selectedStaff, setSelectedStaff] = useState<any | null>(null);
   const [favoriteStaffIds, setFavoriteStaffIds] = useState<string[]>([]);
+  const [staffList, setStaffList] = useState<any[]>([]);
+  const [isLoadingStaff, setIsLoadingStaff] = useState(true);
+
+  useEffect(() => {
+    setIsLoadingStaff(true);
+    staffService.getStaffList({ take: 200 }).then((res: any) => {
+      const raw = Array.isArray(res) ? res : (res?.data || []);
+      setStaffList(raw.map((s: any) => ({
+        ...s,
+        name: s.user?.name || s.name || "Staff",
+        email: s.user?.email || s.email || "",
+        specialty: s.specialty || s.user?.role || "General Staff",
+        rating: parseFloat(s.rating) || 0,
+        hourlyRate: parseFloat(s.hourlyRate) || 0,
+        skills: Array.isArray(s.skills) ? s.skills : [],
+      })));
+    }).catch(() => {}).finally(() => setIsLoadingStaff(false));
+  }, []);
 
   // Get client's event history
   const clientEvents = mockEvents.filter(event => event.clientId === clientId);
@@ -99,7 +118,7 @@ export function EnterpriseStaffDirectory({ clientId }: EnterpriseStaffDirectoryP
 
   // Enhanced filtering logic
   const filteredAndSortedStaff = useMemo(() => {
-    let filtered = mockStaff.filter(staff => {
+    let filtered = staffList.filter(staff => {
       // Search filter
       if (filters.search && !staff.name.toLowerCase().includes(filters.search.toLowerCase())) {
         return false;
@@ -183,7 +202,7 @@ export function EnterpriseStaffDirectory({ clientId }: EnterpriseStaffDirectoryP
     });
     
     return filtered;
-  }, [filters, sorting, clientEvents]);
+  }, [filters, sorting, clientEvents, staffList]);
 
   // Pagination logic
   const paginatedStaff = useMemo(() => {
@@ -506,7 +525,9 @@ export function EnterpriseStaffDirectory({ clientId }: EnterpriseStaffDirectoryP
         ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" 
         : "space-y-3"
       }>
-        {paginatedStaff.map((staff) => {
+        {isLoadingStaff ? (
+          <div className="col-span-full text-center py-12 text-muted-foreground">Loading...</div>
+        ) : paginatedStaff.map((staff) => {
           const eventsWorked = clientEvents.filter(e => e.assignedStaff.includes(staff.id)).length;
           const isFavorite = favoriteStaffIds.includes(staff.id);
           const hasWorkedWith = workedWithStaffIds.includes(staff.id);
@@ -658,7 +679,7 @@ export function EnterpriseStaffDirectory({ clientId }: EnterpriseStaffDirectoryP
       )}
 
       {/* No Results */}
-      {filteredAndSortedStaff.length === 0 && (
+      {filteredAndSortedStaff.length === 0 && !isLoadingStaff && (
         <div className="text-center py-12">
           <Search className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
           <h3 className="text-lg font-semibold mb-2">No staff found</h3>
