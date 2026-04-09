@@ -4,8 +4,13 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "prisma:generate": "prisma generate",
+    "postinstall": "npm run prisma:generate",
+    "predev": "npm run prisma:generate",
     "dev": "nodemon -w src -x ts-node src/server.ts",
+    "prebuild": "npm run prisma:generate",
     "build": "tsc",
+    "prestart": "npm run prisma:generate",
     "start": "node dist/server.js",
     "seed": "ts-node prisma/seed.ts"
   },
