@@ -123,6 +123,19 @@ interface StaffMember {
   notes: string;
 }
 
+const normalizeStaffDocument = (document: any) => ({
+  ...document,
+  id: document?.id,
+  name: document?.name || document?.title || 'Document',
+  category: document?.category || document?.type || document?.documentType || 'OTHER',
+  fileUrl: document?.fileUrl || document?.url || '',
+  status: String(document?.status || 'PENDING').toUpperCase(),
+  notes: document?.notes || '',
+  createdAt: document?.createdAt || document?.uploadDate || '',
+  mimeType: document?.mimeType || '',
+  fileSize: document?.fileSize || 0,
+});
+
 export function StaffDetail({ userRole, userId, staffId }: StaffDetailProps) {
   const { setCurrentPage, pageParams } = useNavigation();
   const [showScheduleDialog, setShowScheduleDialog] = useState(false);
@@ -156,7 +169,7 @@ export function StaffDetail({ userRole, userId, staffId }: StaffDetailProps) {
         const [shifts, timesheetRes, docsRes] = await Promise.allSettled([
           userId ? shiftService.getShifts({ staffId: userId, take: 50 }) : Promise.resolve([]),
           userId ? api.get('/timesheets', { params: { staffId: userId, take: 50 } }).then(r => r.data) : Promise.resolve([]),
-          staffService.getDocuments(currentStaffId),
+          userId ? staffService.getDocuments(userId) : Promise.resolve([]),
         ]);
 
         // --- Event History ---
@@ -211,7 +224,8 @@ export function StaffDetail({ userRole, userId, staffId }: StaffDetailProps) {
 
         // --- Documents ---
         const docsRaw = docsRes.status === 'fulfilled' ? docsRes.value : null;
-        const docsArr: any[] = Array.isArray(docsRaw) ? docsRaw : (docsRaw?.data || docsRaw?.documents || []);
+        const docsArr: any[] = (Array.isArray(docsRaw) ? docsRaw : (docsRaw?.data || docsRaw?.documents || []))
+          .map(normalizeStaffDocument);
         const hasDoc = (type: string) => docsArr.some((d: any) =>
           (d.type || d.documentType || d.category || '').toLowerCase().includes(type.toLowerCase()) && d.status !== 'REJECTED'
         );
