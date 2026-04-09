@@ -80,6 +80,38 @@ interface Assessment {
   status: 'completed' | 'pending' | 'scheduled';
 }
 
+const normalizeAssessment = (assessment: any): Assessment => {
+  const rawScores = assessment?.scores ?? {};
+  const communication = Number(rawScores.communication ?? assessment?.communication ?? 0);
+  const teamwork = Number(rawScores.teamwork ?? assessment?.teamwork ?? 0);
+  const problemSolving = Number(rawScores.problemSolving ?? assessment?.problemSolving ?? 0);
+  const leadership = Number(rawScores.leadership ?? assessment?.leadership ?? 0);
+  const technical = Number(rawScores.technical ?? assessment?.technical ?? 0);
+  const derivedOverall = Math.round((communication + teamwork + problemSolving + leadership + technical) / 5);
+  const normalizedStatus = String(assessment?.status || 'pending').toLowerCase();
+
+  return {
+    id: assessment?.id || crypto.randomUUID(),
+    candidateName: assessment?.candidateName || assessment?.candidate?.name || 'Candidate',
+    position: assessment?.position || assessment?.jobPosting?.title || assessment?.assessmentType || 'Assessment',
+    type: assessment?.type === 'personality' || assessment?.type === 'skills' || assessment?.type === 'both'
+      ? assessment.type
+      : 'skills',
+    completedDate: assessment?.completedDate || assessment?.updatedAt || assessment?.createdAt || '',
+    scores: {
+      communication,
+      teamwork,
+      problemSolving,
+      leadership,
+      technical,
+    },
+    overallScore: Number(assessment?.overallScore ?? assessment?.score ?? derivedOverall),
+    status: normalizedStatus === 'completed' || normalizedStatus === 'scheduled'
+      ? normalizedStatus
+      : 'pending',
+  };
+};
+
 export function Hiring({ userRole, userId }: PageProps) {
   const { setCurrentPage } = useNavigation();
   const [showJobDialog, setShowJobDialog] = useState(false);
@@ -156,7 +188,7 @@ export function Hiring({ userRole, userId }: PageProps) {
         try {
           const assessmentsRes = await staffService.getAssessments();
           fetchedAssessments = Array.isArray(assessmentsRes) ? assessmentsRes : (assessmentsRes?.data || []);
-          setAssessments(fetchedAssessments);
+          setAssessments(fetchedAssessments.map(normalizeAssessment));
         } catch {}
 
         try {

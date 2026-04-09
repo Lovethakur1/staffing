@@ -27,6 +27,18 @@ interface PerformanceProps {
   userId: string;
 }
 
+const normalizeReviewCategories = (review: any) => {
+  const fallbackRating = Number(review?.rating || 0);
+
+  return {
+    punctuality: Number(review?.categories?.punctuality ?? fallbackRating),
+    professionalism: Number(review?.categories?.professionalism ?? fallbackRating),
+    quality: Number(review?.categories?.quality ?? review?.categories?.qualityOfWork ?? fallbackRating),
+    qualityOfWork: Number(review?.categories?.qualityOfWork ?? review?.categories?.quality ?? fallbackRating),
+    communication: Number(review?.categories?.communication ?? fallbackRating),
+  };
+};
+
 export function Performance({ userRole, userId }: PerformanceProps) {
   // Get staff-specific data from API  
   const [staffReviews, setStaffReviews] = useState<any[]>([]);
@@ -44,6 +56,7 @@ export function Performance({ userRole, userId }: PerformanceProps) {
             clientName: r.client?.user?.name || r.clientName || '',
             eventName: r.event?.title || r.eventName || '',
             date: r.date || r.createdAt || '',
+            categories: normalizeReviewCategories(r),
             isPositive: (r.rating || 0) >= 4,
           })));
         } catch { /* No reviews endpoint yet */ }

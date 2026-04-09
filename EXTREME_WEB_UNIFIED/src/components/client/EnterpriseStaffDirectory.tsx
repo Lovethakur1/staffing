@@ -572,7 +572,7 @@ export function EnterpriseStaffDirectory({ clientId }: EnterpriseStaffDirectoryP
                   )}
                   
                   <div className="flex flex-wrap gap-1">
-                    {staff.skills.slice(0, 2).map(skill => (
+                    {staff.skills.slice(0, 2).map((skill: string) => (
                       <Badge key={skill} variant="secondary" className="text-xs">
                         {skill}
                       </Badge>
@@ -617,7 +617,7 @@ export function EnterpriseStaffDirectory({ clientId }: EnterpriseStaffDirectoryP
                           <div>
                             <h4 className="font-medium mb-2">Skills</h4>
                             <div className="flex flex-wrap gap-1">
-                              {staff.skills.map(skill => (
+                              {staff.skills.map((skill: string) => (
                                 <Badge key={skill} variant="secondary" className="text-xs">
                                   {skill}
                                 </Badge>
