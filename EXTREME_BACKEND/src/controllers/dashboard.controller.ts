@@ -245,9 +245,31 @@ export const getUpcomingCriticalEvents = asyncHandler(async (req: AuthRequest, r
     },
     orderBy: { date: 'asc' },
     take: 10,
-    include: {
-      client: { include: { user: { select: { name: true } } } },
-      shifts: { select: { id: true, staffId: true } },
+    select: {
+      id: true,
+      title: true,
+      date: true,
+      startTime: true,
+      endTime: true,
+      location: true,
+      venue: true,
+      staffRequired: true,
+      budget: true,
+      client: {
+        select: {
+          user: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      },
+      shifts: {
+        select: {
+          id: true,
+          staffId: true,
+        },
+      },
     },
   });
 
