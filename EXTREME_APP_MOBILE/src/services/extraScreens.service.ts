@@ -4,6 +4,114 @@
  */
 import api, { API_BASE_URL } from '../config/api';
 
+export type MobileContentSection = 'RESOURCE' | 'DOCUMENTATION' | 'TRAINING';
+
+export interface MobileContentItem {
+  id: string;
+  slug: string;
+  title: string;
+  description: string;
+  body?: string;
+  section: MobileContentSection;
+  kind: string;
+  category: string;
+  icon?: string;
+  color?: string;
+  actionLabel?: string;
+  url?: string;
+  pages?: number;
+  durationMinutes?: number;
+  modules?: number;
+  required: boolean;
+  instructor?: string;
+  audiences: string[];
+  isPublished: boolean;
+  sortOrder: number;
+}
+
+export async function getMobileContent(section: MobileContentSection): Promise<MobileContentItem[]> {
+  try {
+    const res = await api.get('/content/mobile', { params: { section } });
+    const raw = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+    return raw.map((item: any) => ({
+      id: item.id,
+      slug: item.slug || '',
+      title: item.title || '',
+      description: item.description || '',
+      body: item.body || '',
+      section: item.section || section,
+      kind: item.kind || 'LINK',
+      category: item.category || 'General',
+      icon: item.icon || 'book-outline',
+      color: item.color || '#5E1916',
+      actionLabel: item.actionLabel || 'Open',
+      url: item.url || undefined,
+      pages: item.pages ? Number(item.pages) : undefined,
+      durationMinutes: item.durationMinutes ? Number(item.durationMinutes) : undefined,
+      modules: item.modules ? Number(item.modules) : undefined,
+      required: Boolean(item.required),
+      instructor: item.instructor || undefined,
+      audiences: Array.isArray(item.audiences) ? item.audiences : [],
+      isPublished: Boolean(item.isPublished ?? true),
+      sortOrder: Number(item.sortOrder || 0),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+// ─── TRAINING ────────────────────────────────────────────────────────────────
+
+export interface TrainingCourse {
+  id: string;
+  title: string;
+  category: string;
+  duration: number;
+  modules: number;
+  completionRate: number;
+  status: 'not-started' | 'in-progress' | 'completed';
+  required: boolean;
+  description: string;
+  instructor?: string;
+}
+
+export async function getTrainingCourses(): Promise<TrainingCourse[]> {
+  try {
+    const contentItems = await getMobileContent('TRAINING');
+    if (contentItems.length > 0) {
+      return contentItems.map((course) => ({
+        id: course.id,
+        title: course.title,
+        category: course.category || 'Training',
+        duration: Number(course.durationMinutes || 0),
+        modules: Number(course.modules || 0),
+        completionRate: 0,
+        status: 'not-started',
+        required: Boolean(course.required),
+        description: course.description || course.body || '',
+        instructor: course.instructor || undefined,
+      }));
+    }
+
+    const res = await api.get('/training/courses');
+    const raw = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+    return raw.map((course: any) => ({
+      id: course.id,
+      title: course.title || '',
+      category: course.category || '',
+      duration: Number(course.duration || 0),
+      modules: Number(course.modules || 0),
+      completionRate: Number(course.completionRate || 0),
+      status: String(course.status || 'not-started').toLowerCase() as TrainingCourse['status'],
+      required: Boolean(course.required),
+      description: course.description || '',
+      instructor: course.instructor || undefined,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 // ─── TIMESHEETS ──────────────────────────────────────────────────────────────
 
 export interface Timesheet {

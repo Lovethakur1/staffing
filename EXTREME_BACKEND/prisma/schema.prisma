@@ -99,6 +99,8 @@ model User {
   // Settings
   preferences UserPreferences?
   loginLogs   LoginLog[]
+  contentItemsCreated ContentLibraryItem[] @relation("ContentCreatedBy")
+  contentItemsUpdated ContentLibraryItem[] @relation("ContentUpdatedBy")
 
   // Support Tickets
   supportTickets  SupportTicket[] @relation("UserTickets")
@@ -732,4 +734,37 @@ model SupportTicket {
   resolvedById    String?
   resolvedBy      User?    @relation("ResolvedTickets", fields: [resolvedById], references: [id])
   updatedAt       DateTime @updatedAt
+}
+
+// ─── Content Library ─────────────────────────────────────────────────────────
+
+model ContentLibraryItem {
+  id              String   @id @default(uuid())
+  slug            String   @unique
+  title           String
+  description     String
+  body            String?  @db.Text
+  section         String   // RESOURCE, DOCUMENTATION, TRAINING
+  kind            String   // LINK, GUIDE, VIDEO, POLICY, COURSE
+  category        String
+  icon            String?
+  color           String?
+  actionLabel     String?
+  url             String?
+  pages           Int?
+  durationMinutes Int?
+  modules         Int?
+  required        Boolean  @default(false)
+  instructor      String?
+  audiences       String[] @default(["STAFF"])
+  isPublished     Boolean  @default(true)
+  sortOrder       Int      @default(0)
+  createdById     String?
+  createdBy       User?    @relation("ContentCreatedBy", fields: [createdById], references: [id])
+  updatedById     String?
+  updatedBy       User?    @relation("ContentUpdatedBy", fields: [updatedById], references: [id])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([section, kind, isPublished, sortOrder])
 }

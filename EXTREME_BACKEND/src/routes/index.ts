@@ -21,6 +21,7 @@ import settingsRoutes from './settings.routes';
 import supportRoutes from './support.routes';
 import reviewRoutes from './review.routes';
 import unavailabilityRoutes from './unavailability.routes';
+import contentRoutes from './content.routes';
 
 const router = Router();
 
@@ -46,5 +47,6 @@ router.use('/settings', settingsRoutes);
 router.use('/support', supportRoutes);
 router.use('/reviews', reviewRoutes);
 router.use('/unavailability', unavailabilityRoutes);
+router.use('/content', contentRoutes);
 
 export default router;

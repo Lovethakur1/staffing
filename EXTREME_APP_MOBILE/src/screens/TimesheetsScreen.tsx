@@ -54,14 +54,14 @@ export default function TimesheetsScreen() {
 
   if (loading) {
     return (
-      <ScreenLayout activeTab="Dashboard">
+      <ScreenLayout activeTab="Timesheets">
         <View style={st.center}><ActivityIndicator size="large" color={Colors.primary} /></View>
       </ScreenLayout>
     );
   }
 
   return (
-    <ScreenLayout activeTab="Dashboard">
+    <ScreenLayout activeTab="Timesheets">
       <ScrollView
         contentContainerStyle={st.scroll}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} tintColor={Colors.primary} />}

@@ -77,7 +77,7 @@ export default function HelpSupportScreen() {
   };
 
   return (
-    <ScreenLayout activeTab="Dashboard">
+    <ScreenLayout activeTab="HelpSupport">
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
           contentContainerStyle={st.scroll}

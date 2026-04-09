@@ -264,7 +264,7 @@ export function DrawerMenu({ isOpen, activeTab, onNavigate, onClose, navigation 
             <View key={section.title} style={styles.section}>
               <Text style={styles.sectionTitle}>{section.title}</Text>
               {section.items.map((item) => {
-                const isActive = item.tab === activeTab;
+                const isActive = item.tab === activeTab || item.screen === activeTab;
                 return (
                   <TouchableOpacity
                     key={item.label}

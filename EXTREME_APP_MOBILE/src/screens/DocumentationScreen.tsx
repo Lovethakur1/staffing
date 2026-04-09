@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, RefreshControl, Linking,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { ScreenLayout } from '../components';
 import { Colors } from '../theme';
+import { useAuth } from '../context/AuthContext';
+import { getMyDocuments, getCertifications, getTrainingCourses, getStaffAnalytics, getMobileContent, MobileContentItem } from '../services/extraScreens.service';
 
 type DocTab = 'guides' | 'videos' | 'policies';
 
@@ -13,11 +16,13 @@ interface DocItem {
   title: string;
   description: string;
   category: string;
+  kind?: string;
   pages?: number;
   duration?: string;
   icon: keyof typeof Ionicons.glyphMap;
   color: string;
   tag: string;
+  url?: string;
 }
 
 const GUIDES: DocItem[] = [
@@ -46,20 +51,108 @@ const POLICIES: DocItem[] = [
 const DOC_DATA: Record<DocTab, DocItem[]> = { guides: GUIDES, videos: VIDEOS, policies: POLICIES };
 
 export default function DocumentationScreen() {
+  const { user } = useAuth();
   const [tab, setTab] = useState<DocTab>('guides');
   const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [managedDocs, setManagedDocs] = useState<DocItem[]>([]);
+  const [summary, setSummary] = useState({
+    alerts: 0,
+    requiredReads: 0,
+    trainingCourses: 0,
+    documentsPending: 0,
+    averageRating: 0,
+  });
 
-  const items = DOC_DATA[tab].filter(d =>
+  const load = async (quiet = false) => {
+    if (!quiet) setLoading(true);
+    try {
+      const [documents, certifications, trainingCourses, analytics] = await Promise.all([
+        user?.id ? getMyDocuments(user.id) : Promise.resolve([]),
+        user?.id ? getCertifications(user.id) : Promise.resolve([]),
+        getTrainingCourses(),
+        getStaffAnalytics(),
+      ]);
+      const contentItems = await getMobileContent('DOCUMENTATION');
+      setManagedDocs(contentItems.map((item: MobileContentItem) => ({
+        id: item.id,
+        title: item.title,
+        description: item.description || item.body || '',
+        category: item.category || 'General',
+        kind: item.kind,
+        pages: item.pages,
+        duration: item.durationMinutes ? `${item.durationMinutes} min` : undefined,
+        icon: (item.icon as keyof typeof Ionicons.glyphMap) || 'book-outline',
+        color: item.color || Colors.primary,
+        tag: item.required ? 'Required' : item.kind,
+        url: item.url,
+      })));
+
+      const certAlerts = certifications.filter((cert) => cert.status === 'expired' || cert.status === 'expiring-soon').length;
+      const documentAlerts = documents.filter((document) => document.status === 'pending' || document.status === 'rejected').length;
+      const requiredReads = trainingCourses.filter((course) => course.required).length + (contentItems.length > 0
+        ? contentItems.filter((item: MobileContentItem) => item.required).length
+        : POLICIES.filter((item) => item.tag === 'Required').length);
+
+      setSummary({
+        alerts: certAlerts + documentAlerts,
+        requiredReads,
+        trainingCourses: trainingCourses.length,
+        documentsPending: documents.filter((document) => document.status === 'pending').length,
+        averageRating: analytics?.avgRating ?? 0,
+      });
+    } catch {
+      setSummary({ alerts: 0, requiredReads: 0, trainingCourses: 0, documentsPending: 0, averageRating: 0 });
+    }
+    setLoading(false);
+    setRefreshing(false);
+  };
+
+  useFocusEffect(useCallback(() => { load(); }, [user?.id]));
+
+  const managedData: Record<DocTab, DocItem[]> = {
+    guides: managedDocs.filter((item) => item.kind !== 'VIDEO' && item.kind !== 'POLICY'),
+    videos: managedDocs.filter((item) => item.kind === 'VIDEO'),
+    policies: managedDocs.filter((item) => item.kind === 'POLICY'),
+  };
+
+  const sourceData = managedDocs.length > 0 ? managedData : DOC_DATA;
+
+  const items = sourceData[tab].filter(d =>
     search.trim() === '' ||
     d.title.toLowerCase().includes(search.toLowerCase()) ||
     d.description.toLowerCase().includes(search.toLowerCase())
   );
 
+  if (loading) {
+    return (
+      <ScreenLayout activeTab="Documentation">
+        <View style={st.center}><ActivityIndicator size="large" color={Colors.primary} /></View>
+      </ScreenLayout>
+    );
+  }
+
   return (
-    <ScreenLayout activeTab="Dashboard">
-      <ScrollView contentContainerStyle={st.scroll}>
+    <ScreenLayout activeTab="Documentation">
+      <ScrollView
+        contentContainerStyle={st.scroll}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} tintColor={Colors.primary} />}
+      >
         <Text style={st.pageTitle}>Documentation</Text>
         <Text style={st.pageSubtitle}>Guides, tutorials and company policies</Text>
+
+        <View style={st.heroCard}>
+          <View style={st.heroIcon}><Ionicons name="book-outline" size={20} color="#fff" /></View>
+          <View style={{ flex: 1 }}>
+            <Text style={st.heroTitle}>Personalized Knowledge Hub</Text>
+            <Text style={st.heroSubtitle}>
+              {summary.alerts > 0
+                ? `${summary.alerts} item${summary.alerts === 1 ? '' : 's'} need attention across docs and certifications.`
+                : 'Everything looks up to date. Keep reviewing required guides and policies.'}
+            </Text>
+          </View>
+        </View>
 
         {/* Search */}
         <View style={st.searchBar}>
@@ -81,9 +174,10 @@ export default function DocumentationScreen() {
         {/* Stats */}
         <View style={st.statsRow}>
           {[
-            { label: 'Guides', value: GUIDES.length, icon: 'book-outline', color: '#3B82F6' },
-            { label: 'Videos', value: VIDEOS.length, icon: 'play-circle-outline', color: '#10B981' },
-            { label: 'Policies', value: POLICIES.length, icon: 'document-text-outline', color: Colors.primary },
+            { label: 'Library', value: sourceData.guides.length + sourceData.videos.length + sourceData.policies.length, icon: 'book-outline', color: '#3B82F6' },
+            { label: 'Required', value: summary.requiredReads, icon: 'shield-checkmark-outline', color: '#10B981' },
+            { label: 'Training', value: summary.trainingCourses, icon: 'school-outline', color: '#8B5CF6' },
+            { label: 'Alerts', value: summary.alerts, icon: 'warning-outline', color: summary.alerts > 0 ? '#EF4444' : Colors.primary },
           ].map(s => (
             <View key={s.label} style={st.statCard}>
               <View style={[st.statIcon, { backgroundColor: s.color + '18' }]}>
@@ -93,6 +187,17 @@ export default function DocumentationScreen() {
               <Text style={st.statLabel}>{s.label}</Text>
             </View>
           ))}
+        </View>
+
+        <View style={st.contextRow}>
+          <View style={st.contextChip}>
+            <Ionicons name="time-outline" size={12} color={Colors.primary} />
+            <Text style={st.contextChipText}>{summary.documentsPending} pending documents</Text>
+          </View>
+          <View style={st.contextChip}>
+            <Ionicons name="star-outline" size={12} color={Colors.primary} />
+            <Text style={st.contextChipText}>{summary.averageRating > 0 ? `${summary.averageRating.toFixed(1)} avg rating` : 'No rating yet'}</Text>
+          </View>
         </View>
 
         {/* Tabs */}
@@ -112,7 +217,7 @@ export default function DocumentationScreen() {
           </View>
         ) : (
           items.map(doc => (
-            <TouchableOpacity key={doc.id} style={st.card} activeOpacity={0.8}>
+            <TouchableOpacity key={doc.id} style={st.card} activeOpacity={0.8} onPress={() => doc.url && Linking.openURL(doc.url)}>
               <View style={st.cardTop}>
                 <View style={[st.docIcon, { backgroundColor: doc.color + '18' }]}>
                   <Ionicons name={doc.icon} size={22} color={doc.color} />
@@ -159,18 +264,28 @@ export default function DocumentationScreen() {
 }
 
 const st = StyleSheet.create({
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   scroll: { paddingHorizontal: 16, paddingBottom: 100 },
   pageTitle: { fontSize: 22, fontWeight: '700', color: Colors.textPrimary, marginTop: 16 },
   pageSubtitle: { fontSize: 13, color: Colors.textSecondary, marginTop: 2, marginBottom: 14 },
 
+  heroCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: Colors.primary, borderRadius: 14, padding: 16, marginBottom: 14 },
+  heroIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.18)', justifyContent: 'center', alignItems: 'center' },
+  heroTitle: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  heroSubtitle: { fontSize: 12, color: 'rgba(255,255,255,0.82)', marginTop: 2, lineHeight: 17 },
+
   searchBar: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0', paddingHorizontal: 12, paddingVertical: 10, marginBottom: 14 },
   searchInput: { flex: 1, fontSize: 14, color: Colors.textPrimary },
 
-  statsRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
+  statsRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
   statCard: { flex: 1, backgroundColor: '#fff', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#E2E8F0', alignItems: 'center' },
   statIcon: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginBottom: 6 },
   statValue: { fontSize: 18, fontWeight: '700', color: Colors.textPrimary },
   statLabel: { fontSize: 10, color: Colors.textMuted, marginTop: 2 },
+
+  contextRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
+  contextChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#fff', borderRadius: 20, borderWidth: 1, borderColor: '#E2E8F0', paddingHorizontal: 10, paddingVertical: 6 },
+  contextChipText: { fontSize: 11, fontWeight: '600', color: Colors.textSecondary },
 
   tabsRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
   tabBtn: { flex: 1, paddingVertical: 9, borderRadius: 10, backgroundColor: '#fff', borderWidth: 1, borderColor: '#E2E8F0', alignItems: 'center' },

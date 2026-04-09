@@ -7,20 +7,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { ScreenLayout } from '../components';
 import { Colors } from '../theme';
-import api from '../config/api';
-
-interface Course {
-  id: string;
-  title: string;
-  category: string;
-  duration: number;
-  modules: number;
-  completionRate: number;
-  status: 'not-started' | 'in-progress' | 'completed';
-  required: boolean;
-  description: string;
-  instructor?: string;
-}
+import { getTrainingCourses, TrainingCourse } from '../services/extraScreens.service';
 
 const STATUS_CONFIG = {
   completed:   { bg: '#D1FAE5', text: '#065F46', icon: 'checkmark-circle-outline' as const, label: 'Completed' },
@@ -29,32 +16,14 @@ const STATUS_CONFIG = {
 };
 
 export default function TrainingPortalScreen() {
-  const [courses, setCourses] = useState<Course[]>([]);
+  const [courses, setCourses] = useState<TrainingCourse[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [tab, setTab] = useState<'required' | 'all'>('required');
 
   const load = async (quiet = false) => {
     if (!quiet) setLoading(true);
-    try {
-      const res = await api.get('/training/courses');
-      const raw = Array.isArray(res.data) ? res.data : (res.data?.data || []);
-      setCourses(raw.map((c: any) => ({
-        id: c.id,
-        title: c.title || '',
-        category: c.category || '',
-        duration: c.duration || 0,
-        modules: c.modules || 0,
-        completionRate: c.completionRate || 0,
-        status: (c.status || 'not-started').toLowerCase() as Course['status'],
-        required: c.required ?? false,
-        description: c.description || '',
-        instructor: c.instructor || undefined,
-      })));
-    } catch {
-      // No training endpoint yet — graceful empty state
-      setCourses([]);
-    }
+    setCourses(await getTrainingCourses());
     setLoading(false);
     setRefreshing(false);
   };
@@ -76,14 +45,14 @@ export default function TrainingPortalScreen() {
 
   if (loading) {
     return (
-      <ScreenLayout activeTab="Dashboard">
+      <ScreenLayout activeTab="TrainingPortal">
         <View style={st.center}><ActivityIndicator size="large" color={Colors.primary} /></View>
       </ScreenLayout>
     );
   }
 
   return (
-    <ScreenLayout activeTab="Dashboard">
+    <ScreenLayout activeTab="TrainingPortal">
       <ScrollView
         contentContainerStyle={st.scroll}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} tintColor={Colors.primary} />}

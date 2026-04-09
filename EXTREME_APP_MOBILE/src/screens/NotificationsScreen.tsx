@@ -199,7 +199,7 @@ export default function NotificationsScreen() {
             )}
             {notifications.length > 0 && (
               <TouchableOpacity onPress={clearAllNotifications} style={st.clearAllBtn}>
-                <Ionicons name="trash-outline" size={14} color={Colors.error || '#EF4444'} />
+                <Ionicons name="trash-outline" size={14} color={Colors.danger || '#EF4444'} />
                 <Text style={st.clearAllText}>Clear all</Text>
               </TouchableOpacity>
             )}
