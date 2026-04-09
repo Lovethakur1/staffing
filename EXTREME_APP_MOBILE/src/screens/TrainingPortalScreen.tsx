@@ -1,29 +1,23 @@
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking,
   ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { ScreenLayout } from '../components';
 import { Colors } from '../theme';
-import { getTrainingCourses, TrainingCourse } from '../services/extraScreens.service';
-
-const STATUS_CONFIG = {
-  completed:   { bg: '#D1FAE5', text: '#065F46', icon: 'checkmark-circle-outline' as const, label: 'Completed' },
-  'in-progress': { bg: '#DBEAFE', text: '#1E40AF', icon: 'play-circle-outline' as const, label: 'In Progress' },
-  'not-started': { bg: '#F1F5F9', text: '#475569', icon: 'lock-closed-outline' as const, label: 'Not Started' },
-};
+import { getMobileContent, MobileContentItem } from '../services/extraScreens.service';
 
 export default function TrainingPortalScreen() {
-  const [courses, setCourses] = useState<TrainingCourse[]>([]);
+  const [courses, setCourses] = useState<MobileContentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [tab, setTab] = useState<'required' | 'all'>('required');
 
   const load = async (quiet = false) => {
     if (!quiet) setLoading(true);
-    setCourses(await getTrainingCourses());
+    setCourses(await getMobileContent('TRAINING'));
     setLoading(false);
     setRefreshing(false);
   };
@@ -32,11 +26,9 @@ export default function TrainingPortalScreen() {
 
   const stats = {
     total: courses.length,
-    completed: courses.filter(c => c.status === 'completed').length,
-    inProgress: courses.filter(c => c.status === 'in-progress').length,
-    avgCompletion: courses.length > 0
-      ? Math.round(courses.reduce((s, c) => s + c.completionRate, 0) / courses.length)
-      : 0,
+    required: courses.filter(c => c.required).length,
+    optional: courses.filter(c => !c.required).length,
+    duration: courses.reduce((sum, course) => sum + (course.durationMinutes || 0), 0),
   };
 
   const displayed = tab === 'required'
@@ -58,15 +50,15 @@ export default function TrainingPortalScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} tintColor={Colors.primary} />}
       >
         <Text style={st.pageTitle}>Training Portal</Text>
-        <Text style={st.pageSubtitle}>Staff development and certification courses</Text>
+        <Text style={st.pageSubtitle}>Admin-published training courses and learning material</Text>
 
         {/* Stats */}
         <View style={st.statsRow}>
           {[
             { label: 'Total', value: stats.total, icon: 'book-outline', color: '#3B82F6' },
-            { label: 'Done', value: stats.completed, icon: 'checkmark-circle-outline', color: '#10B981' },
-            { label: 'Active', value: stats.inProgress, icon: 'time-outline', color: '#F59E0B' },
-            { label: 'Avg %', value: `${stats.avgCompletion}%`, icon: 'trophy-outline', color: '#8B5CF6', small: true },
+            { label: 'Required', value: stats.required, icon: 'checkmark-circle-outline', color: '#10B981' },
+            { label: 'Optional', value: stats.optional, icon: 'time-outline', color: '#F59E0B' },
+            { label: 'Minutes', value: stats.duration, icon: 'trophy-outline', color: '#8B5CF6', small: true },
           ].map(s => (
             <View key={s.label} style={st.statCard}>
               <View style={[st.statIcon, { backgroundColor: s.color + '18' }]}>
@@ -92,12 +84,11 @@ export default function TrainingPortalScreen() {
         {displayed.length === 0 ? (
           <View style={st.emptyBox}>
             <Ionicons name="school-outline" size={52} color={Colors.textMuted} />
-            <Text style={st.emptyText}>No courses found</Text>
-            <Text style={st.emptySubtext}>Training courses will appear here once available</Text>
+            <Text style={st.emptyText}>No training courses found</Text>
+            <Text style={st.emptySubtext}>This page will populate after admin publishes training content.</Text>
           </View>
         ) : (
           displayed.map(course => {
-            const sc = STATUS_CONFIG[course.status];
             return (
               <View key={course.id} style={st.card}>
                 {course.required && (
@@ -109,29 +100,27 @@ export default function TrainingPortalScreen() {
                 <View style={st.cardTop}>
                   <View style={{ flex: 1 }}>
                     <Text style={st.cardTitle}>{course.title}</Text>
-                    <Text style={st.cardDesc} numberOfLines={2}>{course.description}</Text>
+                    <Text style={st.cardDesc} numberOfLines={3}>{course.description || course.body || ''}</Text>
                   </View>
-                  <View style={[st.statusBadge, { backgroundColor: sc.bg }]}>
-                    <Ionicons name={sc.icon} size={12} color={sc.text} />
-                    <Text style={[st.statusText, { color: sc.text }]}>{sc.label}</Text>
+                  <View style={st.statusBadge}> 
+                    <Ionicons name="library-outline" size={12} color={Colors.primary} />
+                    <Text style={st.statusText}>Published</Text>
                   </View>
                 </View>
                 <View style={st.courseMeta}>
-                  <View style={st.metaChip}><Ionicons name="time-outline" size={12} color={Colors.textMuted} /><Text style={st.metaChipText}>{course.duration}m</Text></View>
-                  <View style={st.metaChip}><Ionicons name="list-outline" size={12} color={Colors.textMuted} /><Text style={st.metaChipText}>{course.modules} modules</Text></View>
-                  {course.instructor && <View style={st.metaChip}><Ionicons name="person-outline" size={12} color={Colors.textMuted} /><Text style={st.metaChipText}>{course.instructor}</Text></View>}
+                  {!!course.durationMinutes && <View style={st.metaChip}><Ionicons name="time-outline" size={12} color={Colors.textMuted} /><Text style={st.metaChipText}>{course.durationMinutes}m</Text></View>}
+                  {!!course.modules && <View style={st.metaChip}><Ionicons name="list-outline" size={12} color={Colors.textMuted} /><Text style={st.metaChipText}>{course.modules} modules</Text></View>}
+                  {!!course.instructor && <View style={st.metaChip}><Ionicons name="person-outline" size={12} color={Colors.textMuted} /><Text style={st.metaChipText}>{course.instructor}</Text></View>}
+                  <View style={st.metaChip}><Ionicons name="folder-outline" size={12} color={Colors.textMuted} /><Text style={st.metaChipText}>{course.category}</Text></View>
                 </View>
-                {/* Progress bar */}
-                <View style={st.progressRow}>
-                  <View style={st.progressBg}>
-                    <View style={[st.progressFill, { width: `${course.completionRate}%` }]} />
-                  </View>
-                  <Text style={st.progressLabel}>{course.completionRate}%</Text>
-                </View>
-                <TouchableOpacity style={[st.actionBtn, course.status === 'completed' && st.actionBtnOutline]}>
-                  <Ionicons name={course.status === 'completed' ? 'trophy-outline' : 'play-outline'} size={14} color={course.status === 'completed' ? Colors.primary : '#fff'} />
-                  <Text style={[st.actionBtnText, course.status === 'completed' && { color: Colors.primary }]}>
-                    {course.status === 'completed' ? 'View Certificate' : course.status === 'in-progress' ? 'Continue' : 'Start Course'}
+                <TouchableOpacity
+                  style={[st.actionBtn, !course.url && st.actionBtnOutline]}
+                  disabled={!course.url}
+                  onPress={() => course.url && Linking.openURL(course.url)}
+                >
+                  <Ionicons name={course.url ? 'open-outline' : 'document-text-outline'} size={14} color={course.url ? '#fff' : Colors.primary} />
+                  <Text style={[st.actionBtnText, !course.url && { color: Colors.primary }]}> 
+                    {course.url ? (course.actionLabel || 'Open Course') : 'Published by Admin'}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -171,15 +160,11 @@ const st = StyleSheet.create({
   cardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 10 },
   cardTitle: { fontSize: 15, fontWeight: '700', color: Colors.textPrimary, marginBottom: 4 },
   cardDesc: { fontSize: 12, color: Colors.textSecondary, lineHeight: 17 },
-  statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20 },
-  statusText: { fontSize: 11, fontWeight: '700' },
+  statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20, backgroundColor: '#EEF2FF' },
+  statusText: { fontSize: 11, fontWeight: '700', color: Colors.primary },
   courseMeta: { flexDirection: 'row', gap: 8, marginBottom: 10 },
   metaChip: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#F8FAFC', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
   metaChipText: { fontSize: 11, color: Colors.textSecondary },
-  progressRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-  progressBg: { flex: 1, height: 6, backgroundColor: '#E2E8F0', borderRadius: 3, overflow: 'hidden' },
-  progressFill: { height: 6, backgroundColor: Colors.primary, borderRadius: 3 },
-  progressLabel: { fontSize: 11, fontWeight: '700', color: Colors.textPrimary, width: 32, textAlign: 'right' },
   actionBtn: { backgroundColor: Colors.primary, borderRadius: 8, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   actionBtnOutline: { backgroundColor: 'transparent', borderWidth: 1, borderColor: Colors.primary },
   actionBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
