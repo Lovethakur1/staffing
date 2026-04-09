@@ -392,6 +392,21 @@ export const listCertifications = asyncHandler(async (req: Request, res: Respons
 });
 
 /**
+ * GET /api/staff/all-certifications
+ * List every certification across all staff (admin / sub-admin only).
+ */
+export const listAllCertifications = asyncHandler(async (req: Request, res: Response) => {
+  const certs = await prisma.certification.findMany({
+    orderBy: { createdAt: 'desc' },
+    include: {
+      staff: { select: { id: true, name: true, email: true } },
+    },
+  });
+
+  res.json(certs);
+});
+
+/**
  * POST /api/staff/certifications
  */
 export const createCertification = asyncHandler(async (req: AuthRequest, res: Response) => {

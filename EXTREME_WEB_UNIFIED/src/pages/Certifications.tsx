@@ -149,8 +149,16 @@ export function Certifications({ userRole, userId }: CertificationsProps) {
   // Get unique cert types
   const certTypes = Array.from(new Set(allCertifications.map(c => c.certType))).filter(Boolean);
 
-  const handleVerify = (cert: Certification) => {
-    toast.success(`Certification ${cert.id} verified successfully`);
+  const handleVerify = async (cert: Certification) => {
+    try {
+      await staffService.verifyCertification(cert.id, {});
+      setAllCertifications(prev => prev.map(c =>
+        c.id === cert.id ? { ...c, status: 'valid' as const, verifiedBy: 'admin', verifiedDate: new Date().toISOString() } : c
+      ));
+      toast.success(`Certification "${cert.certType}" verified successfully`);
+    } catch {
+      toast.error('Failed to verify certification');
+    }
   };
 
   const handleSendReminder = (cert: Certification) => {

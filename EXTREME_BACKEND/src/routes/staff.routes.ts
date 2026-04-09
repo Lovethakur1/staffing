@@ -2,7 +2,7 @@ import { Router } from 'express';
 import {
   listStaff, getStaffProfile, updateStaffProfile,
   listApplications, createApplication, updateApplication,
-  listCertifications, createCertification, verifyCertification,
+  listCertifications, listAllCertifications, createCertification, verifyCertification,
   listInterviews, createInterview, updateInterview,
   listAllDocuments, listDocuments, createDocument, updateDocument,
   getStaffDashboard, getMyPayroll,
@@ -30,6 +30,7 @@ router.post('/hr/applications', authorize('STAFF'), createApplication);
 router.put('/hr/applications/:id', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER'), updateApplication);
 
 // Certifications
+router.get('/all-certifications', authorize('ADMIN', 'SUB_ADMIN'), listAllCertifications);
 router.get('/:staffId/certifications', listCertifications);
 router.post('/certifications', createCertification);
 router.put('/certifications/:id/verify', authorize('ADMIN', 'SUB_ADMIN'), verifyCertification);

@@ -100,6 +100,7 @@ import { DataProcessingAgreement } from "../pages/docs/DataProcessingAgreement";
 import { RolesPermissions } from "../pages/RolesPermissions";
 import { SchedulingDispatch } from "../pages/SchedulingDispatch";
 import { DeviceApprovals } from "../pages/DeviceApprovals";
+import { MobileDocumentation } from "../pages/MobileDocumentation";
 // StaffTracker removed from admin portal
 
 interface PageRouterProps {
@@ -193,6 +194,8 @@ export function PageRouter({ userRole, userId }: PageRouterProps) {
                 return <Settings userRole={userRole} userId={userId} />;
             case 'resources':
                 return <Resources userRole={userRole} userId={userId} />;
+            case 'mobile-documentation':
+                return <MobileDocumentation userRole={userRole} userId={userId} />;
             case 'notifications':
                 return <Notifications userRole={userRole} userId={userId} />;
             case 'profile':

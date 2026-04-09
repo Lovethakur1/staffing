@@ -5,7 +5,6 @@ import { Badge } from '../components/ui/badge';
 import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Switch } from '../components/ui/switch';
 import {
   BookOpen,
@@ -39,7 +38,6 @@ interface ResourcesProps {
   userId: string;
 }
 
-const SECTION_OPTIONS: ContentSection[] = ['RESOURCE', 'DOCUMENTATION', 'TRAINING'];
 const KIND_OPTIONS: ContentKind[] = ['LINK', 'GUIDE', 'VIDEO', 'POLICY', 'COURSE'];
 const ROLE_OPTIONS = ['ALL', 'STAFF', 'MANAGER', 'ADMIN', 'SUB_ADMIN', 'SCHEDULER', 'CLIENT'];
 
@@ -68,7 +66,7 @@ const emptyForm = {
 
 export function Resources({ userRole }: ResourcesProps) {
   const isAdmin = userRole === 'admin' || userRole === 'sub-admin';
-  const [activeSection, setActiveSection] = useState<ContentSection>('RESOURCE');
+  const activeSection: ContentSection = 'RESOURCE';
   const [items, setItems] = useState<ContentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -92,7 +90,7 @@ export function Resources({ userRole }: ResourcesProps) {
 
   useEffect(() => {
     load();
-  }, [activeSection, isAdmin]);
+  }, [isAdmin]);
 
   const groupedItems = useMemo(() => {
     return items.reduce((acc: Record<string, ContentItem[]>, item) => {
@@ -210,8 +208,8 @@ export function Resources({ userRole }: ResourcesProps) {
           </div>
           <p className="text-sm sm:text-base text-muted-foreground mt-1 sm:mt-2">
             {isAdmin
-              ? 'Maintain backend-managed mobile resources, documentation, and training content.'
-              : 'Browse live resources, documentation, and training content published by admin.'}
+              ? 'Manage resource links and guides published to the mobile app.'
+              : 'Browse live resources published by admin.'}
           </p>
         </div>
         <Button variant="outline" onClick={load} disabled={loading}>
@@ -220,83 +218,66 @@ export function Resources({ userRole }: ResourcesProps) {
         </Button>
       </div>
 
-      <Tabs
-        value={activeSection}
-        onValueChange={(value) => {
-          const nextSection = value as ContentSection;
-          setActiveSection(nextSection);
-          if (!form.id) {
-            setForm((prev) => ({ ...prev, section: nextSection }));
-          }
-        }}
-      >
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="RESOURCE">Resources</TabsTrigger>
-          <TabsTrigger value="DOCUMENTATION">Documentation</TabsTrigger>
-          <TabsTrigger value="TRAINING">Training</TabsTrigger>
-        </TabsList>
-
-        {SECTION_OPTIONS.map((section) => (
-          <TabsContent key={section} value={section} className="space-y-4 mt-4">
-            {isAdmin ? (
-              <div className="grid grid-cols-1 xl:grid-cols-[1.5fr_1fr] gap-4">
-                <Card className="p-4 sm:p-6">
-                  <CardHeader className="px-0 pb-4">
-                    <CardTitle className="text-base sm:text-lg flex items-center gap-2">
-                      <Library className="w-5 h-5" />
-                      Published Items
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="px-0 space-y-3">
-                    {items.length === 0 ? (
-                      <div className="text-sm text-muted-foreground py-8 text-center">
-                        No content items created for this section yet.
-                      </div>
-                    ) : (
-                      items.map((item) => (
-                        <div key={item.id} className="border rounded-lg p-4 space-y-3">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="space-y-1">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                {kindIcon(item.kind)}
-                                <span className="font-medium">{item.title}</span>
-                                <Badge variant="outline">{item.kind}</Badge>
-                                {!item.isPublished && <Badge variant="secondary">Draft</Badge>}
-                                {item.required && <Badge>Required</Badge>}
-                              </div>
-                              <p className="text-sm text-muted-foreground">{item.description}</p>
-                              <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                                <span>{item.category}</span>
-                                <span>Order {item.sortOrder}</span>
-                                <span>{item.audiences.join(', ')}</span>
-                              </div>
-                            </div>
-                            <div className="flex gap-2">
-                              <Button variant="outline" size="sm" onClick={() => startEdit(item)}>
-                                <Pencil className="w-4 h-4 mr-1" />
-                                Edit
-                              </Button>
-                              <Button variant="outline" size="sm" onClick={() => remove(item)}>
-                                <Trash2 className="w-4 h-4 mr-1" />
-                                Delete
-                              </Button>
-                            </div>
+      <div className="space-y-4 mt-4">
+        {isAdmin ? (
+          <div className="grid grid-cols-1 xl:grid-cols-[1.5fr_1fr] gap-4">
+            <Card className="p-4 sm:p-6">
+              <CardHeader className="px-0 pb-4">
+                <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                  <Library className="w-5 h-5" />
+                  Published Items
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-0 space-y-3">
+                {items.length === 0 ? (
+                  <div className="text-sm text-muted-foreground py-8 text-center">
+                    No resource items created yet.
+                  </div>
+                ) : (
+                  items.map((item) => (
+                    <div key={item.id} className="border rounded-lg p-4 space-y-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {kindIcon(item.kind)}
+                            <span className="font-medium">{item.title}</span>
+                            <Badge variant="outline">{item.kind}</Badge>
+                            {!item.isPublished && <Badge variant="secondary">Draft</Badge>}
+                            {item.required && <Badge>Required</Badge>}
+                          </div>
+                          <p className="text-sm text-muted-foreground">{item.description}</p>
+                          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                            <span>{item.category}</span>
+                            <span>Order {item.sortOrder}</span>
+                            <span>{item.audiences.join(', ')}</span>
                           </div>
                         </div>
-                      ))
-                    )}
-                  </CardContent>
-                </Card>
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" onClick={() => startEdit(item)}>
+                            <Pencil className="w-4 h-4 mr-1" />
+                            Edit
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => remove(item)}>
+                            <Trash2 className="w-4 h-4 mr-1" />
+                            Delete
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
 
-                <Card className="p-4 sm:p-6">
-                  <CardHeader className="px-0 pb-4 flex flex-row items-center justify-between">
-                    <CardTitle className="text-base sm:text-lg">{form.id ? 'Edit Item' : 'New Item'}</CardTitle>
-                    <Button variant="outline" size="sm" onClick={resetForm}>Clear</Button>
-                  </CardHeader>
-                  <CardContent className="px-0 space-y-3">
-                    <Input placeholder="Title" value={form.title} onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))} />
-                    <Textarea placeholder="Short description" value={form.description} onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))} />
-                    <Textarea placeholder="Optional long body / notes" value={form.body} onChange={(e) => setForm((prev) => ({ ...prev, body: e.target.value }))} />
+            <Card className="p-4 sm:p-6">
+              <CardHeader className="px-0 pb-4 flex flex-row items-center justify-between">
+                <CardTitle className="text-base sm:text-lg">{form.id ? 'Edit Item' : 'New Item'}</CardTitle>
+                <Button variant="outline" size="sm" onClick={resetForm}>Clear</Button>
+              </CardHeader>
+              <CardContent className="px-0 space-y-3">
+                <Input placeholder="Title" value={form.title} onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))} />
+                <Textarea placeholder="Short description" value={form.description} onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))} />
+                <Textarea placeholder="Optional long body / notes" value={form.body} onChange={(e) => setForm((prev) => ({ ...prev, body: e.target.value }))} />
 
                     <div className="grid grid-cols-2 gap-3">
                       <div>
@@ -327,14 +308,8 @@ export function Resources({ userRole }: ResourcesProps) {
 
                     <Input placeholder="URL (optional)" value={form.url} onChange={(e) => setForm((prev) => ({ ...prev, url: e.target.value }))} />
 
-                    <div className="grid grid-cols-3 gap-3">
-                      <Input placeholder="Pages" value={form.pages} onChange={(e) => setForm((prev) => ({ ...prev, pages: e.target.value }))} />
-                      <Input placeholder="Duration min" value={form.durationMinutes} onChange={(e) => setForm((prev) => ({ ...prev, durationMinutes: e.target.value }))} />
-                      <Input placeholder="Modules" value={form.modules} onChange={(e) => setForm((prev) => ({ ...prev, modules: e.target.value }))} />
-                    </div>
-
                     <div className="grid grid-cols-2 gap-3">
-                      <Input placeholder="Instructor" value={form.instructor} onChange={(e) => setForm((prev) => ({ ...prev, instructor: e.target.value }))} />
+                      <Input placeholder="Pages" value={form.pages} onChange={(e) => setForm((prev) => ({ ...prev, pages: e.target.value }))} />
                       <Input placeholder="Sort order" value={form.sortOrder} onChange={(e) => setForm((prev) => ({ ...prev, sortOrder: e.target.value }))} />
                     </div>
 
@@ -366,7 +341,7 @@ export function Resources({ userRole }: ResourcesProps) {
                     <div className="flex items-center justify-between border rounded-lg px-3 py-2">
                       <div>
                         <p className="font-medium">Published</p>
-                        <p className="text-xs text-muted-foreground">Unpublished items stay hidden from mobile and non-admin users.</p>
+                        <p className="text-xs text-muted-foreground">Unpublished items stay hidden from mobile users.</p>
                       </div>
                       <Switch checked={form.isPublished} onCheckedChange={(checked) => setForm((prev) => ({ ...prev, isPublished: checked }))} />
                     </div>
@@ -374,7 +349,7 @@ export function Resources({ userRole }: ResourcesProps) {
                     <div className="flex items-center justify-between border rounded-lg px-3 py-2">
                       <div>
                         <p className="font-medium">Required</p>
-                        <p className="text-xs text-muted-foreground">Mark required policies or courses for staff attention.</p>
+                        <p className="text-xs text-muted-foreground">Mark required resources for staff attention.</p>
                       </div>
                       <Switch checked={form.required} onCheckedChange={(checked) => setForm((prev) => ({ ...prev, required: checked }))} />
                     </div>
@@ -383,54 +358,53 @@ export function Resources({ userRole }: ResourcesProps) {
                       {form.id ? <Save className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
                       {saving ? 'Saving...' : form.id ? 'Update Item' : 'Create Item'}
                     </Button>
-                  </CardContent>
-                </Card>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {Object.entries(groupedItems).map(([category, group]) => (
-                  <Card key={category} className="p-4 sm:p-6">
-                    <CardHeader className="px-0 pb-4">
-                      <CardTitle className="text-base sm:text-lg">{category}</CardTitle>
-                    </CardHeader>
-                    <CardContent className="px-0 space-y-3">
-                      {group.map((item) => (
-                        <div key={item.id} className="flex items-start justify-between gap-3 border rounded-lg p-4">
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              {kindIcon(item.kind)}
-                              <span className="font-medium">{item.title}</span>
-                              {item.required && <Badge>Required</Badge>}
-                            </div>
-                            <p className="text-sm text-muted-foreground">{item.description}</p>
-                            {item.body && <p className="text-sm">{item.body}</p>}
-                          </div>
-                          {item.url && (
-                            <Button asChild variant="outline" size="sm">
-                              <a href={item.url} target="_blank" rel="noreferrer">
-                                {item.actionLabel || 'Open'}
-                                <ExternalLink className="w-4 h-4 ml-2" />
-                              </a>
-                            </Button>
-                          )}
+              </CardContent>
+            </Card>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {Object.entries(groupedItems).map(([category, group]) => (
+              <Card key={category} className="p-4 sm:p-6">
+                <CardHeader className="px-0 pb-4">
+                  <CardTitle className="text-base sm:text-lg">{category}</CardTitle>
+                </CardHeader>
+                <CardContent className="px-0 space-y-3">
+                  {group.map((item) => (
+                    <div key={item.id} className="flex items-start justify-between gap-3 border rounded-lg p-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {kindIcon(item.kind)}
+                          <span className="font-medium">{item.title}</span>
+                          {item.required && <Badge>Required</Badge>}
                         </div>
-                      ))}
-                    </CardContent>
-                  </Card>
-                ))}
+                        <p className="text-sm text-muted-foreground">{item.description}</p>
+                        {item.body && <p className="text-sm">{item.body}</p>}
+                      </div>
+                      {item.url && (
+                        <Button asChild variant="outline" size="sm">
+                          <a href={item.url} target="_blank" rel="noreferrer">
+                            {item.actionLabel || 'Open'}
+                            <ExternalLink className="w-4 h-4 ml-2" />
+                          </a>
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            ))}
 
-                {!loading && items.length === 0 && (
-                  <Card className="p-4 sm:p-6">
-                    <CardContent className="px-0 text-sm text-muted-foreground">
-                      No published items available in this section yet.
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
+            {!loading && items.length === 0 && (
+              <Card className="p-4 sm:p-6">
+                <CardContent className="px-0 text-sm text-muted-foreground">
+                  No published resources available yet.
+                </CardContent>
+              </Card>
             )}
-          </TabsContent>
-        ))}
-      </Tabs>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
+

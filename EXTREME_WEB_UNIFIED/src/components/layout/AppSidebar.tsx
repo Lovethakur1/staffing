@@ -144,6 +144,15 @@ export function AppSidebar({ currentUser, onLogout }: AppSidebarProps) {
       ]
     },
     {
+      label: "Mobile Content",
+      items: [
+        { title: "Resources", icon: FolderOpen, id: "resources" },
+        { title: "Mobile Documentation", icon: BookOpen, id: "mobile-documentation" },
+        { title: "Training Portal", icon: GraduationCap, id: "training-portal" },
+        { title: "Certifications", icon: Award, id: "certifications" },
+      ]
+    },
+    {
       label: "Analytics & Reports",
       items: [
         { title: "Analytics & Reports", icon: BarChart3, id: "analytics" },
@@ -208,8 +217,10 @@ export function AppSidebar({ currentUser, onLogout }: AppSidebarProps) {
       ]
     },
     {
-      label: "Training & Resources",
+      label: "Mobile Content",
       items: [
+        { title: "Resources", icon: FolderOpen, id: "resources" },
+        { title: "Mobile Documentation", icon: BookOpen, id: "mobile-documentation" },
         { title: "Training Portal", icon: GraduationCap, id: "training-portal" },
         { title: "Certifications", icon: Award, id: "certifications" },
         { title: "Equipment Inventory", icon: Package, id: "equipment-inventory" },

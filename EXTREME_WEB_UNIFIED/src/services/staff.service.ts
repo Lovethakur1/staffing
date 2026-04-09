@@ -131,7 +131,7 @@ export const staffService = {
     },
 
     getAllCertifications: async () => {
-        const response = await api.get('/staff/certifications');
+        const response = await api.get('/staff/all-certifications');
         return response.data;
     },
 
