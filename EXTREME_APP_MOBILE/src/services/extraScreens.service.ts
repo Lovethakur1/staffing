@@ -2,7 +2,7 @@
  * Shared API service for the new drawer screens.
  * Mirrors financeService, staffService, supportService, analyticsService from the web app.
  */
-import api from '../config/api';
+import api, { API_BASE_URL } from '../config/api';
 
 // ─── TIMESHEETS ──────────────────────────────────────────────────────────────
 
@@ -152,6 +152,7 @@ export async function getMyDocuments(userId: string): Promise<StaffDocument[]> {
 
 /**
  * Step 1: Upload the raw file to the server.
+ * Uses fetch() directly — axios cannot correctly set the multipart boundary in React Native.
  * Returns the fileUrl, size, and mimeType from the server.
  */
 export async function uploadFileToServer(file: {
@@ -159,6 +160,10 @@ export async function uploadFileToServer(file: {
   name: string;
   mimeType?: string;
 }): Promise<{ url: string; size: number; mimeType: string }> {
+  // Read the auth token from SecureStore (same key used by the axios interceptor)
+  const SecureStore = await import('expo-secure-store');
+  const token = await SecureStore.getItemAsync('authToken');
+
   const formData = new FormData();
   formData.append('file', {
     uri: file.uri,
@@ -166,10 +171,22 @@ export async function uploadFileToServer(file: {
     type: file.mimeType || 'application/octet-stream',
   } as any);
 
-  const res = await api.post('/upload', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
+  // Use fetch — React Native fetch correctly sets multipart/form-data boundary automatically
+  const response = await fetch(`${API_BASE_URL}/upload`, {
+    method: 'POST',
+    headers: {
+      Authorization: token ? `Bearer ${token}` : '',
+      // NO Content-Type header — fetch sets it with the correct boundary from FormData
+    },
+    body: formData as any,
   });
-  return res.data; // { url, originalName, filename, size, mimeType }
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => 'Upload failed');
+    throw new Error(errText);
+  }
+
+  return response.json();
 }
 
 /**
