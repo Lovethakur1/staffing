@@ -19,6 +19,11 @@ export const uploadFile = asyncHandler(async (req: AuthRequest, res: Response) =
 
   res.status(201).json({
     message: 'File uploaded successfully.',
+    url: fileUrl,
+    originalName: req.file.originalname,
+    filename: req.file.filename,
+    size: req.file.size,
+    mimeType: req.file.mimetype,
     file: {
       url: fileUrl,
       originalName: req.file.originalname,

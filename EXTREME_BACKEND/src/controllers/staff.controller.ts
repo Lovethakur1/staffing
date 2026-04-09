@@ -560,16 +560,26 @@ export const listDocuments = asyncHandler(async (req: Request, res: Response) =>
  * POST /api/staff/documents
  */
 export const createDocument = asyncHandler(async (req: AuthRequest, res: Response) => {
-  const { userId, name, category, fileUrl, fileSize, mimeType, expiresAt, notes } = req.body;
+  const { userId, name, category, fileUrl, url, fileSize, mimeType, expiresAt, notes } = req.body;
 
   const ownerId = userId || req.user!.userId;
+  const normalizedFileUrl = typeof fileUrl === 'string' && fileUrl.trim()
+    ? fileUrl.trim()
+    : typeof url === 'string' && url.trim()
+      ? url.trim()
+      : undefined;
+
+  if (!normalizedFileUrl) {
+    res.status(400).json({ error: 'fileUrl is required. Upload the file first and send its URL when creating the document record.' });
+    return;
+  }
 
   const doc = await prisma.document.create({
     data: {
       userId: ownerId,
       name,
       category,
-      fileUrl,
+      fileUrl: normalizedFileUrl,
       fileSize,
       mimeType,
       expiresAt: expiresAt ? new Date(expiresAt) : undefined,

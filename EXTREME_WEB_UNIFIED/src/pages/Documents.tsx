@@ -100,7 +100,13 @@ export function Documents({ userRole, userId }: DocumentsProps) {
           if (e.total) setUploadProgress(Math.round((e.loaded / e.total) * 60) + 30);
         },
       });
-      const { url, size, mimeType } = uploadRes.data;
+      const url = uploadRes.data?.file?.url || uploadRes.data?.url;
+      const size = uploadRes.data?.file?.size || uploadRes.data?.size;
+      const mimeType = uploadRes.data?.file?.mimeType || uploadRes.data?.mimeType;
+
+      if (!url) {
+        throw new Error('Upload succeeded but no file URL was returned.');
+      }
       setUploadProgress(90);
 
       // Step 2: Create document record
