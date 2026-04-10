@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
+import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Input } from "../components/ui/input";
@@ -12,18 +12,18 @@ import {
   DollarSign,
   Clock,
   Users,
-  Globe,
   CheckCircle,
   TrendingUp,
   Send,
   Search,
-  ArrowLeft,
   Building2,
   ChevronRight,
   Mail,
   Phone,
   User,
   ExternalLink,
+  Upload,
+  FileText,
   X,
 } from "lucide-react";
 import api from "../services/api";
@@ -51,6 +51,8 @@ export function PublicCareers() {
   const [applyingTo, setApplyingTo] = useState<JobPosting | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
+  const [isUploadingResume, setIsUploadingResume] = useState(false);
 
   useEffect(() => {
     fetchJobs();
@@ -82,6 +84,7 @@ export function PublicCareers() {
     setApplyingTo(job);
     setIsApplyOpen(true);
     setSubmitted(false);
+    setResumeFile(null);
   };
 
   const handleSubmitApplication = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -91,16 +94,30 @@ export function PublicCareers() {
 
     const formData = new FormData(e.currentTarget);
     try {
+      // Upload resume file if selected
+      let resumeUrl = formData.get("resumeUrl") as string || undefined;
+      if (resumeFile) {
+        setIsUploadingResume(true);
+        const uploadData = new FormData();
+        uploadData.append("file", resumeFile);
+        const uploadRes = await api.post("/public/upload-resume", uploadData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        resumeUrl = uploadRes.data.url;
+        setIsUploadingResume(false);
+      }
+
       await api.post(`/public/jobs/${applyingTo.id}/apply`, {
         name: formData.get("name"),
         email: formData.get("email"),
         phone: formData.get("phone") || undefined,
         coverLetter: formData.get("coverLetter"),
-        resumeUrl: formData.get("resumeUrl") || undefined,
+        resumeUrl,
         notes: formData.get("notes") || undefined,
       });
       setSubmitted(true);
     } catch {
+      setIsUploadingResume(false);
       alert("Failed to submit application. Please try again.");
     } finally {
       setIsSubmitting(false);
@@ -121,10 +138,10 @@ export function PublicCareers() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
+    <div className="min-h-screen bg-slate-50">
       {/* Hero Section */}
-      <div className="bg-gradient-to-r from-[#5E1916] to-[#8B2E2A] text-white">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-16 sm:py-24 text-center">
+      <div className="bg-primary text-primary-foreground pb-20">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-16 sm:pt-24 pb-8 text-center">
           <div className="flex items-center justify-center gap-2 mb-4">
             <Building2 className="h-8 w-8" />
             <span className="text-lg font-medium opacity-90">Extreme Staffing</span>
@@ -133,25 +150,27 @@ export function PublicCareers() {
           <p className="text-xl opacity-90 mb-8 max-w-2xl mx-auto">
             Build your career in the exciting world of event staffing. We're looking for passionate people to join our growing team.
           </p>
-          <div className="max-w-md mx-auto relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-            <Input
+          <div className="max-w-lg mx-auto relative">
+            <Search className="absolute top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 pointer-events-none" style={{ left: '1.25rem' }} />
+            <input
+              type="text"
               placeholder="Search positions, departments, locations..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-12 h-12 bg-white/95 border-0 text-slate-900 placeholder:text-slate-400 text-base rounded-full shadow-lg"
+              className="w-full h-14 bg-white border-0 text-slate-900 placeholder:text-slate-400 text-base rounded-full shadow-lg outline-none"
+              style={{ paddingLeft: '3.25rem', paddingRight: '1.5rem' }}
             />
           </div>
         </div>
       </div>
 
       {/* Why Work With Us */}
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 -mt-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 -mt-12">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <Card className="shadow-lg border-0">
             <CardContent className="p-6 text-center">
-              <div className="w-12 h-12 bg-[#5E1916]/10 rounded-full flex items-center justify-center mx-auto mb-3">
-                <TrendingUp className="h-6 w-6 text-[#5E1916]" />
+              <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-3">
+                <TrendingUp className="h-6 w-6 text-primary" />
               </div>
               <h3 className="font-semibold mb-1">Career Growth</h3>
               <p className="text-sm text-muted-foreground">
@@ -161,8 +180,8 @@ export function PublicCareers() {
           </Card>
           <Card className="shadow-lg border-0">
             <CardContent className="p-6 text-center">
-              <div className="w-12 h-12 bg-[#5E1916]/10 rounded-full flex items-center justify-center mx-auto mb-3">
-                <DollarSign className="h-6 w-6 text-[#5E1916]" />
+              <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-3">
+                <DollarSign className="h-6 w-6 text-primary" />
               </div>
               <h3 className="font-semibold mb-1">Competitive Pay</h3>
               <p className="text-sm text-muted-foreground">
@@ -172,8 +191,8 @@ export function PublicCareers() {
           </Card>
           <Card className="shadow-lg border-0">
             <CardContent className="p-6 text-center">
-              <div className="w-12 h-12 bg-[#5E1916]/10 rounded-full flex items-center justify-center mx-auto mb-3">
-                <Users className="h-6 w-6 text-[#5E1916]" />
+              <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-3">
+                <Users className="h-6 w-6 text-primary" />
               </div>
               <h3 className="font-semibold mb-1">Great Culture</h3>
               <p className="text-sm text-muted-foreground">
@@ -199,7 +218,7 @@ export function PublicCareers() {
 
         {isLoading ? (
           <div className="flex items-center justify-center py-20">
-            <div className="w-8 h-8 border-4 border-[#5E1916] border-t-transparent rounded-full animate-spin" />
+            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
           </div>
         ) : filteredJobs.length === 0 ? (
           <Card className="border-dashed">
@@ -209,7 +228,7 @@ export function PublicCareers() {
               <p className="text-muted-foreground">
                 {searchTerm
                   ? "No positions match your search. Try different keywords."
-                  : "Check back soon — we're always growing!"}
+                  : "Check back soon \u2014 we're always growing!"}
               </p>
             </CardContent>
           </Card>
@@ -218,17 +237,17 @@ export function PublicCareers() {
             {filteredJobs.map((job) => (
               <Card
                 key={job.id}
-                className="hover:shadow-md transition-shadow cursor-pointer group"
+                className="hover:shadow-md transition-shadow cursor-pointer group bg-white"
                 onClick={() => setSelectedJob(selectedJob?.id === job.id ? null : job)}
               >
                 <CardContent className="p-6">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h3 className="text-xl font-semibold text-slate-900 group-hover:text-[#5E1916] transition-colors">
+                      <div className="flex items-center gap-3 mb-2 flex-wrap">
+                        <h3 className="text-xl font-semibold text-slate-900 group-hover:text-primary transition-colors">
                           {job.title}
                         </h3>
-                        <Badge variant="outline" className="bg-[#5E1916]/5 text-[#5E1916] border-[#5E1916]/20">
+                        <Badge variant="secondary">
                           {getTypeLabel(job.type)}
                         </Badge>
                       </div>
@@ -255,7 +274,7 @@ export function PublicCareers() {
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <Button
-                        className="bg-[#5E1916] hover:bg-[#8B2E2A]"
+                        className="bg-primary text-primary-foreground hover:bg-primary/90"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleApply(job);
@@ -274,7 +293,7 @@ export function PublicCareers() {
 
                   {/* Expanded Detail */}
                   {selectedJob?.id === job.id && (
-                    <div className="mt-6 pt-6 border-t space-y-6">
+                    <div className="mt-6 pt-6 border-t space-y-6" onClick={(e) => e.stopPropagation()}>
                       <div>
                         <h4 className="font-semibold mb-2 text-slate-900">About This Role</h4>
                         <p className="text-sm text-muted-foreground whitespace-pre-line">{job.description}</p>
@@ -315,7 +334,7 @@ export function PublicCareers() {
                             <ul className="space-y-1.5">
                               {job.benefits.map((benefit, idx) => (
                                 <li key={idx} className="flex items-start gap-2 text-sm text-muted-foreground">
-                                  <CheckCircle className="h-4 w-4 text-[#5E1916] mt-0.5 shrink-0" />
+                                  <CheckCircle className="h-4 w-4 text-primary mt-0.5 shrink-0" />
                                   {benefit}
                                 </li>
                               ))}
@@ -326,7 +345,7 @@ export function PublicCareers() {
 
                       <div className="flex justify-end pt-2">
                         <Button
-                          className="bg-[#5E1916] hover:bg-[#8B2E2A]"
+                          className="bg-primary text-primary-foreground hover:bg-primary/90"
                           size="lg"
                           onClick={(e) => {
                             e.stopPropagation();
@@ -382,7 +401,7 @@ export function PublicCareers() {
               <p className="text-muted-foreground">
                 Thank you for applying for <strong>{applyingTo?.title}</strong>. Our team will review your application and get back to you soon.
               </p>
-              <Button onClick={() => setIsApplyOpen(false)} className="bg-[#5E1916] hover:bg-[#8B2E2A]">
+              <Button onClick={() => setIsApplyOpen(false)} className="bg-primary text-primary-foreground hover:bg-primary/90">
                 Close
               </Button>
             </div>
@@ -433,17 +452,62 @@ export function PublicCareers() {
 
                 <div className="space-y-2">
                   <Label className="flex items-center gap-1">
-                    <ExternalLink className="h-3.5 w-3.5" />
-                    Resume URL
+                    <Upload className="h-3.5 w-3.5" />
+                    Resume
                   </Label>
-                  <Input
-                    name="resumeUrl"
-                    type="url"
-                    placeholder="https://drive.google.com/your-resume.pdf"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Paste a link to your resume (Google Drive, Dropbox, etc.)
-                  </p>
+                  {resumeFile ? (
+                    <div className="flex items-center gap-2 p-3 border rounded-md bg-slate-50">
+                      <FileText className="h-5 w-5 text-primary shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{resumeFile.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {(resumeFile.size / 1024).toFixed(0)} KB
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0 shrink-0"
+                        onClick={() => setResumeFile(null)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <label className="flex flex-col items-center gap-2 p-4 border-2 border-dashed rounded-md cursor-pointer hover:border-primary/50 hover:bg-slate-50 transition-colors">
+                      <Upload className="h-6 w-6 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">
+                        Click to upload PDF, DOC, or DOCX
+                      </span>
+                      <span className="text-xs text-muted-foreground">Max 5MB</span>
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            if (file.size > 5 * 1024 * 1024) {
+                              alert("File too large. Max 5MB.");
+                              return;
+                            }
+                            setResumeFile(file);
+                          }
+                        }}
+                      />
+                    </label>
+                  )}
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>or paste a link:</span>
+                    <Input
+                      name="resumeUrl"
+                      type="url"
+                      placeholder="https://drive.google.com/your-resume.pdf"
+                      className="h-8 text-xs"
+                      disabled={!!resumeFile}
+                    />
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -459,9 +523,9 @@ export function PublicCareers() {
                   <Button type="button" variant="outline" onClick={() => setIsApplyOpen(false)}>
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={isSubmitting} className="bg-[#5E1916] hover:bg-[#8B2E2A]">
+                  <Button type="submit" disabled={isSubmitting} className="bg-primary text-primary-foreground hover:bg-primary/90">
                     <Send className="h-4 w-4 mr-2" />
-                    {isSubmitting ? "Submitting..." : "Submit Application"}
+                    {isUploadingResume ? "Uploading Resume..." : isSubmitting ? "Submitting..." : "Submit Application"}
                   </Button>
                 </div>
               </form>
