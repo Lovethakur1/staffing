@@ -71,6 +71,15 @@ export function Applications({ userRole, userId }: PageProps) {
 
   const [applications, setApplications] = useState<Application[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [newNotes, setNewNotes] = useState("");
+  const [isSavingNotes, setIsSavingNotes] = useState(false);
+
+  const getFileUrl = (fileUrl: string) => {
+    if (!fileUrl) return '';
+    if (fileUrl.startsWith('http')) return fileUrl;
+    const base = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000';
+    return `${base}${fileUrl}`;
+  };
 
   useEffect(() => {
     fetchApplications();
@@ -176,6 +185,27 @@ export function Applications({ userRole, userId }: PageProps) {
   const handleViewDetails = (application: Application) => {
     setSelectedApplication(application);
     setIsDetailsDialogOpen(true);
+    setNewNotes("");
+  };
+
+  const handleSaveNotes = async () => {
+    if (!selectedApplication || !newNotes.trim()) return;
+    setIsSavingNotes(true);
+    try {
+      const combined = selectedApplication.notes
+        ? `${selectedApplication.notes}\n---\n${newNotes.trim()}`
+        : newNotes.trim();
+      await staffService.updateApplication(selectedApplication.id, { notes: combined });
+      const updated = { ...selectedApplication, notes: combined };
+      setSelectedApplication(updated);
+      setApplications(prev => prev.map(a => a.id === selectedApplication.id ? updated : a));
+      setNewNotes("");
+      toast.success("Notes saved!");
+    } catch {
+      toast.error("Failed to save notes");
+    } finally {
+      setIsSavingNotes(false);
+    }
   };
 
   const stats = {
@@ -580,16 +610,40 @@ export function Applications({ userRole, userId }: PageProps) {
                   <div>
                     <h3 className="font-semibold mb-3">Documents</h3>
                     <div className="space-y-2">
-                      {selectedApplication.resumeUrl && (
-                        <Button variant="outline" size="sm" className="w-full justify-start">
+                      {selectedApplication.resumeUrl ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full justify-start"
+                          onClick={() => window.open(getFileUrl(selectedApplication.resumeUrl!), '_blank')}
+                        >
                           <FileText className="h-4 w-4 mr-2" />
                           Download Resume
                         </Button>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">No resume uploaded</p>
                       )}
                       {selectedApplication.coverLetterUrl && (
-                        <Button variant="outline" size="sm" className="w-full justify-start">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full justify-start"
+                          onClick={() => {
+                            const cl = selectedApplication.coverLetterUrl!;
+                            if (cl.startsWith('http') || cl.startsWith('/uploads')) {
+                              window.open(getFileUrl(cl), '_blank');
+                            } else {
+                              // It's text content — show in a new tab
+                              const w = window.open('', '_blank');
+                              if (w) {
+                                w.document.write(`<html><head><title>Cover Letter - ${selectedApplication.name}</title><style>body{font-family:system-ui;max-width:700px;margin:40px auto;padding:0 20px;line-height:1.6;white-space:pre-wrap;}</style></head><body>${cl}</body></html>`);
+                                w.document.close();
+                              }
+                            }
+                          }}
+                        >
                           <FileText className="h-4 w-4 mr-2" />
-                          Download Cover Letter
+                          View Cover Letter
                         </Button>
                       )}
                     </div>
@@ -611,16 +665,41 @@ export function Applications({ userRole, userId }: PageProps) {
                 <Textarea
                   placeholder="Enter notes about this application..."
                   className="min-h-[100px]"
+                  value={newNotes}
+                  onChange={(e) => setNewNotes(e.target.value)}
                 />
+                <Button
+                  size="sm"
+                  className="mt-2"
+                  disabled={!newNotes.trim() || isSavingNotes}
+                  onClick={handleSaveNotes}
+                >
+                  {isSavingNotes ? 'Saving...' : 'Save Notes'}
+                </Button>
               </div>
 
               <div className="flex justify-between pt-4">
                 <div className="flex gap-2">
-                  <Button variant="outline">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setIsDetailsDialogOpen(false);
+                      setNavigationPage('interviews');
+                    }}
+                  >
                     <Calendar className="h-4 w-4 mr-2" />
                     Schedule Interview
                   </Button>
-                  <Button variant="outline">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      if (selectedApplication?.email) {
+                        window.open(`mailto:${selectedApplication.email}?subject=Regarding your application for ${selectedApplication.position || 'open position'} at Extreme Staffing`, '_blank');
+                      } else {
+                        toast.error('No email address available');
+                      }
+                    }}
+                  >
                     <Mail className="h-4 w-4 mr-2" />
                     Send Email
                   </Button>
