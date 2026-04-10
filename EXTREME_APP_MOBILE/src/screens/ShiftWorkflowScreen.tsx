@@ -176,6 +176,12 @@ export default function ShiftWorkflowScreen() {
           'Too Far From Venue',
           `You are ${distance ? distance + 'm' : 'too far'} from the event venue. You must be within 50m to check in.`,
         );
+      } else if (code === 'TOO_EARLY_FOR_CHECKIN') {
+        const reportTime = err?.response?.data?.reportTime;
+        Alert.alert(
+          'Too Early',
+          `Check-in is not open yet. Your report time is ${reportTime || 'not set'}. Check-in opens 30 minutes before your report time.`,
+        );
       } else if (code === 'LOCATION_REQUIRED') {
         Alert.alert('Location Required', 'Please enable GPS and allow location access to check in.');
       } else {
@@ -529,6 +535,14 @@ export default function ShiftWorkflowScreen() {
             <Ionicons name="time" size={18} color={Colors.primary} />
             <Text style={s.infoText}>{shift.startTime} – {shift.endTime}</Text>
           </View>
+          {shift.reportTime && (
+            <View style={[s.infoRow, { backgroundColor: Colors.primary + '15', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 }]}>
+              <Ionicons name="alarm" size={18} color={Colors.primary} />
+              <Text style={[s.infoText, { color: Colors.primary, fontWeight: '700' }]}>
+                Report by: {shift.reportTime}
+              </Text>
+            </View>
+          )}
           {shift.event?.venue && (
             <View style={s.infoRow}>
               <Ionicons name="location" size={18} color={Colors.primary} />

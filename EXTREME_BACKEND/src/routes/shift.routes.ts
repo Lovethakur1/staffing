@@ -6,6 +6,7 @@ import {
   startBreak, endBreak,
   startTravelHome, endTravelHome, updateLocation,
   requestDeviceChange, approveDeviceChange, getDeviceInfo, getPendingDeviceChanges,
+  bulkUpdateReportTime,
 } from '../controllers/shift.controller';
 import { authenticate } from '../middleware/auth';
 import { authorize } from '../middleware/rbac';
@@ -18,6 +19,7 @@ router.get('/', listShifts);
 router.get('/my', getMyShifts); // Get logged-in user's own shifts
 
 // Device management (MUST be before /:id routes)
+router.put('/bulk-report-time', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER', 'SCHEDULER'), bulkUpdateReportTime);
 router.get('/device/info', authorize('STAFF', 'MANAGER'), getDeviceInfo);
 router.get('/device/pending', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER'), getPendingDeviceChanges);
 router.post('/device/request-change', authorize('STAFF', 'MANAGER'), requestDeviceChange);

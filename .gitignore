@@ -73,3 +73,6 @@ yarn-error.log*
 .npm
 .eslintcache
 .cache
+
+# Expo
+.expo/

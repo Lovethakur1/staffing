@@ -65,6 +65,7 @@ export interface Shift {
   date: string;
   startTime: string;
   endTime: string;
+  reportTime?: string;
   status: ShiftStatus;
   role?: string;
   hourlyRate: number;

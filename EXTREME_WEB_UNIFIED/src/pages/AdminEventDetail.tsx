@@ -340,6 +340,7 @@ export function AdminEventDetail({ userRole = 'admin' }: AdminEventDetailProps) 
           phone: s.phone || s.user?.phone || '',
           certifications: s.skills || [],
           travelEnabled: shift.travelEnabled || false,
+          reportTime: shift.reportTime || null,
         };
       });
     }
@@ -446,6 +447,8 @@ export function AdminEventDetail({ userRole = 'admin' }: AdminEventDetailProps) 
   const [addStaffDialogOpen, setAddStaffDialogOpen] = useState(false);
   const [staffSearchTerm, setStaffSearchTerm] = useState('');
   const [selectedRole, setSelectedRole] = useState('all');
+  const [addStaffReportTime, setAddStaffReportTime] = useState('');
+  const [roleReportTimes, setRoleReportTimes] = useState<Record<string, string>>({});
 
   // Available staff pool from API (not currently assigned to this event)
   // staffMembers uses User IDs from shifts; apiStaff has user.id nested
@@ -489,6 +492,7 @@ export function AdminEventDetail({ userRole = 'admin' }: AdminEventDetailProps) 
         date: apiEvent?.date || new Date().toISOString(),
         startTime: apiEvent?.startTime || '09:00',
         endTime: apiEvent?.endTime || '17:00',
+        reportTime: addStaffReportTime || apiEvent?.startTime || '09:00',
         role: staff.role || 'Staff',
         hourlyRate: staff.hourlyRate || 25,
         guaranteedHours: 4,
@@ -505,6 +509,7 @@ export function AdminEventDetail({ userRole = 'admin' }: AdminEventDetailProps) 
       setAddStaffDialogOpen(false);
       setStaffSearchTerm('');
       setSelectedRole('all');
+      setAddStaffReportTime('');
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed to assign staff');
     }
@@ -1088,9 +1093,73 @@ export function AdminEventDetail({ userRole = 'admin' }: AdminEventDetailProps) 
                 </div>
               </CardContent>
             </Card>
-          </TabsContent>
 
-          {/* Payments Tab */}
+            {/* Report Times by Role */}
+            {staffMembers.length > 0 && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Clock className="w-5 h-5" />
+                    Report Times by Role
+                  </CardTitle>
+                  <CardDescription>Set when each role group should arrive at the venue</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {Object.entries(
+                      staffMembers.reduce((acc: Record<string, { count: number; currentTime: string | null }>, s: any) => {
+                        const role = s.role || 'Staff';
+                        if (!acc[role]) acc[role] = { count: 0, currentTime: s.reportTime };
+                        acc[role].count++;
+                        return acc;
+                      }, {})
+                    ).map(([role, info]: [string, any]) => (
+                      <div key={role} className="flex items-center justify-between gap-3 p-3 border rounded-lg">
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <Badge variant="outline">{role}</Badge>
+                          <span className="text-sm text-muted-foreground">{info.count} staff</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="time"
+                            value={roleReportTimes[role] ?? info.currentTime ?? ''}
+                            onChange={(e) => setRoleReportTimes(prev => ({ ...prev, [role]: e.target.value }))}
+                            className="h-9 px-3 border border-input bg-background rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={!roleReportTimes[role]}
+                            onClick={async () => {
+                              try {
+                                await api.put('/shifts/bulk-report-time', {
+                                  eventId: event.id,
+                                  role,
+                                  reportTime: roleReportTimes[role],
+                                });
+                                // Update local state
+                                setApiEvent((prev: any) => ({
+                                  ...prev,
+                                  shifts: (prev?.shifts || []).map((s: any) =>
+                                    s.role === role ? { ...s, reportTime: roleReportTimes[role] } : s
+                                  ),
+                                }));
+                                toast.success(`Report time updated to ${roleReportTimes[role]} for all ${role} staff`);
+                              } catch {
+                                toast.error('Failed to update report time');
+                              }
+                            }}
+                          >
+                            Save
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
           <TabsContent value="payments" className="space-y-4">
             {isAdmin && (
               <Card>
@@ -1291,6 +1360,19 @@ export function AdminEventDetail({ userRole = 'admin' }: AdminEventDetailProps) 
             {/* Results Counter */}
             <div className="text-sm text-muted-foreground">
               Showing {filteredAvailableStaff.length} of {availableStaffPool.length} available staff
+            </div>
+
+            {/* Report Time */}
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium whitespace-nowrap">Report Time:</label>
+              <input
+                type="time"
+                value={addStaffReportTime}
+                onChange={(e) => setAddStaffReportTime(e.target.value)}
+                className="h-9 px-3 border border-input bg-background rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder={apiEvent?.startTime || '09:00'}
+              />
+              <span className="text-xs text-muted-foreground">(when staff should arrive)</span>
             </div>
           </div>
 

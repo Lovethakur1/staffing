@@ -273,6 +273,7 @@ model Shift {
   date            DateTime
   startTime       String
   endTime         String
+  reportTime      String?   // When staff should arrive (may differ from paid startTime)
   status          ShiftStatus @default(PENDING)
   role            String? // Bartender, Server, Security, etc.
   hourlyRate      Float       @default(0)

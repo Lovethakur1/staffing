@@ -188,7 +188,7 @@ export const getShift = asyncHandler(async (req: Request, res: Response) => {
  * Assign staff to an event (create a shift).
  */
 export const createShift = asyncHandler(async (req: Request, res: Response) => {
-  const { eventId, staffId, date, startTime, endTime, role, hourlyRate, guaranteedHours } = req.body;
+  const { eventId, staffId, date, startTime, endTime, reportTime, role, hourlyRate, guaranteedHours } = req.body;
 
   const shift = await prisma.shift.create({
     data: {
@@ -197,6 +197,7 @@ export const createShift = asyncHandler(async (req: Request, res: Response) => {
       date: new Date(date),
       startTime,
       endTime,
+      reportTime,
       role,
       hourlyRate,
       guaranteedHours,
@@ -222,7 +223,7 @@ export const createShift = asyncHandler(async (req: Request, res: Response) => {
 export const updateShift = asyncHandler(async (req: Request, res: Response) => {
   const {
     status, startTime, endTime, role, hourlyRate, guaranteedHours,
-    tipsReceived, parkingAmount, parkingReceiptUrl,
+    tipsReceived, parkingAmount, parkingReceiptUrl, reportTime,
   } = req.body;
 
   const shift = await prisma.shift.update({
@@ -231,6 +232,7 @@ export const updateShift = asyncHandler(async (req: Request, res: Response) => {
       ...(status && { status }),
       ...(startTime && { startTime }),
       ...(endTime && { endTime }),
+      ...(reportTime !== undefined && { reportTime }),
       ...(role !== undefined && { role }),
       ...(hourlyRate !== undefined && { hourlyRate }),
       ...(guaranteedHours !== undefined && { guaranteedHours }),
@@ -438,6 +440,22 @@ export const clockIn = asyncHandler(async (req: AuthRequest, res: Response) => {
       code: 'LOCATION_REQUIRED',
     });
     return;
+  }
+
+  // ── Time-based check-in validation ────────
+  if (shiftWithEvent.reportTime) {
+    const [rh, rm] = shiftWithEvent.reportTime.split(':').map(Number);
+    const reportDate = new Date(shiftWithEvent.date);
+    reportDate.setHours(rh, rm, 0, 0);
+    const earliestAllowed = new Date(reportDate.getTime() - 30 * 60 * 1000); // 30 min before report time
+    if (now < earliestAllowed) {
+      res.status(403).json({
+        error: `Check-in opens 30 minutes before your report time (${shiftWithEvent.reportTime}). Please come back later.`,
+        code: 'TOO_EARLY_FOR_CHECKIN',
+        reportTime: shiftWithEvent.reportTime,
+      });
+      return;
+    }
   }
 
   try {
@@ -860,4 +878,21 @@ export const getDeviceInfo = asyncHandler(async (req: AuthRequest, res: Response
     deviceChangeRequested: profile.deviceChangeRequested,
     deviceChangeReason: profile.deviceChangeReason,
   });
+});
+
+/**
+ * PUT /api/shifts/bulk-report-time
+ * Set reportTime for all shifts of a given role within an event.
+ */
+export const bulkUpdateReportTime = asyncHandler(async (req: Request, res: Response) => {
+  const { eventId, role, reportTime } = req.body;
+  if (!eventId || !role) {
+    res.status(400).json({ error: 'eventId and role are required.' });
+    return;
+  }
+  const result = await prisma.shift.updateMany({
+    where: { eventId, role },
+    data: { reportTime },
+  });
+  res.json({ updated: result.count, role, reportTime });
 });
