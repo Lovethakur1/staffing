@@ -12,6 +12,7 @@ import { Toaster } from "./components/ui/sonner";
 import { useIsMobile } from "./hooks/use-mobile";
 import { DesktopOnlyRestriction } from "./components/mobile/DesktopOnlyRestriction";
 import { SplashScreen } from "./components/mobile/SplashScreen";
+import { PublicCareers } from "./pages/PublicCareers";
 import api from "./services/api";
 
 function AppContent({ currentUser, onLogout }: { currentUser: User; onLogout: () => void }) {
@@ -66,6 +67,14 @@ export default function App() {
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const isMobile = useIsMobile();
   const [showSplash, setShowSplash] = useState(true);
+  const [hash, setHash] = useState(window.location.hash);
+
+  // Listen for hash changes (public routes)
+  useEffect(() => {
+    const onHashChange = () => setHash(window.location.hash);
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
 
   useEffect(() => {
     const initAuth = async () => {
@@ -109,6 +118,11 @@ export default function App() {
         <div className="w-8 h-8 border-4 border-sangria border-t-transparent rounded-full animate-spin" />
       </div>
     );
+  }
+
+  // Public careers page — accessible without login
+  if (hash === '#/careers') {
+    return <PublicCareers />;
   }
 
   if (!currentUser) {

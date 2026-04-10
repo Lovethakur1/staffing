@@ -332,14 +332,19 @@ model ShiftBreak {
 
 model Application {
   id          String   @id @default(uuid())
-  applicantId String
-  applicant   User     @relation(fields: [applicantId], references: [id])
+  applicantId String?
+  applicant   User?    @relation(fields: [applicantId], references: [id])
   position    String? // Role they're applying for
   status      String   @default("PENDING") // PENDING, REVIEWING, INTERVIEWED, HIRED, REJECTED
   resumeUrl   String?
   coverLetter String?
-  source      String? // QR code, website, referral
+  source      String? // QR code, website, referral, careers_page
   notes       String?
+  // Public applicant fields (when no User account exists)
+  applicantName  String?
+  applicantEmail String?
+  applicantPhone String?
+  jobPostingId   String? // Link to specific JobPosting
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }

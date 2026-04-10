@@ -83,9 +83,9 @@ export function Applications({ userRole, userId }: PageProps) {
       const data = Array.isArray(res) ? res : (res?.data || []);
       const mapped = data.map((a: any) => ({
         id: a.id,
-        name: a.applicant?.name || 'Unknown',
-        email: a.applicant?.email || '',
-        phone: a.applicant?.phone || '',
+        name: a.applicant?.name || a.applicantName || 'Unknown',
+        email: a.applicant?.email || a.applicantEmail || '',
+        phone: a.applicant?.phone || a.applicantPhone || '',
         position: a.position || 'General',
         experience: 'Not specified',
         education: 'Not specified',
