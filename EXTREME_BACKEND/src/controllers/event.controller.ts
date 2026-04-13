@@ -569,6 +569,24 @@ export const updateIncident = asyncHandler(async (req: Request, res: Response) =
 });
 
 /**
+ * GET /api/events/:id/geofence
+ * Fetch saved geofence for an event.
+ */
+export const getGeofence = asyncHandler(async (req: Request, res: Response) => {
+  const event = await prisma.event.findUnique({
+    where: { id: req.params.id },
+    select: { id: true, geofencePolygon: true, geofenceRadius: true },
+  });
+
+  if (!event) {
+    res.status(404).json({ message: 'Event not found.' });
+    return;
+  }
+
+  res.json({ geofencePolygon: event.geofencePolygon ?? null, geofenceRadius: event.geofenceRadius ?? null });
+});
+
+/**
  * PUT /api/events/:id/geofence
  * Save geofence polygon or radius for an event (admin only).
  */
