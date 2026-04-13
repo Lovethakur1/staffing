@@ -226,7 +226,7 @@ export default function LiveStaffMap({
   const [arrivedNotifications, setArrivedNotifications] = useState<ArrivedStaffNotification[]>([]);
   const [exitNotifications, setExitNotifications] = useState<ArrivedStaffNotification[]>([]);
   const [venuePolygon, setVenuePolygon] = useState<[number, number][] | null>(null);
-  const [geofenceRadius, setGeofenceRadius] = useState<number>(100);
+  const [geofenceRadius, setGeofenceRadius] = useState<number>(10);
   const [manualPolygon, setManualPolygon] = useState<[number, number][] | null>(null);
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [drawPoints, setDrawPoints] = useState<[number, number][]>([]);
@@ -339,7 +339,7 @@ export default function LiveStaffMap({
 
       // Add geofence circle (initial default; replaced by polygon or resized after OSM fetch)
       const venueCircle = L.circle([venueLat, venueLng], {
-        radius: 100,
+        radius: 10,
         color: '#dc2626',
         fillColor: '#dc2626',
         fillOpacity: 0.08,
@@ -351,7 +351,7 @@ export default function LiveStaffMap({
 
       // Add pulse circle (animated)
       const pulseCircle = L.circle([venueLat, venueLng], {
-        radius: 100,
+        radius: 10,
         color: '#dc2626',
         fillColor: 'transparent',
         fillOpacity: 0,
@@ -512,9 +512,9 @@ export default function LiveStaffMap({
         }).addTo(map);
         venuePolygonLayerRef.current = poly;
       } else {
-        // No polygon found — update the circle to use adaptive radius
-        if (venueCircleRef.current) venueCircleRef.current.setRadius(radius);
-        if (pulseCircleRef.current) pulseCircleRef.current.setRadius(radius);
+        // No polygon found — fixed 10 m radius
+        if (venueCircleRef.current) venueCircleRef.current.setRadius(10);
+        if (pulseCircleRef.current) pulseCircleRef.current.setRadius(10);
       }
     });
   }, [venueLat, venueLng, guestCount, eventType]);
