@@ -6,7 +6,7 @@ import api from '../../services/api';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Avatar, AvatarFallback } from '../ui/avatar';
-import { X, Maximize2, Minimize2, RefreshCw, MapPin, Navigation, Users, Crosshair, Phone, Clock } from 'lucide-react';
+import { X, Maximize2, Minimize2, RefreshCw, MapPin, Navigation, Users, Crosshair, Phone, Clock, AlertTriangle, PenLine, Trash2, Check, RotateCcw } from 'lucide-react';
 
 interface StaffLocation {
   shiftId: string;
@@ -32,8 +32,62 @@ interface ArrivedStaffNotification {
   timestamp: number;
 }
 
-// Geofence radius in meters
-const VENUE_RADIUS_METERS = 100;
+// Adaptive geofence radius based on event size/type (fallback when no OSM polygon)
+function computeGeofenceRadius(guestCount: number = 0, eventType: string = ''): number {
+  const type = eventType.toLowerCase();
+  let base = guestCount <= 50 ? 75 : guestCount <= 150 ? 120 : guestCount <= 500 ? 200 : 300;
+  if (type.includes('festival') || type.includes('concert') || type.includes('outdoor')) base += 50;
+  if (type.includes('restaurant') || type.includes('dinner') || type.includes('cafe')) base = Math.max(50, base - 25);
+  return base;
+}
+
+// Ray-casting point-in-polygon test (lat/lng)
+function pointInPolygon(lat: number, lng: number, poly: [number, number][]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [ayLat, axLng] = poly[i];
+    const [byLat, bxLng] = poly[j];
+    if ((ayLat > lat) !== (byLat > lat) &&
+        lng < (bxLng - axLng) * (lat - ayLat) / (byLat - ayLat) + axLng) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+// Fetch building/venue polygon from OpenStreetMap Overpass API
+async function fetchVenuePolygon(lat: number, lng: number): Promise<[number, number][] | null> {
+  const query = `[out:json][timeout:15];(way["building"](around:60,${lat},${lng});way["amenity"](around:80,${lat},${lng});way["leisure"](around:80,${lat},${lng}););out geom;`;
+  try {
+    const res = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data.elements?.length) return null;
+
+    // Pick the building/way that actually contains the point, smallest area first
+    const candidates: { coords: [number, number][]; area: number }[] = [];
+    for (const el of data.elements) {
+      if (el.type !== 'way' || !el.geometry?.length) continue;
+      const coords: [number, number][] = el.geometry.map((g: { lat: number; lon: number }) => [g.lat, g.lon] as [number, number]);
+      if (coords.length < 3) continue;
+      // Quick bounding box area estimate
+      const lats = coords.map(c => c[0]);
+      const lngs = coords.map(c => c[1]);
+      const area = (Math.max(...lats) - Math.min(...lats)) * (Math.max(...lngs) - Math.min(...lngs));
+      candidates.push({ coords, area });
+    }
+
+    // Sort smallest first, return the first one that contains the point
+    candidates.sort((a, b) => a.area - b.area);
+    for (const c of candidates) {
+      if (pointInPolygon(lat, lng, c.coords)) return c.coords;
+    }
+    // If none contain the point exactly, return the smallest candidate anyway
+    return candidates[0]?.coords ?? null;
+  } catch {
+    return null;
+  }
+}
 
 // Calculate distance between two coordinates in meters
 function getDistanceMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -52,7 +106,13 @@ interface LiveStaffMapProps {
   venueLat?: number | null;
   venueLng?: number | null;
   venueName?: string;
+  guestCount?: number;
+  eventType?: string;
+  canEditGeofence?: boolean;
+  savedGeofencePolygon?: [number, number][] | null;
+  savedGeofenceRadius?: number | null;
   onClose?: () => void;
+  onStaffExitVenue?: (staffName: string, staffId: string) => void;
   className?: string;
   selectedStaffId?: string | null;
 }
@@ -133,7 +193,13 @@ export default function LiveStaffMap({
   venueLat,
   venueLng,
   venueName,
+  guestCount = 0,
+  eventType = '',
+  canEditGeofence = false,
+  savedGeofencePolygon = null,
+  savedGeofenceRadius = null,
   onClose,
+  onStaffExitVenue,
   className = '',
   selectedStaffId,
 }: LiveStaffMapProps) {
@@ -142,11 +208,15 @@ export default function LiveStaffMap({
   const markersRef = useRef<Map<string, L.Marker>>(new Map());
   const venueMarkerRef = useRef<L.Marker | null>(null);
   const venueCircleRef = useRef<L.Circle | null>(null);
+  const venuePolygonLayerRef = useRef<L.Polygon | null>(null);
   const pulseCircleRef = useRef<L.Circle | null>(null);
+  const manualPolygonLayerRef = useRef<L.Polygon | null>(null);
+  const drawPreviewPolyRef = useRef<L.Polygon | null>(null);
+  const drawPointMarkersRef = useRef<L.Marker[]>([]);
   const socketRef = useRef<Socket | null>(null);
   const initialFitDone = useRef(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const enteredStaffRef = useRef<Set<string>>(new Set()); // Track staff who already entered
+  const enteredStaffRef = useRef<Set<string>>(new Set());
 
   const [staffLocations, setStaffLocations] = useState<StaffLocation[]>([]);
   const [expanded, setExpanded] = useState(false);
@@ -154,6 +224,12 @@ export default function LiveStaffMap({
   const [connected, setConnected] = useState(false);
   const [focusedStaffId, setFocusedStaffId] = useState<string | null>(selectedStaffId || null);
   const [arrivedNotifications, setArrivedNotifications] = useState<ArrivedStaffNotification[]>([]);
+  const [exitNotifications, setExitNotifications] = useState<ArrivedStaffNotification[]>([]);
+  const [venuePolygon, setVenuePolygon] = useState<[number, number][] | null>(null);
+  const [geofenceRadius, setGeofenceRadius] = useState<number>(100);
+  const [manualPolygon, setManualPolygon] = useState<[number, number][] | null>(null);
+  const [isDrawingMode, setIsDrawingMode] = useState(false);
+  const [drawPoints, setDrawPoints] = useState<[number, number][]>([]);
 
   // Trigger arrival animation when staff enters venue radius
   const triggerArrivalAnimation = useCallback((staffName: string, staffId: string, lat: number, lng: number) => {
@@ -191,26 +267,30 @@ export default function LiveStaffMap({
     }, 4000);
   }, []);
 
-  // Check if staff is within venue radius and trigger animation
-  const checkAndTriggerArrival = useCallback((staff: StaffLocation) => {
+  // Check if staff is within venue geofence — manual > OSM polygon > adaptive circle
+  const checkGeofence = useCallback((staff: StaffLocation) => {
     if (!venueLat || !venueLng || !staff.lat || !staff.lng) return;
-    
-    const staffId = staff.staffId || staff.shiftId;
-    const distance = getDistanceMeters(staff.lat, staff.lng, venueLat, venueLng);
-    const isInRadius = distance <= VENUE_RADIUS_METERS;
-    const wasAlreadyIn = enteredStaffRef.current.has(staffId);
 
-    if (isInRadius && !wasAlreadyIn) {
-      // Staff just entered the radius!
+    const staffId = staff.staffId || staff.shiftId;
+    const activePoly = manualPolygon ?? venuePolygon;
+    const isInside = activePoly
+      ? pointInPolygon(staff.lat, staff.lng, activePoly)
+      : getDistanceMeters(staff.lat, staff.lng, venueLat, venueLng) <= geofenceRadius;
+
+    const wasInside = enteredStaffRef.current.has(staffId);
+
+    if (isInside && !wasInside) {
       enteredStaffRef.current.add(staffId);
       triggerArrivalAnimation(staff.staffName, staffId, staff.lat, staff.lng);
-      console.log(`[LiveStaffMap] ${staff.staffName} entered venue radius (${Math.round(distance)}m)`);
-    } else if (!isInRadius && wasAlreadyIn) {
-      // Staff left the radius
+    } else if (!isInside && wasInside) {
       enteredStaffRef.current.delete(staffId);
-      console.log(`[LiveStaffMap] ${staff.staffName} left venue radius (${Math.round(distance)}m)`);
+      // Fire exit alert
+      const notifId = `exit-${staffId}-${Date.now()}`;
+      setExitNotifications(prev => [...prev, { id: notifId, staffName: staff.staffName, timestamp: Date.now() }]);
+      setTimeout(() => setExitNotifications(prev => prev.filter(n => n.id !== notifId)), 5000);
+      onStaffExitVenue?.(staff.staffName, staffId);
     }
-  }, [venueLat, venueLng, triggerArrivalAnimation]);
+  }, [venueLat, venueLng, venuePolygon, manualPolygon, geofenceRadius, triggerArrivalAnimation, onStaffExitVenue]);
 
   // Fetch initial staff locations
   const fetchLocations = useCallback(async () => {
@@ -257,9 +337,9 @@ export default function LiveStaffMap({
         .bindPopup(`<div style="text-align:center; padding:4px;"><strong>${venueName || 'Event Venue'}</strong></div>`);
       venueMarkerRef.current = venueMarker;
 
-      // Add geofence radius circle
+      // Add geofence circle (initial default; replaced by polygon or resized after OSM fetch)
       const venueCircle = L.circle([venueLat, venueLng], {
-        radius: VENUE_RADIUS_METERS,
+        radius: 100,
         color: '#dc2626',
         fillColor: '#dc2626',
         fillOpacity: 0.08,
@@ -271,7 +351,7 @@ export default function LiveStaffMap({
 
       // Add pulse circle (animated)
       const pulseCircle = L.circle([venueLat, venueLng], {
-        radius: VENUE_RADIUS_METERS,
+        radius: 100,
         color: '#dc2626',
         fillColor: 'transparent',
         fillOpacity: 0,
@@ -403,6 +483,42 @@ export default function LiveStaffMap({
     };
   }, [venueLat, venueLng, venueName]);
 
+  // Compute adaptive radius and try to fetch real venue polygon from OSM
+  useEffect(() => {
+    const radius = computeGeofenceRadius(guestCount, eventType);
+    setGeofenceRadius(radius);
+
+    if (!venueLat || !venueLng) return;
+
+    fetchVenuePolygon(venueLat, venueLng).then(polygon => {
+      setVenuePolygon(polygon);
+
+      if (!mapRef.current) return;
+      const map = mapRef.current;
+
+      if (polygon) {
+        // Replace circle with the real building polygon
+        if (venueCircleRef.current) { map.removeLayer(venueCircleRef.current); venueCircleRef.current = null; }
+        if (pulseCircleRef.current) { map.removeLayer(pulseCircleRef.current); pulseCircleRef.current = null; }
+        if (venuePolygonLayerRef.current) map.removeLayer(venuePolygonLayerRef.current);
+
+        const poly = L.polygon(polygon as L.LatLngExpression[], {
+          color: '#dc2626',
+          fillColor: '#dc2626',
+          fillOpacity: 0.08,
+          weight: 2,
+          dashArray: '8, 4',
+          className: 'venue-radius-circle',
+        }).addTo(map);
+        venuePolygonLayerRef.current = poly;
+      } else {
+        // No polygon found — update the circle to use adaptive radius
+        if (venueCircleRef.current) venueCircleRef.current.setRadius(radius);
+        if (pulseCircleRef.current) pulseCircleRef.current.setRadius(radius);
+      }
+    });
+  }, [venueLat, venueLng, guestCount, eventType]);
+
   // Fetch initial data + start polling as reliable fallback
   useEffect(() => {
     fetchLocations();
@@ -483,6 +599,20 @@ export default function LiveStaffMap({
       });
     });
 
+    // Listen for server-side geofence alerts (fired by backend on every location update)
+    socket.on('geofence:exit', (data: { shiftId: string; staffName: string; eventId: string }) => {
+      if (data.eventId !== eventId) return;
+      const notifId = `exit-srv-${data.shiftId}-${Date.now()}`;
+      setExitNotifications(prev => [...prev, { id: notifId, staffName: data.staffName, timestamp: Date.now() }]);
+      setTimeout(() => setExitNotifications(prev => prev.filter(n => n.id !== notifId)), 5000);
+      onStaffExitVenue?.(data.staffName, data.shiftId);
+    });
+
+    socket.on('geofence:enter', (data: { shiftId: string; staffName: string; eventId: string }) => {
+      if (data.eventId !== eventId) return;
+      setExitNotifications(prev => prev.filter(n => !n.id.includes(data.shiftId)));
+    });
+
     socketRef.current = socket;
 
     return () => {
@@ -505,8 +635,8 @@ export default function LiveStaffMap({
       const key = staff.staffId || staff.shiftId;
       activeIds.add(key);
 
-      // Check if staff entered venue radius
-      checkAndTriggerArrival(staff);
+      // Check if staff is inside venue geofence
+      checkGeofence(staff);
 
       const isSelected = selectedStaffId === staff.staffId;
       const icon = createStaffIcon(staff.staffName || 'Staff', staff.status, isSelected);
@@ -558,7 +688,7 @@ export default function LiveStaffMap({
         initialFitDone.current = true;
       }
     }
-  }, [staffLocations, selectedStaffId, venueLat, venueLng, checkAndTriggerArrival]);
+  }, [staffLocations, selectedStaffId, venueLat, venueLng, checkGeofence]);
 
   // When selectedStaffId changes (from parent), fly to that staff
   useEffect(() => {
@@ -618,6 +748,134 @@ export default function LiveStaffMap({
     initialFitDone.current = true;
   };
 
+  // Load geofence: localStorage first (most recent), then backend-saved, then null
+  useEffect(() => {
+    try {
+      const local = localStorage.getItem(`geofence_manual_${eventId}`);
+      if (local) { setManualPolygon(JSON.parse(local)); return; }
+    } catch { /* ignore */ }
+    if (savedGeofencePolygon?.length) setManualPolygon(savedGeofencePolygon);
+  }, [eventId, savedGeofencePolygon]);
+
+  // Draw saved manual polygon on map when it changes
+  useEffect(() => {
+    if (!mapRef.current) return;
+    const map = mapRef.current;
+
+    if (manualPolygonLayerRef.current) { map.removeLayer(manualPolygonLayerRef.current); manualPolygonLayerRef.current = null; }
+
+    if (manualPolygon && manualPolygon.length >= 3) {
+      manualPolygonLayerRef.current = L.polygon(manualPolygon as L.LatLngExpression[], {
+        color: '#2563eb',
+        fillColor: '#2563eb',
+        fillOpacity: 0.1,
+        weight: 2.5,
+        dashArray: '6, 3',
+      }).addTo(map);
+    }
+  }, [manualPolygon]);
+
+  // Handle drawing mode: map click listener, preview polygon, cursor
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (!isDrawingMode) {
+      map.getContainer().style.cursor = '';
+      return;
+    }
+
+    map.getContainer().style.cursor = 'crosshair';
+
+    const onClick = (e: L.LeafletMouseEvent) => {
+      const newPoint: [number, number] = [e.latlng.lat, e.latlng.lng];
+
+      setDrawPoints(prev => {
+        const next = [...prev, newPoint];
+
+        const dotIcon = L.divIcon({
+          className: '',
+          html: `<div style="width:10px;height:10px;border-radius:50%;background:#2563eb;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.4);"></div>`,
+          iconSize: [10, 10],
+          iconAnchor: [5, 5],
+        });
+        const marker = L.marker([newPoint[0], newPoint[1]], { icon: dotIcon, interactive: false }).addTo(map);
+        drawPointMarkersRef.current.push(marker);
+
+        if (drawPreviewPolyRef.current) map.removeLayer(drawPreviewPolyRef.current);
+        if (next.length >= 2) {
+          drawPreviewPolyRef.current = L.polygon(next as L.LatLngExpression[], {
+            color: '#2563eb', fillColor: '#2563eb', fillOpacity: 0.08, weight: 2, dashArray: '5,5',
+          }).addTo(map);
+        }
+
+        // Auto-close when clicking near the first point (≤ 20px screen distance)
+        if (next.length >= 4) {
+          const firstPx = map.latLngToContainerPoint(next[0]);
+          const lastPx = e.containerPoint;
+          if (Math.hypot(firstPx.x - lastPx.x, firstPx.y - lastPx.y) <= 20) {
+            const closed = next.slice(0, -1);
+            setTimeout(() => finishDrawingWithRef.current?.(closed, map), 0);
+            return closed;
+          }
+        }
+
+        return next;
+      });
+    };
+
+    map.on('click', onClick);
+    return () => { map.off('click', onClick); map.getContainer().style.cursor = ''; };
+  }, [isDrawingMode]);
+
+  const finishDrawingWithRef = useRef<((points: [number, number][], map: L.Map) => void) | null>(null);
+
+  const clearDrawPreview = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    drawPointMarkersRef.current.forEach(m => map.removeLayer(m));
+    drawPointMarkersRef.current = [];
+    if (drawPreviewPolyRef.current) { map.removeLayer(drawPreviewPolyRef.current); drawPreviewPolyRef.current = null; }
+  }, []);
+
+  const finishDrawingWith = useCallback((points: [number, number][], map: L.Map) => {
+    drawPointMarkersRef.current.forEach(m => map.removeLayer(m));
+    drawPointMarkersRef.current = [];
+    if (drawPreviewPolyRef.current) { map.removeLayer(drawPreviewPolyRef.current); drawPreviewPolyRef.current = null; }
+    setIsDrawingMode(false);
+    setDrawPoints([]);
+    setManualPolygon(points);
+    try { localStorage.setItem(`geofence_manual_${eventId}`, JSON.stringify(points)); } catch { /* ignore */ }
+    // Persist to backend so all admins and server-side checks use the same boundary
+    api.put(`/events/${eventId}/geofence`, { geofencePolygon: points }).catch(() => {/* non-blocking */});
+  }, [eventId]);
+
+  finishDrawingWithRef.current = finishDrawingWith;
+
+  const handleFinishDrawing = useCallback(() => {
+    if (drawPoints.length < 3 || !mapRef.current) return;
+    finishDrawingWith(drawPoints, mapRef.current);
+  }, [drawPoints, finishDrawingWith]);
+
+  const handleCancelDrawing = useCallback(() => {
+    clearDrawPreview();
+    setIsDrawingMode(false);
+    setDrawPoints([]);
+  }, [clearDrawPreview]);
+
+  const handleClearManual = useCallback(() => {
+    setManualPolygon(null);
+    try { localStorage.removeItem(`geofence_manual_${eventId}`); } catch { /* ignore */ }
+    api.put(`/events/${eventId}/geofence`, { geofencePolygon: null, geofenceRadius: null }).catch(() => {/* non-blocking */});
+    enteredStaffRef.current.clear();
+  }, [eventId]);
+
+  const handleStartDrawing = useCallback(() => {
+    clearDrawPreview();
+    setDrawPoints([]);
+    setIsDrawingMode(true);
+  }, [clearDrawPreview]);
+
   return (
     <div className={`relative bg-white rounded-xl border shadow-sm overflow-hidden ${expanded ? 'fixed inset-4 z-50' : ''} ${className}`}>
       {/* Header */}
@@ -648,6 +906,43 @@ export default function LiveStaffMap({
           </div>
         </div>
         <div className="flex items-center gap-1">
+          {/* Geofence draw controls — admin only */}
+          {canEditGeofence && (
+            isDrawingMode ? (
+              <>
+                <Button
+                  variant="default" size="sm"
+                  className="h-7 text-xs gap-1 bg-blue-600 hover:bg-blue-700"
+                  onClick={handleFinishDrawing}
+                  disabled={drawPoints.length < 3}
+                  title="Finish drawing (min 3 points)"
+                >
+                  <Check className="w-3.5 h-3.5" /> Finish ({drawPoints.length})
+                </Button>
+                <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={handleCancelDrawing}>
+                  <X className="w-3.5 h-3.5" /> Cancel
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant={manualPolygon ? 'default' : 'outline'}
+                  size="sm"
+                  className={`h-7 text-xs gap-1 ${manualPolygon ? 'bg-blue-600 hover:bg-blue-700' : ''}`}
+                  onClick={handleStartDrawing}
+                  title="Draw custom geofence boundary"
+                >
+                  <PenLine className="w-3.5 h-3.5" />
+                  {manualPolygon ? 'Redraw' : 'Draw Geofence'}
+                </Button>
+                {manualPolygon && (
+                  <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-red-500 hover:text-red-600" onClick={handleClearManual} title="Remove manual boundary, revert to auto">
+                    <RotateCcw className="w-3.5 h-3.5" /> Reset
+                  </Button>
+                )}
+              </>
+            )
+          )}
           <Button variant="ghost" size="sm" onClick={fetchLocations} title="Refresh">
             <RefreshCw className="w-4 h-4" />
           </Button>
@@ -778,6 +1073,18 @@ export default function LiveStaffMap({
         <div className="flex-1 relative">
           <div ref={mapContainerRef} style={{ width: '100%', height: '100%', zIndex: 1, touchAction: 'none' }} />
 
+          {/* Draw mode instruction banner */}
+          {isDrawingMode && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1003] bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg text-sm font-medium flex items-center gap-2 pointer-events-none">
+              <PenLine className="w-4 h-4 flex-shrink-0" />
+              {drawPoints.length === 0
+                ? 'Click on the map to start drawing the boundary'
+                : drawPoints.length < 3
+                  ? `${drawPoints.length} point${drawPoints.length > 1 ? 's' : ''} — keep clicking to add more`
+                  : 'Click near the first point to close, or press Finish'}
+            </div>
+          )}
+
           {/* Loading overlay */}
           {loading && (
             <div className="absolute inset-0 z-[1001] bg-white/80 flex items-center justify-center">
@@ -799,7 +1106,7 @@ export default function LiveStaffMap({
             </div>
           )}
 
-          {/* Arrival notifications */}
+          {/* Arrival + Exit notifications */}
           <div className="absolute top-4 right-4 z-[1002] space-y-2 pointer-events-none">
             {arrivedNotifications.map((notif) => (
               <div
@@ -815,15 +1122,39 @@ export default function LiveStaffMap({
                 </div>
               </div>
             ))}
+            {exitNotifications.map((notif) => (
+              <div
+                key={notif.id}
+                className="arrival-notification flex items-center gap-3 bg-red-500 text-white px-4 py-3 rounded-lg shadow-lg pointer-events-auto"
+              >
+                <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+                  <AlertTriangle className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="font-semibold text-sm">{notif.staffName}</p>
+                  <p className="text-xs opacity-90">Left the venue!</p>
+                </div>
+              </div>
+            ))}
           </div>
 
           {/* Geofence indicator legend */}
           {venueLat && venueLng && (
-            <div className="absolute bottom-4 left-4 z-[1002] bg-white/95 backdrop-blur rounded-lg p-3 shadow-lg">
-              <div className="flex items-center gap-2 text-xs text-gray-600">
-                <div className="w-3 h-3 rounded-full border-2 border-dashed border-red-500 bg-red-500/10"></div>
-                <span>Venue geofence ({VENUE_RADIUS_METERS}m radius)</span>
-              </div>
+            <div className="absolute bottom-4 left-4 z-[1002] bg-white/95 backdrop-blur rounded-lg p-3 shadow-lg space-y-1.5">
+              {manualPolygon && (
+                <div className="flex items-center gap-2 text-xs text-blue-700 font-medium">
+                  <div className="w-3 h-3 rounded border-2 border-dashed border-blue-600 bg-blue-600/10"></div>
+                  <span>Manual boundary (active)</span>
+                </div>
+              )}
+              {!manualPolygon && (
+                <div className="flex items-center gap-2 text-xs text-gray-600">
+                  <div className="w-3 h-3 rounded border-2 border-dashed border-red-500 bg-red-500/10"></div>
+                  <span>
+                    {venuePolygon ? 'Auto: building shape (OSM)' : `Auto: ${geofenceRadius}m radius`}
+                  </span>
+                </div>
+              )}
             </div>
           )}
         </div>

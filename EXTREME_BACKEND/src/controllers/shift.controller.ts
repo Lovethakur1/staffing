@@ -19,6 +19,25 @@ function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number)
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// Ray-casting point-in-polygon (lat/lng coords)
+// ═══════════════════════════════════════════════════════════════════
+function pointInPolygon(lat: number, lng: number, poly: [number, number][]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [ayLat, axLng] = poly[i];
+    const [byLat, bxLng] = poly[j];
+    if ((ayLat > lat) !== (byLat > lat) &&
+        lng < (bxLng - axLng) * (lat - ayLat) / (byLat - ayLat) + axLng) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+// In-memory geofence state: shiftId → isInsideGeofence (true = inside)
+const geofenceState = new Map<string, boolean>();
+
+// ═══════════════════════════════════════════════════════════════════
 // Device verification helper
 // One staff = one device. First use registers the device.
 // Subsequent uses must match. Mismatch → blocked until admin approves.
@@ -733,7 +752,8 @@ export const endTravelHome = asyncHandler(async (req: AuthRequest, res: Response
 
 /**
  * POST /api/shifts/:id/update-location
- * Real-time location update during travel (for admin tracking).
+ * Real-time location update during travel. Also checks geofence and fires
+ * a notification + socket event if a working staff member exits the venue.
  */
 export const updateLocation = asyncHandler(async (req: AuthRequest, res: Response) => {
   const { lat, lng } = req.body || {};
@@ -741,7 +761,10 @@ export const updateLocation = asyncHandler(async (req: AuthRequest, res: Respons
   const shift = await prisma.shift.update({
     where: { id: req.params.id },
     data: { travelLat: lat, travelLng: lng },
-    include: { staff: { select: { id: true, name: true } }, event: { select: { id: true, title: true } } },
+    include: {
+      staff: { select: { id: true, name: true } },
+      event: { select: { id: true, title: true, locationLat: true, locationLng: true, geofencePolygon: true, geofenceRadius: true } },
+    },
   });
 
   // Broadcast to admins/managers for live tracking
@@ -751,15 +774,60 @@ export const updateLocation = asyncHandler(async (req: AuthRequest, res: Respons
     eventTitle: shift.event?.title,
     staffId: shift.staff?.id || shift.staffId,
     staffName: shift.staff?.name || 'Staff',
-    lat,
-    lng,
+    lat, lng,
     status: shift.status,
     timestamp: new Date(),
   };
-  console.log(`[Location] ${locationData.staffName} → lat:${lat}, lng:${lng}, event:${shift.eventId}`);
   emitToRole('ADMIN', 'staff:location', locationData);
   emitToRole('MANAGER', 'staff:location', locationData);
   emitToRole('SUB_ADMIN', 'staff:location', locationData);
+
+  // ── Geofence exit/re-entry detection ────────────────────────────
+  const ev = shift.event as any;
+  const venueLat = ev?.locationLat;
+  const venueLng = ev?.locationLng;
+  const isWorking = ['IN_PROGRESS', 'ONGOING', 'BREAK'].includes(shift.status);
+
+  if (isWorking && venueLat && venueLng && lat != null && lng != null) {
+    const polygon = Array.isArray(ev?.geofencePolygon) ? (ev.geofencePolygon as [number, number][]) : null;
+    const radius: number = ev?.geofenceRadius ?? 100;
+
+    const isInside = polygon?.length
+      ? pointInPolygon(lat, lng, polygon)
+      : haversineMeters(lat, lng, venueLat, venueLng) <= radius;
+
+    const wasInside = geofenceState.get(shift.id) ?? true; // assume inside until proven otherwise
+    geofenceState.set(shift.id, isInside);
+
+    if (wasInside && !isInside) {
+      // Staff just LEFT the geofence
+      await sendRoleNotification('ADMIN', {
+        title: 'Staff Left Venue',
+        message: `${shift.staff?.name || 'A staff member'} has left the venue for "${ev?.title}".`,
+        type: 'alert',
+        priority: 'high',
+        category: 'geofence',
+        actionRequired: true,
+        data: { shiftId: shift.id, staffId: shift.staffId, eventId: shift.eventId },
+      });
+      emitToRole('ADMIN', 'geofence:exit', {
+        shiftId: shift.id, eventId: shift.eventId,
+        staffId: shift.staff?.id || shift.staffId,
+        staffName: shift.staff?.name || 'Staff',
+        eventTitle: ev?.title,
+        timestamp: new Date(),
+      });
+      emitToRole('MANAGER', 'geofence:exit', locationData);
+    } else if (!wasInside && isInside) {
+      // Staff re-entered — notify and clear alert
+      emitToRole('ADMIN', 'geofence:enter', {
+        shiftId: shift.id, eventId: shift.eventId,
+        staffId: shift.staff?.id || shift.staffId,
+        staffName: shift.staff?.name || 'Staff',
+        timestamp: new Date(),
+      });
+    }
+  }
 
   res.json({ message: 'Location updated.' });
 });

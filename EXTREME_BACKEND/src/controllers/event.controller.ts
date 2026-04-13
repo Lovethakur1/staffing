@@ -567,3 +567,22 @@ export const updateIncident = asyncHandler(async (req: Request, res: Response) =
 
   res.json(incident);
 });
+
+/**
+ * PUT /api/events/:id/geofence
+ * Save geofence polygon or radius for an event (admin only).
+ */
+export const updateGeofence = asyncHandler(async (req: Request, res: Response) => {
+  const { geofencePolygon, geofenceRadius } = req.body;
+
+  const event = await prisma.event.update({
+    where: { id: req.params.id },
+    data: {
+      ...(geofencePolygon !== undefined && { geofencePolygon }),
+      ...(geofenceRadius !== undefined && { geofenceRadius }),
+    },
+    select: { id: true, geofencePolygon: true, geofenceRadius: true },
+  });
+
+  res.json({ message: 'Geofence saved.', geofencePolygon: event.geofencePolygon, geofenceRadius: event.geofenceRadius });
+});

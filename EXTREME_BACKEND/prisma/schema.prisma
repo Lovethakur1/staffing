@@ -225,6 +225,8 @@ model Event {
   location            String
   locationLat         Float?
   locationLng         Float?
+  geofencePolygon     Json?   // [[lat,lng],...] — manual or OSM polygon
+  geofenceRadius      Float?  // metres — circle fallback; null = adaptive
   status              EventStatus @default(PENDING)
   staffRequired       Int
   guestCount          Int?

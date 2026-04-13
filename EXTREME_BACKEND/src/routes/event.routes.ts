@@ -2,7 +2,7 @@ import { Router } from 'express';
 import {
   listEvents, getEvent, createEvent, updateEvent, deleteEvent,
   listIncidents, createIncident, updateIncident, geocodeEvent, geocodeAllEvents,
-  getEventStaffLocations,
+  getEventStaffLocations, updateGeofence,
 } from '../controllers/event.controller';
 import { authenticate } from '../middleware/auth';
 import { authorize } from '../middleware/rbac';
@@ -20,6 +20,9 @@ router.get('/:id', getEvent);
 router.post('/', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER', 'SCHEDULER', 'CLIENT'), createEvent);
 router.put('/:id', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER', 'SCHEDULER', 'CLIENT'), updateEvent);
 router.delete('/:id', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER', 'SCHEDULER'), deleteEvent);
+
+// Geofence
+router.put('/:id/geofence', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER'), updateGeofence);
 
 // Staff live locations
 router.get('/:id/staff-locations', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER'), getEventStaffLocations);

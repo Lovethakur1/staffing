@@ -356,17 +356,57 @@ export function AdminEventDetail({ userRole = 'admin' }: AdminEventDetailProps) 
     // but sticking to IDs not in the active list for clean state by default
   ];
 
-  const eventTimeline = [
-    { time: '5:30 PM', event: 'Event  checked in', status: 'completed', user: 'Thomas Moore' },
-    { time: '5:45 PM', event: 'Head server checked in', status: 'completed', user: 'Michael Chen' },
-    { time: '5:48 PM', event: 'Bartender checked in', status: 'completed', user: 'Lisa Anderson' },
-    { time: '5:50 PM', event: 'Server checked in', status: 'completed', user: 'Emma Davis' },
-    { time: '6:00 PM', event: 'Event started', status: 'completed', user: 'System' },
-    { time: '6:15 PM', event: 'Sarah Martinez (Bartender) - Not arrived (ALERT)', status: 'alert', user: 'System' },
-    { time: '7:00 PM', event: 'Dinner service begins (scheduled)', status: 'upcoming', user: 'System' },
-    { time: '9:00 PM', event: 'Dancing & bar service (scheduled)', status: 'upcoming', user: 'System' },
-    { time: '11:00 PM', event: 'Event end (scheduled)', status: 'upcoming', user: 'System' }
-  ];
+  const formatTime24to12 = (t: string) => {
+    if (!t) return '';
+    const [h, m] = t.split(':').map(Number);
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const hour = h > 12 ? h - 12 : h === 0 ? 12 : h;
+    return `${hour}:${String(m).padStart(2, '0')} ${ampm}`;
+  };
+
+  const parseSortKey = (timeStr: string) => {
+    const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)?/i);
+    if (!match) return 9999;
+    let h = parseInt(match[1]);
+    const m = parseInt(match[2]);
+    const ampm = match[3]?.toUpperCase();
+    if (ampm === 'PM' && h !== 12) h += 12;
+    else if (ampm === 'AM' && h === 12) h = 0;
+    return h * 60 + m;
+  };
+
+  const eventTimeline = (() => {
+    const items: Array<{ time: string; event: string; status: string; user: string; sortKey: number }> = [];
+
+    if (event.startTime) {
+      const timeStr = formatTime24to12(event.startTime);
+      const isStarted = ['in-progress', 'completed'].includes(event.status);
+      items.push({ time: timeStr, event: isStarted ? 'Event started' : 'Event start (scheduled)', status: isStarted ? 'completed' : 'upcoming', user: 'System', sortKey: parseSortKey(timeStr) });
+    }
+
+    staffMembers.forEach((staff: any) => {
+      if (staff.checkInTime) {
+        items.push({ time: staff.checkInTime, event: `${staff.role} checked in`, status: 'completed', user: staff.name, sortKey: parseSortKey(staff.checkInTime) });
+      } else if (staff.status === 'not-arrived') {
+        const alertTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        items.push({ time: alertTime, event: `${staff.name} (${staff.role}) - Not arrived (ALERT)`, status: 'alert', user: 'System', sortKey: parseSortKey(alertTime) });
+      }
+    });
+
+    if (event.endTime) {
+      const timeStr = formatTime24to12(event.endTime);
+      const isEnded = event.status === 'completed';
+      items.push({ time: timeStr, event: isEnded ? 'Event ended' : 'Event end (scheduled)', status: isEnded ? 'completed' : 'upcoming', user: 'System', sortKey: parseSortKey(timeStr) });
+    }
+
+    items.sort((a, b) => a.sortKey - b.sortKey);
+
+    if (items.length === 0) {
+      return [{ time: '-', event: 'No timeline events yet', status: 'upcoming', user: 'System', sortKey: 0 }];
+    }
+
+    return items;
+  })();
 
   const paymentHistory = [
     { id: 1, date: 'Sep 15, 2025', description: 'Initial Deposit', amount: 3000, status: 'completed', method: 'Credit Card' },
@@ -1286,6 +1326,12 @@ export function AdminEventDetail({ userRole = 'admin' }: AdminEventDetailProps) 
                 venueLat={apiEvent?.locationLat}
                 venueLng={apiEvent?.locationLng}
                 venueName={event.location || event.name}
+                guestCount={apiEvent?.guestCount}
+                eventType={apiEvent?.eventType}
+                canEditGeofence={isAdmin}
+                savedGeofencePolygon={apiEvent?.geofencePolygon ?? null}
+                savedGeofenceRadius={apiEvent?.geofenceRadius ?? null}
+                onStaffExitVenue={(staffName) => toast.warning(`${staffName} has left the venue!`)}
                 selectedStaffId={selectedTrackStaff}
               />
             </Suspense>
