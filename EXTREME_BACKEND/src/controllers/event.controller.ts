@@ -532,7 +532,7 @@ export const getEventStaffLocations = asyncHandler(async (req: Request, res: Res
       id: true, title: true, locationLat: true, locationLng: true, venue: true, location: true,
       shifts: {
         select: {
-          id: true, status: true, travelLat: true, travelLng: true,
+          id: true, status: true, date: true, travelLat: true, travelLng: true,
           travelEnabled: true, travelStartTime: true, travelArrivalTime: true,
           clockIn: true, clockOut: true, travelHomeStart: true, travelHomeEnd: true,
           location: true,
@@ -546,13 +546,19 @@ export const getEventStaffLocations = asyncHandler(async (req: Request, res: Res
 
   const onSiteStatuses = ['ARRIVED', 'IN_PROGRESS', 'ONGOING', 'BREAK', 'COMPLETED'];
 
-  const staffLocations = event.shifts.map(shift => {
+  // Status priority: higher = more active/relevant (used to pick the best shift per staff)
+  const STATUS_PRIORITY: Record<string, number> = {
+    IN_PROGRESS: 8, ONGOING: 8, BREAK: 7, TRAVEL_TO_VENUE: 6, ARRIVED: 5,
+    TRAVEL_HOME: 4, COMPLETED: 3, CONFIRMED: 2, PENDING: 1,
+  };
+
+  // Build one entry per shift first
+  const allShiftEntries = event.shifts.map(shift => {
     let lat = shift.travelLat;
     let lng = shift.travelLng;
 
     // For on-site/completed staff with no GPS, fall back to clock-in location or venue coords
     if ((lat == null || lng == null) && onSiteStatuses.includes(shift.status)) {
-      // Try the location string saved at clock-in ("lat,lng")
       if (shift.location) {
         const parts = shift.location.split(',').map(Number);
         if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
@@ -560,7 +566,6 @@ export const getEventStaffLocations = asyncHandler(async (req: Request, res: Res
           lng = parts[1];
         }
       }
-      // Final fallback: use venue coordinates so staff always shows on map after check-in
       if ((lat == null || lng == null) && event.locationLat && event.locationLng) {
         lat = event.locationLat;
         lng = event.locationLng;
@@ -583,8 +588,24 @@ export const getEventStaffLocations = asyncHandler(async (req: Request, res: Res
       clockOut: shift.clockOut,
       travelHomeStart: shift.travelHomeStart,
       travelHomeEnd: shift.travelHomeEnd,
+      _date: shift.clockIn || null,
+      _priority: STATUS_PRIORITY[shift.status] || 0,
     };
   });
+
+  // Deduplicate: group by staffId, keep the most relevant shift per staff
+  const staffMap = new Map<string, typeof allShiftEntries[0]>();
+  for (const entry of allShiftEntries) {
+    const key = entry.staffId || entry.shiftId;
+    const existing = staffMap.get(key);
+    if (!existing || entry._priority > existing._priority ||
+        (entry._priority === existing._priority && entry.lat != null && existing.lat == null)) {
+      staffMap.set(key, entry);
+    }
+  }
+
+  // Strip internal fields
+  const staffLocations = Array.from(staffMap.values()).map(({ _date, _priority, ...rest }) => rest);
 
   res.json({
     eventId: event.id,

@@ -321,28 +321,49 @@ export function AdminEventDetail({ userRole = 'admin' }: AdminEventDetailProps) 
   const staffMembers = (() => {
     // If we have API event data with shifts, use that
     if (apiEvent?.shifts?.length > 0) {
-      return apiEvent.shifts.map((shift: any, index: number) => {
+      // Group shifts by staffId to avoid showing the same staff multiple times (multi-day events)
+      const staffMap = new Map<string, any>();
+      apiEvent.shifts.forEach((shift: any, index: number) => {
         const s = shift.staff || {};
-        return {
-          id: s.id || `s${index + 1}`,
-          shiftId: shift.id,
-          staffId: shift.staffId || s.id,
-          name: s.name || s.user?.name || `Staff ${index + 1}`,
-          role: shift.role || s.staffType || 'Staff',
-          avatar: (s.name || s.user?.name || 'S').split(' ').map((n: string) => n[0]).join('').slice(0, 2),
-          status: mapShiftStatus(shift.status),
-          checkInTime: shift.clockIn ? new Date(shift.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null,
-          hourlyRate: shift.hourlyRate || s.hourlyRate || 25,
-          hoursWorked: shift.clockIn
-            ? Math.round(((shift.clockOut ? new Date(shift.clockOut).getTime() : Date.now()) - new Date(shift.clockIn).getTime()) / 3600000 * 10) / 10
-            : 0,
-          rating: s.rating || 0,
-          phone: s.phone || s.user?.phone || '',
-          certifications: s.skills || [],
-          travelEnabled: shift.travelEnabled || false,
-          reportTime: shift.reportTime || null,
-        };
+        const staffId = shift.staffId || s.id || `s${index + 1}`;
+
+        if (staffMap.has(staffId)) {
+          // Already seen this staff — accumulate shift info
+          const existing = staffMap.get(staffId);
+          existing.shiftIds.push(shift.id);
+          // Aggregate hours
+          if (shift.clockIn) {
+            const hrs = Math.round(((shift.clockOut ? new Date(shift.clockOut).getTime() : Date.now()) - new Date(shift.clockIn).getTime()) / 3600000 * 10) / 10;
+            existing.hoursWorked += hrs;
+          }
+          // Use the earliest pending status (if any shift is pending, show pending)
+          if (shift.status === 'PENDING') existing.status = mapShiftStatus('PENDING');
+          existing.dayCount += 1;
+        } else {
+          staffMap.set(staffId, {
+            id: staffId,
+            shiftId: shift.id,
+            shiftIds: [shift.id],
+            staffId,
+            name: s.name || s.user?.name || `Staff ${index + 1}`,
+            role: shift.role || s.staffType || 'Staff',
+            avatar: (s.name || s.user?.name || 'S').split(' ').map((n: string) => n[0]).join('').slice(0, 2),
+            status: mapShiftStatus(shift.status),
+            checkInTime: shift.clockIn ? new Date(shift.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null,
+            hourlyRate: shift.hourlyRate || s.hourlyRate || 25,
+            hoursWorked: shift.clockIn
+              ? Math.round(((shift.clockOut ? new Date(shift.clockOut).getTime() : Date.now()) - new Date(shift.clockIn).getTime()) / 3600000 * 10) / 10
+              : 0,
+            rating: s.rating || 0,
+            phone: s.phone || s.user?.phone || '',
+            certifications: s.skills || [],
+            travelEnabled: shift.travelEnabled || false,
+            reportTime: shift.reportTime || null,
+            dayCount: 1,
+          });
+        }
       });
+      return Array.from(staffMap.values());
     }
     // No shifts assigned yet
     return [];
@@ -575,13 +596,15 @@ export function AdminEventDetail({ userRole = 'admin' }: AdminEventDetailProps) 
       return;
     }
     try {
-      await api.delete(`/shifts/${staff.shiftId}`);
-      // Update local apiEvent to remove the shift
+      // For multi-day events, remove all shifts for this staff member
+      const shiftIdsToRemove = staff.shiftIds || [staff.shiftId];
+      await Promise.all(shiftIdsToRemove.map((id: string) => api.delete(`/shifts/${id}`)));
+      // Update local apiEvent to remove all shifts for this staff
       setApiEvent((prev: any) => ({
         ...prev,
-        shifts: (prev?.shifts || []).filter((s: any) => s.id !== staff.shiftId)
+        shifts: (prev?.shifts || []).filter((s: any) => !shiftIdsToRemove.includes(s.id))
       }));
-      toast.success(`${staff.name} has been removed from ${event.name}`);
+      toast.success(`${staff.name} has been removed from ${event.name}${shiftIdsToRemove.length > 1 ? ` (${shiftIdsToRemove.length} days)` : ''}`);
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed to remove staff');
     }
@@ -1019,6 +1042,11 @@ export function AdminEventDetail({ userRole = 'admin' }: AdminEventDetailProps) 
                             <Badge variant="outline" className="text-xs">
                               {staff.role}
                             </Badge>
+                            {staff.dayCount > 1 && (
+                              <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                                {staff.dayCount} days
+                              </Badge>
+                            )}
                           </div>
                           <div className="flex items-center gap-4 text-sm text-muted-foreground">
                             {isAdmin && (
