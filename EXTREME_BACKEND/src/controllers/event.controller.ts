@@ -464,6 +464,7 @@ export const getEventStaffLocations = asyncHandler(async (req: Request, res: Res
           id: true, status: true, travelLat: true, travelLng: true,
           travelEnabled: true, travelStartTime: true, travelArrivalTime: true,
           clockIn: true, clockOut: true, travelHomeStart: true, travelHomeEnd: true,
+          location: true,
           staff: { select: { id: true, name: true, avatar: true, phone: true } },
         },
       },
@@ -472,23 +473,47 @@ export const getEventStaffLocations = asyncHandler(async (req: Request, res: Res
 
   if (!event) { res.status(404).json({ error: 'Event not found.' }); return; }
 
-  const staffLocations = event.shifts.map(shift => ({
-    shiftId: shift.id,
-    staffId: shift.staff?.id,
-    staffName: shift.staff?.name,
-    staffAvatar: shift.staff?.avatar,
-    staffPhone: shift.staff?.phone,
-    status: shift.status,
-    lat: shift.travelLat,
-    lng: shift.travelLng,
-    travelEnabled: shift.travelEnabled,
-    travelStartTime: shift.travelStartTime,
-    travelArrivalTime: shift.travelArrivalTime,
-    clockIn: shift.clockIn,
-    clockOut: shift.clockOut,
-    travelHomeStart: shift.travelHomeStart,
-    travelHomeEnd: shift.travelHomeEnd,
-  }));
+  const onSiteStatuses = ['ARRIVED', 'IN_PROGRESS', 'ONGOING', 'BREAK', 'COMPLETED'];
+
+  const staffLocations = event.shifts.map(shift => {
+    let lat = shift.travelLat;
+    let lng = shift.travelLng;
+
+    // For on-site/completed staff with no GPS, fall back to clock-in location or venue coords
+    if ((lat == null || lng == null) && onSiteStatuses.includes(shift.status)) {
+      // Try the location string saved at clock-in ("lat,lng")
+      if (shift.location) {
+        const parts = shift.location.split(',').map(Number);
+        if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+          lat = parts[0];
+          lng = parts[1];
+        }
+      }
+      // Final fallback: use venue coordinates so staff always shows on map after check-in
+      if ((lat == null || lng == null) && event.locationLat && event.locationLng) {
+        lat = event.locationLat;
+        lng = event.locationLng;
+      }
+    }
+
+    return {
+      shiftId: shift.id,
+      staffId: shift.staff?.id,
+      staffName: shift.staff?.name,
+      staffAvatar: shift.staff?.avatar,
+      staffPhone: shift.staff?.phone,
+      status: shift.status,
+      lat,
+      lng,
+      travelEnabled: shift.travelEnabled,
+      travelStartTime: shift.travelStartTime,
+      travelArrivalTime: shift.travelArrivalTime,
+      clockIn: shift.clockIn,
+      clockOut: shift.clockOut,
+      travelHomeStart: shift.travelHomeStart,
+      travelHomeEnd: shift.travelHomeEnd,
+    };
+  });
 
   res.json({
     eventId: event.id,

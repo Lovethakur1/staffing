@@ -484,6 +484,9 @@ export const clockIn = asyncHandler(async (req: AuthRequest, res: Response) => {
         status: 'IN_PROGRESS',
         clockIn: now,
         location: lat && lng ? `${lat},${lng}` : undefined,
+        // Persist lat/lng so staff always appears on the live tracking map
+        travelLat: lat || undefined,
+        travelLng: lng || undefined,
         deviceId: device.deviceId,
         deviceName: device.deviceName,
         deviceModel: device.deviceModel,

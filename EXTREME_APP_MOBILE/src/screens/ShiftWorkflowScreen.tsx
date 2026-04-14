@@ -135,11 +135,11 @@ export default function ShiftWorkflowScreen() {
       await api.post(`/shifts/${shiftId}/${endpoint}`, { ...location, ...device });
       Vibration.vibrate(100);
 
-      if (endpoint === 'start-travel' || endpoint === 'travel-home') {
+      if (endpoint === 'start-travel' || endpoint === 'travel-home' || endpoint === 'clock-in') {
         startLocationTracking();
         startBackgroundLocationTracking(shiftId, API_BASE_URL).catch(() => {});
       }
-      if (endpoint === 'arrive' || endpoint === 'end-travel') {
+      if (endpoint === 'arrive' || endpoint === 'end-travel' || endpoint === 'clock-out') {
         stopLocationTracking();
         stopBackgroundLocationTracking().catch(() => {});
       }

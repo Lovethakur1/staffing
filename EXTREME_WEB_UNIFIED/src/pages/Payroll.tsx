@@ -83,77 +83,7 @@ export function Payroll({ userRole, userId }: PayrollProps) {
   const isAdmin = userRole === 'admin';
   const [isLoading, setIsLoading] = useState(true);
 
-  // Mock payroll data for STAFF/MANAGER - their OWN payroll entries only
-  const [myPayrollEntries, setMyPayrollEntries] = useState<PayrollEntry[]>([
-    {
-      id: "PAY-001",
-      eventName: "Corporate Gala",
-      clientName: "TechCorp Inc",
-      date: "2024-10-05",
-      managerName: "John Smith",
-      venue: "Grand Hotel Ballroom",
-      checkInTime: "14:00",
-      checkOutTime: "22:00",
-      totalHours: 7.5,
-      status: 'approved',
-      amount: 187.50,
-      submittedDate: "2024-10-06"
-    },
-    {
-      id: "PAY-002",
-      eventName: "Wedding Reception",
-      clientName: "Johnson Wedding",
-      date: "2024-10-06",
-      managerName: "Sarah Wilson",
-      venue: "Riverside Garden",
-      checkInTime: "16:00",
-      checkOutTime: "23:00",
-      totalHours: 6.5,
-      status: 'approved',
-      amount: 162.50,
-      submittedDate: "2024-10-07"
-    },
-    {
-      id: "PAY-003",
-      eventName: "Birthday Party",
-      clientName: "Smith Family",
-      date: "2024-10-07",
-      managerName: "Mike Johnson",
-      venue: "Community Center",
-      checkInTime: "18:00",
-      checkOutTime: "22:00",
-      totalHours: 4.0,
-      status: 'approved',
-      amount: 100.00,
-      submittedDate: "2024-10-08"
-    },
-    {
-      id: "PAY-004",
-      eventName: "Fundraiser Gala",
-      clientName: "Smith Foundation",
-      date: "2024-10-09",
-      managerName: "Emily Davis",
-      venue: "Convention Center",
-      checkInTime: "17:00",
-      checkOutTime: "23:00",
-      totalHours: 5.5,
-      status: 'pending',
-      submittedDate: "2024-10-10"
-    },
-    {
-      id: "PAY-005",
-      eventName: "Team Building Event",
-      clientName: "Marketing Agency",
-      date: "2024-10-10",
-      managerName: "David Brown",
-      venue: "Outdoor Park",
-      checkInTime: "10:00",
-      checkOutTime: "16:00",
-      totalHours: 5.0,
-      status: 'pending',
-      submittedDate: "2024-10-11"
-    }
-  ]);
+  const [myPayrollEntries, setMyPayrollEntries] = useState<PayrollEntry[]>([]);
 
   // Fetch live payroll data from API
   useEffect(() => {
@@ -162,25 +92,23 @@ export function Payroll({ userRole, userId }: PayrollProps) {
         setIsLoading(true);
         const timesheets = await financeService.getTimesheets();
         const tsArray = Array.isArray(timesheets) ? timesheets : (timesheets?.data || []);
-        if (tsArray.length > 0) {
-          const entries: PayrollEntry[] = tsArray.map((ts: any) => ({
-            id: ts.id || '',
-            eventName: ts.shift?.event?.title || 'Shift',
-            clientName: ts.shift?.event?.client?.company || 'Client',
-            date: ts.shift?.date || ts.createdAt?.split('T')[0] || '',
-            managerName: ts.approvedBy?.name || 'Manager',
-            venue: ts.shift?.event?.venue?.name || 'Venue',
-            checkInTime: ts.clockIn || '',
-            checkOutTime: ts.clockOut || '',
-            totalHours: ts.totalHours || 0,
-            status: (ts.status || 'pending').toLowerCase() as PayrollEntry['status'],
-            amount: ts.grossPay || undefined,
-            submittedDate: ts.createdAt?.split('T')[0] || ''
-          }));
-          setMyPayrollEntries(entries);
-        }
+        const entries: PayrollEntry[] = tsArray.map((ts: any) => ({
+          id: ts.id || '',
+          eventName: ts.shift?.event?.title || ts.shift?.role || 'Shift',
+          clientName: ts.shift?.event?.client?.user?.name || ts.shift?.event?.client?.company || '—',
+          date: ts.shift?.date?.split('T')[0] || ts.clockInTime?.split('T')[0] || '',
+          managerName: ts.approvedBy?.name || '—',
+          venue: ts.shift?.event?.location || ts.shift?.event?.venue || '—',
+          checkInTime: ts.clockInTime ? new Date(ts.clockInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—',
+          checkOutTime: ts.clockOutTime ? new Date(ts.clockOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—',
+          totalHours: ts.totalHours || 0,
+          status: (ts.status || 'pending').toLowerCase() as PayrollEntry['status'],
+          amount: ts.totalHours && ts.shift?.hourlyRate ? ts.totalHours * ts.shift.hourlyRate : undefined,
+          submittedDate: ts.createdAt?.split('T')[0] || '',
+        }));
+        setMyPayrollEntries(entries);
       } catch {
-        // API unavailable — keep mock data
+        // API unavailable
       } finally {
         setIsLoading(false);
       }
@@ -188,59 +116,45 @@ export function Payroll({ userRole, userId }: PayrollProps) {
     fetchPayroll();
   }, []);
 
-  // Mock data for ADMIN - all staff submissions
-  const allStaffSubmissions: StaffSubmission[] = [
-    {
-      id: "SUB-2024-045",
-      staffName: "Michael Rodriguez",
-      staffId: "STAFF-045",
-      submittedDate: "2024-10-10",
-      entriesCount: 2,
-      totalHours: 10.5,
-      estimatedPay: 262.50,
-      status: 'pending'
-    },
-    {
-      id: "SUB-2024-046",
-      staffName: "Sarah Chen",
-      staffId: "STAFF-028",
-      submittedDate: "2024-10-11",
-      entriesCount: 3,
-      totalHours: 15.5,
-      estimatedPay: 387.50,
-      status: 'pending'
-    },
-    {
-      id: "SUB-2024-047",
-      staffName: "David Miller",
-      staffId: "STAFF-063",
-      submittedDate: "2024-10-11",
-      entriesCount: 1,
-      totalHours: 6.0,
-      estimatedPay: 150.00,
-      status: 'pending'
-    },
-    {
-      id: "SUB-2024-044",
-      staffName: "Emma Johnson",
-      staffId: "STAFF-092",
-      submittedDate: "2024-10-08",
-      entriesCount: 2,
-      totalHours: 12.0,
-      estimatedPay: 300.00,
-      status: 'approved'
-    },
-    {
-      id: "SUB-2024-043",
-      staffName: "James Wilson",
-      staffId: "STAFF-034",
-      submittedDate: "2024-10-07",
-      entriesCount: 1,
-      totalHours: 5.0,
-      estimatedPay: 125.00,
-      status: 'rejected'
-    }
-  ];
+  const [allStaffSubmissions, setAllStaffSubmissions] = useState<StaffSubmission[]>([]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const fetchAdminPayroll = async () => {
+      try {
+        const timesheets = await financeService.getTimesheets({ take: 500 } as any);
+        const tsArray = Array.isArray(timesheets) ? timesheets : (timesheets?.data || []);
+        // Group by staffId to create one row per staff member
+        const byStaff: Record<string, StaffSubmission> = {};
+        for (const ts of tsArray) {
+          const sid = ts.staffId || ts.id;
+          const date = ts.createdAt?.split('T')[0] || '';
+          const pay = (ts.totalHours || 0) * (ts.shift?.hourlyRate || 0);
+          const status = (ts.status || 'pending').toLowerCase() as StaffSubmission['status'];
+          if (!byStaff[sid]) {
+            byStaff[sid] = {
+              id: `SUB-${sid.slice(0, 8)}`,
+              staffName: ts.staff?.name || '—',
+              staffId: sid,
+              submittedDate: date,
+              entriesCount: 0,
+              totalHours: 0,
+              estimatedPay: 0,
+              status,
+            };
+          }
+          byStaff[sid].entriesCount += 1;
+          byStaff[sid].totalHours += ts.totalHours || 0;
+          byStaff[sid].estimatedPay += pay;
+          if (date > byStaff[sid].submittedDate) byStaff[sid].submittedDate = date;
+          // If any entry is pending, mark the group as pending
+          if (status === 'pending') byStaff[sid].status = 'pending';
+        }
+        setAllStaffSubmissions(Object.values(byStaff));
+      } catch { /* API unavailable */ }
+    };
+    fetchAdminPayroll();
+  }, [isAdmin]);
 
   const filteredMyEntries = myPayrollEntries.filter(entry => {
     const matchesSearch = 

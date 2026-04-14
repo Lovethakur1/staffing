@@ -720,7 +720,7 @@ export default function LiveStaffMap({
     s.lat && s.lng && ['TRAVEL_TO_VENUE', 'TRAVEL_HOME'].includes(s.status)
   );
   const onSiteStaff = staffLocations.filter(s =>
-    ['ARRIVED', 'IN_PROGRESS', 'ONGOING', 'BREAK'].includes(s.status)
+    ['ARRIVED', 'IN_PROGRESS', 'ONGOING', 'BREAK', 'COMPLETED'].includes(s.status)
   );
 
   const handleRecenterStaff = (staff: StaffLocation) => {
