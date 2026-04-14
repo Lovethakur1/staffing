@@ -298,6 +298,7 @@ export function Payroll({ userRole, userId }: PayrollProps) {
             </CardContent>
           </Card>
 
+
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm text-muted-foreground">Rejected</CardTitle>

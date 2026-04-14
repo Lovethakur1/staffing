@@ -782,13 +782,30 @@ export const getStaffDashboard = asyncHandler(async (req: AuthRequest, res: Resp
   // Calculate stats
   const completedShifts = allShifts.filter(s => s.status === 'COMPLETED').length;
   const totalEarnings = payrollItems.reduce((sum, item) => sum + (item.netPay || 0), 0);
-  const thisMonthEarnings = payrollItems
+  const thisMonthPayroll = payrollItems
     .filter(item => {
       const periodEnd = new Date(item.payrollRun.periodEnd);
       const now = new Date();
       return periodEnd.getMonth() === now.getMonth() && periodEnd.getFullYear() === now.getFullYear();
     })
     .reduce((sum, item) => sum + (item.netPay || 0), 0);
+
+  // Fall back to shift-based totalPay for current month if no payroll run exists yet
+  const now = new Date();
+  const thisMonthShiftEarnings = allShifts
+    .filter(s => s.status === 'COMPLETED' && s.date &&
+      new Date(s.date).getMonth() === now.getMonth() &&
+      new Date(s.date).getFullYear() === now.getFullYear())
+    .reduce((sum, s) => sum + Math.max(0, s.totalPay || 0), 0);
+
+  const thisMonthEarnings = thisMonthPayroll > 0 ? thisMonthPayroll : thisMonthShiftEarnings;
+
+  // Total hours this month from completed shifts
+  const thisMonthHours = allShifts
+    .filter(s => s.status === 'COMPLETED' && s.date &&
+      new Date(s.date).getMonth() === now.getMonth() &&
+      new Date(s.date).getFullYear() === now.getFullYear())
+    .reduce((sum, s) => sum + Math.max(0, s.totalHours || 0), 0);
 
   res.json({
     profile: staffProfile,
@@ -801,6 +818,7 @@ export const getStaffDashboard = asyncHandler(async (req: AuthRequest, res: Resp
       totalEvents: staffProfile.totalEvents,
       totalEarnings,
       thisMonthEarnings,
+      thisMonthHours,
     },
     shifts: {
       today: todaysShifts,

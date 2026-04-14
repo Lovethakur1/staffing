@@ -74,7 +74,7 @@ export default function DashboardScreen() {
     ['TRAVEL_TO_VENUE', 'ARRIVED', 'IN_PROGRESS', 'BREAK', 'TRAVEL_HOME', 'CONFIRMED', 'YET_TO_START'].includes(sh.status)
   );
   const completedRecent = shifts.recent.filter((sh: any) => sh.status === 'COMPLETED');
-  const totalHours = completedRecent.reduce((sum: number, sh: any) => sum + (sh.totalHours || 0), 0);
+  const totalHours = stats.thisMonthHours ?? completedRecent.reduce((sum: number, sh: any) => sum + Math.max(0, sh.totalHours || 0), 0);
 
   return (
     <ScreenLayout activeTab="Dashboard" notificationCount={stats.pendingRequests}>
@@ -202,7 +202,7 @@ export default function DashboardScreen() {
                     <Text style={st.activitySub}>{new Date(shift.date).toLocaleDateString('en-GB')} • {shift.event?.venue || ''}</Text>
                   </View>
                   <View style={st.activityRight}>
-                    <Text style={st.activityPay}>${shift.totalPay?.toFixed(0) || '0'}</Text>
+                    <Text style={st.activityPay}>${Math.max(0, shift.totalPay || 0).toFixed(0)}</Text>
                   </View>
                 </View>
               ))}

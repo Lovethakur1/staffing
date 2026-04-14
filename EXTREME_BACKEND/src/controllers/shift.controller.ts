@@ -629,16 +629,17 @@ export const clockOut = asyncHandler(async (req: AuthRequest, res: Response) => 
      const [h, m] = shift.endTime.split(':').map(Number);
      const shiftEnd = new Date(shift.date);
      shiftEnd.setHours(h, m, 0, 0);
-     
+
      const gracePeriodEnd = new Date(shiftEnd.getTime() + 2 * 60 * 60 * 1000); // end + 2h
-     
-     if (now > gracePeriodEnd) {
+
+     // Only auto-cap if shiftEnd is after clockIn to prevent negative hours
+     if (now > gracePeriodEnd && shiftEnd.getTime() > shift.clockIn.getTime()) {
          effectiveClockOutTime = shiftEnd;
          systemNote = 'System auto-capped check-out at scheduled end time due to >2 hours missed punch.';
      }
   }
 
-  const totalHours = calculateHours(shift.clockIn, effectiveClockOutTime);
+  const totalHours = Math.max(0, calculateHours(shift.clockIn, effectiveClockOutTime));
   const guaranteedHours = shift.guaranteedHours || 0;
   const regularHours = Math.min(totalHours, guaranteedHours || totalHours);
   const additionalWork = guaranteedHours > 0 ? Math.max(0, totalHours - guaranteedHours) : 0;
