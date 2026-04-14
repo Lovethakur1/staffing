@@ -195,8 +195,11 @@ export default function ShiftWorkflowScreen() {
   async function handleAcceptShift() {
     setActionLoading('accept');
     try {
-      await api.put(`/shifts/${shiftId}/status`, { status: 'CONFIRMED' });
+      const res = await api.put(`/shifts/${shiftId}/status`, { status: 'CONFIRMED' });
       Vibration.vibrate(100);
+      if (res.data.siblingUpdated > 0) {
+        Alert.alert('Shifts Accepted', `Accepted this shift and ${res.data.siblingUpdated} other day(s) for the same event.`);
+      }
       await fetchShift();
     } catch (err: any) {
       Alert.alert('Error', err?.response?.data?.error || 'Failed to accept shift.');

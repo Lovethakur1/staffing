@@ -84,6 +84,21 @@ export default function MyShiftsScreen() {
     return d >= now && !['COMPLETED', 'REJECTED'].includes(s.status);
   });
 
+  // Group multi-day event shifts: group by eventId, keep the earliest shift as representative
+  const groupedUpcoming = (() => {
+    const groups: Map<string, typeof upcomingShifts> = new Map();
+    for (const shift of upcomingShifts) {
+      const key = shift.eventId || shift.id;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(shift);
+    }
+    // Sort each group by date, return as array of groups
+    return Array.from(groups.values()).map(group => {
+      group.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      return group;
+    }).sort((a, b) => new Date(a[0].date).getTime() - new Date(b[0].date).getTime());
+  })();
+
   const today = new Date();
   const year = currentMonth.getFullYear();
   const month = currentMonth.getMonth();
@@ -376,15 +391,38 @@ export default function MyShiftsScreen() {
         {/* Upcoming Shifts */}
         <View style={st.card}>
           <Text style={st.sectionTitle}>Upcoming Shifts</Text>
-          {upcomingShifts.length === 0 ? (
+          {groupedUpcoming.length === 0 ? (
             <Text style={st.noShiftsText}>No upcoming shifts</Text>
           ) : (
-            upcomingShifts.slice(0, 5).map(shift => (
-              <TouchableOpacity key={shift.id} style={st.shiftItem} onPress={() => nav.navigate('ShiftWorkflow', { shiftId: shift.id })}>
-                <Text style={st.shiftItemTitle}>{shift.event?.title || 'Shift'}</Text>
-                <Text style={st.shiftItemSub}>{new Date(shift.date).toLocaleDateString()} • {shift.startTime} – {shift.endTime}</Text>
-              </TouchableOpacity>
-            ))
+            groupedUpcoming.slice(0, 5).map(group => {
+              const first = group[0];
+              const isMultiDay = group.length > 1;
+              const firstDate = new Date(first.date).toLocaleDateString();
+              const lastDate = isMultiDay ? new Date(group[group.length - 1].date).toLocaleDateString() : null;
+
+              return (
+                <TouchableOpacity
+                  key={first.id}
+                  style={st.shiftItem}
+                  onPress={() => nav.navigate('ShiftWorkflow', { shiftId: first.id })}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={st.shiftItemTitle}>{first.event?.title || 'Shift'}</Text>
+                    {isMultiDay && (
+                      <View style={{ backgroundColor: '#EFF6FF', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
+                        <Text style={{ fontSize: 10, fontWeight: '700', color: '#3B82F6' }}>{group.length} days</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={st.shiftItemSub}>
+                    {isMultiDay
+                      ? `${firstDate} – ${lastDate} • ${first.startTime} – ${first.endTime}`
+                      : `${firstDate} • ${first.startTime} – ${first.endTime}`
+                    }
+                  </Text>
+                </TouchableOpacity>
+              );
+            })
           )}
         </View>
 

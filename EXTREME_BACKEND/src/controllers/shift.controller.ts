@@ -371,23 +371,39 @@ export const updateShiftStatus = asyncHandler(async (req: AuthRequest, res: Resp
     where: { id: shift.id },
     data: { status },
     include: {
-      event: { select: { id: true, title: true } },
+      event: { select: { id: true, title: true, isMultiDay: true } },
     }
   });
 
+  // For multi-day events: auto-accept/reject all sibling shifts for the same event & staff
+  let siblingCount = 0;
+  if (updatedShift.event.isMultiDay) {
+    const result = await prisma.shift.updateMany({
+      where: {
+        eventId: shift.eventId,
+        staffId: req.user!.userId,
+        id: { not: shift.id },
+        status: 'PENDING',
+      },
+      data: { status },
+    });
+    siblingCount = result.count;
+  }
+
   // Notify admins when staff confirms/rejects a shift
   try {
+    const dayNote = siblingCount > 0 ? ` (${siblingCount + 1} days)` : '';
     if (status === 'CONFIRMED') {
       await sendRoleNotification('ADMIN', {
         title: 'Shift Confirmed',
-        message: `Staff confirmed shift for "${updatedShift.event.title}".`,
+        message: `Staff confirmed shift for "${updatedShift.event.title}"${dayNote}.`,
         type: 'shift',
         category: 'work',
       });
     } else if (status === 'REJECTED') {
       await sendRoleNotification('ADMIN', {
         title: 'Shift Rejected',
-        message: `Staff rejected shift for "${updatedShift.event.title}". Reassignment needed.`,
+        message: `Staff rejected shift for "${updatedShift.event.title}"${dayNote}. Reassignment needed.`,
         type: 'shift',
         category: 'work',
         priority: 'high',
@@ -395,7 +411,7 @@ export const updateShiftStatus = asyncHandler(async (req: AuthRequest, res: Resp
     }
   } catch {}
 
-  res.json(updatedShift);
+  res.json({ ...updatedShift, siblingUpdated: siblingCount });
 });
 
 // ═══════════════════════════════════════════════════════════════════
