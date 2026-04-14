@@ -375,6 +375,8 @@ export function BookEvent({
         date: formData.eventDate.toISOString(),
         startTime: formData.startTime || undefined,
         endTime: formData.endTime || undefined,
+        isMultiDay: formData.isMultiDay || false,
+        endDate: formData.isMultiDay && formData.endDate ? formData.endDate.toISOString() : undefined,
         location: [formData.address, formData.city, formData.state, formData.zipCode].filter(Boolean).join(', ') || formData.location || undefined,
         locationLat: formData.latitude || undefined,
         locationLng: formData.longitude || undefined,

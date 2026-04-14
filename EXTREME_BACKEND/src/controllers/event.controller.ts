@@ -321,7 +321,19 @@ export const updateEvent = asyncHandler(async (req: Request, res: Response) => {
       ...(adminNotes !== undefined && { adminNotes }),
       ...(isMultiDay !== undefined && { isMultiDay: Boolean(isMultiDay) }),
       ...(endDate !== undefined && { endDate: endDate ? new Date(endDate) : null }),
-      // Replace all eventDates when provided
+      // Auto-generate eventDates when isMultiDay + date + endDate are updated (and no explicit eventDates array)
+      ...(isMultiDay && date && endDate && !Array.isArray(eventDates) && (() => {
+        const dates: { date: Date; startTime: string; endTime: string }[] = [];
+        const s = new Date(date);
+        const e = new Date(endDate);
+        const cur = new Date(s);
+        while (cur <= e) {
+          dates.push({ date: new Date(cur), startTime: startTime || '09:00', endTime: endTime || '17:00' });
+          cur.setDate(cur.getDate() + 1);
+        }
+        return dates.length > 0 ? { eventDates: { deleteMany: {}, create: dates } } : {};
+      })()),
+      // Replace all eventDates when explicitly provided
       ...(Array.isArray(eventDates) && {
         eventDates: {
           deleteMany: {},
@@ -362,6 +374,65 @@ export const updateEvent = asyncHandler(async (req: Request, res: Response) => {
       }
     },
   });
+
+  // Sync shifts when multi-day event dates change:
+  // - Remove PENDING/CONFIRMED shifts for dates that no longer exist
+  // - Create missing shifts for new dates (for already-assigned staff)
+  if (event.isMultiDay && event.eventDates.length > 0) {
+    const eventDateStrs = new Set(event.eventDates.map(ed => ed.date.toISOString().split('T')[0]));
+
+    // Find all existing shifts for this event
+    const existingShifts = await prisma.shift.findMany({
+      where: { eventId: req.params.id },
+      select: { id: true, date: true, staffId: true, status: true },
+    });
+
+    // Delete shifts for removed dates (only if not started/completed)
+    const orphanedShiftIds = existingShifts
+      .filter(s => !eventDateStrs.has(s.date.toISOString().split('T')[0]))
+      .filter(s => ['PENDING', 'CONFIRMED'].includes(s.status))
+      .map(s => s.id);
+
+    if (orphanedShiftIds.length > 0) {
+      await prisma.shift.deleteMany({ where: { id: { in: orphanedShiftIds } } });
+    }
+
+    // Create shifts for new dates for already-assigned staff
+    const assignedStaff = [...new Set(existingShifts.map(s => s.staffId))];
+    if (assignedStaff.length > 0) {
+      const shiftsToCreate: any[] = [];
+      for (const staffId of assignedStaff) {
+        const staffExistingDates = new Set(
+          existingShifts.filter(s => s.staffId === staffId).map(s => s.date.toISOString().split('T')[0])
+        );
+        for (const ed of event.eventDates) {
+          const dayStr = ed.date.toISOString().split('T')[0];
+          if (!staffExistingDates.has(dayStr)) {
+            // Get their shift details from an existing shift as template
+            const template = existingShifts.find(s => s.staffId === staffId);
+            const templateShift = template ? await prisma.shift.findUnique({
+              where: { id: template.id },
+              select: { role: true, hourlyRate: true, guaranteedHours: true, reportTime: true },
+            }) : null;
+            shiftsToCreate.push({
+              eventId: req.params.id,
+              staffId,
+              date: ed.date,
+              startTime: ed.startTime,
+              endTime: ed.endTime,
+              reportTime: templateShift?.reportTime || ed.startTime,
+              role: templateShift?.role || 'Staff',
+              hourlyRate: templateShift?.hourlyRate || 25,
+              guaranteedHours: templateShift?.guaranteedHours || 4,
+            });
+          }
+        }
+      }
+      if (shiftsToCreate.length > 0) {
+        await prisma.shift.createMany({ data: shiftsToCreate });
+      }
+    }
+  }
 
   // If status changed to CONFIRMED, send notification to client
   if (status === 'CONFIRMED' && existingEvent && existingEvent.status !== 'CONFIRMED') {

@@ -205,10 +205,79 @@ export const getShift = asyncHandler(async (req: Request, res: Response) => {
 /**
  * POST /api/shifts
  * Assign staff to an event (create a shift).
+ * For multi-day events, automatically creates one shift per event day.
  */
 export const createShift = asyncHandler(async (req: Request, res: Response) => {
   const { eventId, staffId, date, startTime, endTime, reportTime, role, hourlyRate, guaranteedHours } = req.body;
 
+  // Check if the event is multi-day with eventDates
+  const event = await prisma.event.findUnique({
+    where: { id: eventId },
+    select: {
+      id: true, title: true, isMultiDay: true, date: true, endDate: true,
+      startTime: true, endTime: true,
+      eventDates: { orderBy: { date: 'asc' } },
+    },
+  });
+
+  if (!event) {
+    res.status(404).json({ error: 'Event not found.' });
+    return;
+  }
+
+  // For multi-day events: create one shift per event day
+  if (event.isMultiDay && event.eventDates.length > 0) {
+    // Check which days already have a shift for this staff member
+    const existingShifts = await prisma.shift.findMany({
+      where: { eventId, staffId },
+      select: { date: true },
+    });
+    const existingDates = new Set(existingShifts.map(s => s.date.toISOString().split('T')[0]));
+
+    const shiftsToCreate = event.eventDates
+      .filter(ed => !existingDates.has(ed.date.toISOString().split('T')[0]))
+      .map(ed => ({
+        eventId,
+        staffId,
+        date: ed.date,
+        startTime: startTime || ed.startTime,
+        endTime: endTime || ed.endTime,
+        reportTime: reportTime || ed.startTime,
+        role,
+        hourlyRate,
+        guaranteedHours,
+      }));
+
+    if (shiftsToCreate.length === 0) {
+      res.status(400).json({ error: 'Staff is already assigned to all days of this event.' });
+      return;
+    }
+
+    const created = await prisma.shift.createMany({ data: shiftsToCreate });
+
+    // Fetch the created shifts to return full data
+    const shifts = await prisma.shift.findMany({
+      where: { eventId, staffId },
+      include: {
+        event: { select: { id: true, title: true } },
+        staff: { select: { id: true, name: true } },
+      },
+      orderBy: { date: 'asc' },
+    });
+
+    // Notify staff about new shift assignment
+    try {
+      const firstDate = event.eventDates[0].date;
+      const lastDate = event.eventDates[event.eventDates.length - 1].date;
+      const dateRange = `${firstDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} - ${lastDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+      await notifyShiftAssigned(staffId, event.title, dateRange);
+    } catch {}
+
+    res.status(201).json({ shifts, count: created.count, multiDay: true });
+    return;
+  }
+
+  // Single-day event: create one shift
   const shift = await prisma.shift.create({
     data: {
       eventId,

@@ -538,14 +538,28 @@ export function AdminEventDetail({ userRole = 'admin' }: AdminEventDetailProps) 
         guaranteedHours: 4,
       };
       const res = await api.post('/shifts', shiftData);
-      // Update local apiEvent to include the new shift
-      setApiEvent((prev: any) => ({
-        ...prev,
-        shifts: [...(prev?.shifts || []), { ...res.data, staff: { id: staff.userId || staff.id, name: staff.name } }]
-      }));
-      toast.success(`${staff.name} has been assigned to ${event.name}`, {
-        description: `Role: ${staff.role} | Rate: $${staff.hourlyRate}/hr`
-      });
+
+      // Handle multi-day response (array of shifts) vs single shift
+      if (res.data.multiDay && res.data.shifts) {
+        setApiEvent((prev: any) => ({
+          ...prev,
+          shifts: [
+            ...(prev?.shifts || []),
+            ...res.data.shifts.map((s: any) => ({ ...s, staff: { id: staff.userId || staff.id, name: staff.name } }))
+          ]
+        }));
+        toast.success(`${staff.name} has been assigned to all ${res.data.count} days of ${event.name}`, {
+          description: `Role: ${staff.role} | Rate: $${staff.hourlyRate}/hr`
+        });
+      } else {
+        setApiEvent((prev: any) => ({
+          ...prev,
+          shifts: [...(prev?.shifts || []), { ...res.data, staff: { id: staff.userId || staff.id, name: staff.name } }]
+        }));
+        toast.success(`${staff.name} has been assigned to ${event.name}`, {
+          description: `Role: ${staff.role} | Rate: $${staff.hourlyRate}/hr`
+        });
+      }
       setAddStaffDialogOpen(false);
       setStaffSearchTerm('');
       setSelectedRole('all');
