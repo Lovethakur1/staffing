@@ -133,7 +133,9 @@ export function AdminEventDetail({ userRole = 'admin' }: AdminEventDetailProps) 
     paidAmount: 0,
     pendingAmount: apiEvent.budget || 0,
     attendees: apiEvent.guestCount || 0,
-    duration: `${apiEvent.startTime || ''} - ${apiEvent.endTime || ''}`,
+    duration: apiEvent.isMultiDay && apiEvent.endDate
+      ? `${new Date(apiEvent.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ${apiEvent.startTime || ''} — ${new Date(apiEvent.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ${apiEvent.endTime || ''}`
+      : `${apiEvent.startTime || ''} - ${apiEvent.endTime || ''}`,
     description: apiEvent.notes || apiEvent.specialRequirements || '',
     specialRequirements: apiEvent.specialRequirements ? [apiEvent.specialRequirements] : [],
   } : (eventDetails || defaultEvent);

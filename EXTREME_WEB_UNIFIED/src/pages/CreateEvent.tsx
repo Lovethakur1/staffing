@@ -603,9 +603,9 @@ export function CreateEvent({ userRole, userId }: CreateEventProps) {
                           />
                         </div>
                       </div>
-                      {/* Daily Start Time + Daily End Time */}
+                      {/* Event Start Time + Event End Time */}
                       <div>
-                        <Label>Daily Start Time</Label>
+                        <Label>Event Start Time</Label>
                         <Input
                           type="time"
                           value={manualForm.startTime}
@@ -614,7 +614,7 @@ export function CreateEvent({ userRole, userId }: CreateEventProps) {
                         />
                       </div>
                       <div>
-                        <Label>Daily End Time</Label>
+                        <Label>Event End Time</Label>
                         <Input
                           type="time"
                           value={manualForm.endTime}
@@ -629,7 +629,7 @@ export function CreateEvent({ userRole, userId }: CreateEventProps) {
                           <div className="col-span-2">
                             <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
                               <CalendarIcon className="h-3 w-3 mr-1" />
-                              {days} day{days !== 1 ? "s" : ""} total
+                              {days} day{days !== 1 ? "s" : ""} • {manualForm.startTime || '09:00'} (Day 1) – {manualForm.endTime || '17:00'} (last day)
                             </Badge>
                           </div>
                         ) : null;

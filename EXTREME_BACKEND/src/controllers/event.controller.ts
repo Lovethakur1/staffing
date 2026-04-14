@@ -207,13 +207,32 @@ export const createEvent = asyncHandler(async (req: AuthRequest, res: Response) 
       isMultiDay: isMultiDay ? true : false,
       ...(endDate && { endDate: new Date(endDate) }),
       // Auto-generate EventDate entries for multi-day (one per day in range)
+      // Continuous event: Day 1 starts at event startTime→23:59, middle days 00:00→23:59, last day 00:00→event endTime
       ...(isMultiDay && date && endDate && (() => {
         const dates: { date: Date; startTime: string; endTime: string }[] = [];
         const start = new Date(date);
         const end = new Date(endDate);
         const cur = new Date(start);
+        const startStr = start.toISOString().split('T')[0];
+        const endStr = end.toISOString().split('T')[0];
+        const evStart = startTime || '09:00';
+        const evEnd = endTime || '17:00';
+
         while (cur <= end) {
-          dates.push({ date: new Date(cur), startTime: startTime || '09:00', endTime: endTime || '17:00' });
+          const curStr = cur.toISOString().split('T')[0];
+          const isSameDay = startStr === endStr;
+          const isFirst = curStr === startStr;
+          const isLast = curStr === endStr;
+
+          if (isSameDay) {
+            dates.push({ date: new Date(cur), startTime: evStart, endTime: evEnd });
+          } else if (isFirst) {
+            dates.push({ date: new Date(cur), startTime: evStart, endTime: '23:59' });
+          } else if (isLast) {
+            dates.push({ date: new Date(cur), startTime: '00:00', endTime: evEnd });
+          } else {
+            dates.push({ date: new Date(cur), startTime: '00:00', endTime: '23:59' });
+          }
           cur.setDate(cur.getDate() + 1);
         }
         return dates.length > 0 ? { eventDates: { create: dates } } : {};
@@ -322,13 +341,32 @@ export const updateEvent = asyncHandler(async (req: Request, res: Response) => {
       ...(isMultiDay !== undefined && { isMultiDay: Boolean(isMultiDay) }),
       ...(endDate !== undefined && { endDate: endDate ? new Date(endDate) : null }),
       // Auto-generate eventDates when isMultiDay + date + endDate are updated (and no explicit eventDates array)
+      // Continuous event: Day 1 starts at event startTime→23:59, middle days 00:00→23:59, last day 00:00→event endTime
       ...(isMultiDay && date && endDate && !Array.isArray(eventDates) && (() => {
         const dates: { date: Date; startTime: string; endTime: string }[] = [];
         const s = new Date(date);
         const e = new Date(endDate);
         const cur = new Date(s);
+        const startStr = s.toISOString().split('T')[0];
+        const endStr = e.toISOString().split('T')[0];
+        const evStart = startTime || '09:00';
+        const evEnd = endTime || '17:00';
+
         while (cur <= e) {
-          dates.push({ date: new Date(cur), startTime: startTime || '09:00', endTime: endTime || '17:00' });
+          const curStr = cur.toISOString().split('T')[0];
+          const isSameDay = startStr === endStr;
+          const isFirst = curStr === startStr;
+          const isLast = curStr === endStr;
+
+          if (isSameDay) {
+            dates.push({ date: new Date(cur), startTime: evStart, endTime: evEnd });
+          } else if (isFirst) {
+            dates.push({ date: new Date(cur), startTime: evStart, endTime: '23:59' });
+          } else if (isLast) {
+            dates.push({ date: new Date(cur), startTime: '00:00', endTime: evEnd });
+          } else {
+            dates.push({ date: new Date(cur), startTime: '00:00', endTime: '23:59' });
+          }
           cur.setDate(cur.getDate() + 1);
         }
         return dates.length > 0 ? { eventDates: { deleteMany: {}, create: dates } } : {};

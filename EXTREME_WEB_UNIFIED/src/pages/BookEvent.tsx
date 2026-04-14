@@ -762,7 +762,7 @@ export function BookEvent({
                     <div>
                       <Label htmlFor="startTime">
                         {formData.isMultiDay
-                          ? "Daily Start Time"
+                          ? "Event Start Time"
                           : "Start Time"}
                       </Label>
                       <Input
@@ -781,7 +781,7 @@ export function BookEvent({
                     <div>
                       <Label htmlFor="endTime">
                         {formData.isMultiDay
-                          ? "Daily End Time"
+                          ? "Event End Time"
                           : "End Time"}
                       </Label>
                       <Input
@@ -817,8 +817,8 @@ export function BookEvent({
                             {formData.startTime &&
                               formData.endTime && (
                                 <span className="ml-2">
-                                  • Daily: {formData.startTime}{" "}
-                                  - {formData.endTime}
+                                  • {formData.startTime}{" "}
+                                  (Day 1) – {formData.endTime} (last day)
                                 </span>
                               )}
                           </span>
@@ -1432,8 +1432,8 @@ export function BookEvent({
                         {formData.startTime &&
                           formData.endTime && (
                             <span className="block">
-                              Daily: {formData.startTime} -{" "}
-                              {formData.endTime}
+                              {formData.startTime} (Day 1) –{" "}
+                              {formData.endTime} (last day)
                             </span>
                           )}
                       </div>

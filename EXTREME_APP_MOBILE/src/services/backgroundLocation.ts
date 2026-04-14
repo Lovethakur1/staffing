@@ -1,6 +1,7 @@
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 
 const BACKGROUND_LOCATION_TASK = 'BACKGROUND_LOCATION_TASK';
 
@@ -11,8 +12,10 @@ let activeApiBaseUrl: string | null = null;
 /**
  * Define the background task at module level (required by expo-task-manager).
  * This runs even when the app is in the background / killed.
+ * Wrapped in try/catch to prevent crashes if native modules aren't ready yet.
  */
-TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
+try {
+  TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
   if (error) {
     console.warn('[BG Location] Task error:', error.message);
     return;
@@ -53,6 +56,9 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
     // Network errors are expected when server is unreachable — silently ignore
   }
 });
+} catch (e) {
+  console.warn('[BG Location] Failed to define background task:', e);
+}
 
 /**
  * Start background location tracking for a shift.
