@@ -674,12 +674,20 @@ export const getEventStaffLocations = asyncHandler(async (req: Request, res: Res
  * List all incidents (for managers)
  */
 export const listIncidents = asyncHandler(async (req: AuthRequest, res: Response) => {
-  const { status, eventId, priority } = req.query as any;
+  const { status, eventId, priority, type, search } = req.query as any;
 
   const where: any = {};
   if (status) where.status = status;
   if (eventId) where.eventId = eventId;
   if (priority) where.severity = priority;
+  if (type) where.type = type;
+  if (search) {
+    where.OR = [
+      { title: { contains: search, mode: 'insensitive' } },
+      { description: { contains: search, mode: 'insensitive' } },
+      { location: { contains: search, mode: 'insensitive' } },
+    ];
+  }
 
   const incidents = await prisma.incidentReport.findMany({
     where,
@@ -694,19 +702,66 @@ export const listIncidents = asyncHandler(async (req: AuthRequest, res: Response
 });
 
 /**
+ * GET /api/events/incidents/:id
+ */
+export const getIncident = asyncHandler(async (req: Request, res: Response) => {
+  const incident = await prisma.incidentReport.findUnique({
+    where: { id: req.params.id },
+    include: {
+      event: { select: { id: true, title: true, venue: true, location: true } },
+      reporter: { select: { id: true, name: true } },
+    },
+  });
+
+  if (!incident) {
+    res.status(404).json({ error: 'Incident not found.' });
+    return;
+  }
+
+  res.json(incident);
+});
+
+/**
  * POST /api/events/:eventId/incidents
  */
 export const createIncident = asyncHandler(async (req: AuthRequest, res: Response) => {
-  const { severity, description } = req.body;
+  const {
+    severity, description, title, type, location,
+    involvedParties, witnesses, actionsTaken, followUpRequired,
+  } = req.body;
+
+  const eventId = req.params.eventId;
+
+  // Allow eventId to be 'none' or empty for incidents not linked to an event
+  const finalEventId = eventId && eventId !== 'none' ? eventId : null;
+
+  const now = new Date().toISOString();
+  const timeline = [{
+    id: '1',
+    action: 'Incident Reported',
+    by: req.user?.role || 'admin',
+    timestamp: now,
+    details: 'Initial incident report submitted',
+  }];
 
   const incident = await prisma.incidentReport.create({
     data: {
-      eventId: req.params.eventId,
+      ...(finalEventId && { eventId: finalEventId }),
       reportedBy: req.user!.userId,
-      severity,
-      description,
+      title: title || '',
+      type: type || 'other',
+      severity: severity || 'LOW',
+      description: description || '',
+      location: location || null,
+      involvedParties: involvedParties || [],
+      witnesses: witnesses || [],
+      actionsTaken: actionsTaken || null,
+      followUpRequired: followUpRequired || false,
+      notes: [],
+      timeline,
     },
     include: {
+      event: { select: { id: true, title: true, venue: true } },
       reporter: { select: { id: true, name: true } },
     },
   });
@@ -718,7 +773,11 @@ export const createIncident = asyncHandler(async (req: AuthRequest, res: Respons
  * PUT /api/events/incidents/:id
  */
 export const updateIncident = asyncHandler(async (req: Request, res: Response) => {
-  const { status, resolution, severity } = req.body;
+  const {
+    status, resolution, severity, title, type, location,
+    involvedParties, witnesses, actionsTaken, followUpRequired,
+    notes, timeline,
+  } = req.body;
 
   const incident = await prisma.incidentReport.update({
     where: { id: req.params.id },
@@ -726,6 +785,19 @@ export const updateIncident = asyncHandler(async (req: Request, res: Response) =
       ...(status && { status }),
       ...(resolution !== undefined && { resolution }),
       ...(severity && { severity }),
+      ...(title !== undefined && { title }),
+      ...(type !== undefined && { type }),
+      ...(location !== undefined && { location }),
+      ...(involvedParties !== undefined && { involvedParties }),
+      ...(witnesses !== undefined && { witnesses }),
+      ...(actionsTaken !== undefined && { actionsTaken }),
+      ...(followUpRequired !== undefined && { followUpRequired }),
+      ...(notes !== undefined && { notes }),
+      ...(timeline !== undefined && { timeline }),
+    },
+    include: {
+      event: { select: { id: true, title: true, venue: true } },
+      reporter: { select: { id: true, name: true } },
     },
   });
 

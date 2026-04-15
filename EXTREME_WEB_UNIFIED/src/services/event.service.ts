@@ -67,9 +67,14 @@ export const eventService = {
         return response.data;
     },
 
-    getIncidents: async (eventId?: string) => {
-        const url = eventId ? `/events/${eventId}/incidents` : '/events/incidents';
-        const response = await api.get(url);
+    getIncident: async (incidentId: string) => {
+        const response = await api.get(`/events/incidents/${incidentId}`);
         return response.data;
+    },
+
+    getIncidents: async (params?: any) => {
+        const response = await api.get('/events/incidents', { params });
+        const data = response.data;
+        return Array.isArray(data) ? data : (data?.data || []);
     }
 };

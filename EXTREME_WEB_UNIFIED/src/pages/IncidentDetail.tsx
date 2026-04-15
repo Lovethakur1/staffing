@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useNavigation } from "../contexts/NavigationContext";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
 import { Button } from "../components/ui/button";
@@ -24,9 +24,7 @@ import {
   AlertCircle,
   History,
   Phone,
-  Mail,
   Users,
-  DollarSign,
   Search,
   UserPlus,
   Send,
@@ -74,17 +72,44 @@ interface Incident {
   timeline: TimelineEntry[];
 }
 
-const LS_KEY = 'incidents_store';
-function loadIncidents(): Incident[] {
-  try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]'); } catch { return []; }
+const SEVERITY_MAP: Record<string, Severity> = {
+  CRITICAL: 'critical', HIGH: 'high', MEDIUM: 'medium', LOW: 'low',
+  critical: 'critical', high: 'high', medium: 'medium', low: 'low',
+};
+const STATUS_MAP: Record<string, IncidentStatus> = {
+  OPEN: 'open', INVESTIGATING: 'investigating', RESOLVED: 'resolved', CLOSED: 'closed',
+  open: 'open', investigating: 'investigating', resolved: 'resolved', closed: 'closed',
+};
+
+function mapIncident(raw: any): Incident {
+  return {
+    id: raw.id,
+    title: raw.title || '',
+    type: (raw.type || 'other') as IncidentType,
+    severity: SEVERITY_MAP[raw.severity] || 'medium',
+    status: STATUS_MAP[raw.status] || 'open',
+    eventId: raw.eventId || undefined,
+    eventName: raw.event?.title || undefined,
+    reportedBy: raw.reporter?.name || raw.reportedBy || '',
+    reportedDate: raw.createdAt || new Date().toISOString(),
+    location: raw.location || '',
+    description: raw.description || '',
+    involvedParties: raw.involvedParties || [],
+    witnesses: raw.witnesses || [],
+    actionsTaken: raw.actionsTaken || '',
+    resolution: raw.resolution,
+    followUpRequired: raw.followUpRequired || false,
+    notes: Array.isArray(raw.notes) ? raw.notes : [],
+    timeline: Array.isArray(raw.timeline) ? raw.timeline : [],
+  };
 }
-function saveIncidents(list: Incident[]) { localStorage.setItem(LS_KEY, JSON.stringify(list)); }
 
 export function IncidentDetail({ userRole, userId, incidentId }: IncidentDetailProps) {
   const { setCurrentPage } = useNavigation();
 
   const [incident, setIncident] = useState<Incident | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [staffList, setStaffList] = useState<{ id: string; name: string; role?: string }[]>([]);
 
   // Dialogs
@@ -105,9 +130,13 @@ export function IncidentDetail({ userRole, userId, incidentId }: IncidentDetailP
   const [newNote, setNewNote] = useState("");
 
   useEffect(() => {
-    const all = loadIncidents();
-    const found = all.find(i => i.id === incidentId);
-    if (found) { setIncident(found); } else { setNotFound(true); }
+    if (!incidentId) { setNotFound(true); setLoading(false); return; }
+
+    eventService.getIncident(incidentId).then(raw => {
+      setIncident(mapIncident(raw));
+    }).catch(() => {
+      setNotFound(true);
+    }).finally(() => setLoading(false));
 
     staffService.getStaffList({ take: 200 }).then((res: any) => {
       const data = Array.isArray(res) ? res : (res?.data || []);
@@ -119,14 +148,21 @@ export function IncidentDetail({ userRole, userId, incidentId }: IncidentDetailP
     }).catch(() => {});
   }, [incidentId]);
 
-  if (notFound || (!incident && !notFound)) {
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 space-y-4">
+        <Shield className="h-14 w-14 text-muted-foreground animate-pulse" />
+        <p className="text-xl font-semibold text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
+
+  if (notFound || !incident) {
     return (
       <div className="flex flex-col items-center justify-center py-24 space-y-4">
         <Shield className="h-14 w-14 text-muted-foreground" />
-        <p className="text-xl font-semibold text-muted-foreground">
-          {notFound ? 'Incident not found' : 'Loadingâ€¦'}
-        </p>
-        {notFound && <p className="text-sm text-muted-foreground">This incident may have been removed or the ID is incorrect.</p>}
+        <p className="text-xl font-semibold text-muted-foreground">Incident not found</p>
+        <p className="text-sm text-muted-foreground">This incident may have been removed or the ID is incorrect.</p>
         <Button variant="outline" onClick={() => setCurrentPage('incident-management')}>
           <ArrowLeft className="h-4 w-4 mr-2" />Back to Incidents
         </Button>
@@ -134,12 +170,21 @@ export function IncidentDetail({ userRole, userId, incidentId }: IncidentDetailP
     );
   }
 
-  // â”€â”€ Persist changes to localStorage â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const update = (patch: Partial<Incident>) => {
+  // Persist changes to API
+  const update = async (patch: Partial<Incident>) => {
     const updated = { ...incident!, ...patch };
     setIncident(updated);
-    const all = loadIncidents();
-    saveIncidents(all.map(i => i.id === updated.id ? updated : i));
+    try {
+      await eventService.updateIncident(incident!.id, {
+        ...(patch.status && { status: patch.status.toUpperCase() }),
+        ...(patch.resolution !== undefined && { resolution: patch.resolution }),
+        ...(patch.notes !== undefined && { notes: patch.notes }),
+        ...(patch.timeline !== undefined && { timeline: patch.timeline }),
+        ...(patch.followUpRequired !== undefined && { followUpRequired: patch.followUpRequired }),
+      });
+    } catch {
+      // Silently fail but keep local state updated
+    }
   };
 
   const addTimeline = (action: string, details: string) => {
@@ -150,10 +195,11 @@ export function IncidentDetail({ userRole, userId, incidentId }: IncidentDetailP
       timestamp: new Date().toISOString(),
       details,
     };
-    update({ timeline: [...(incident!.timeline || []), entry] });
+    const newTimeline = [...(incident!.timeline || []), entry];
+    update({ timeline: newTimeline });
   };
 
-  // â”€â”€ Badges â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Badges
   const getSeverityBadge = (s: Severity) => {
     switch (s) {
       case 'critical': return <Badge className="bg-red-100 text-red-700 hover:bg-red-100 gap-1"><Flame className="h-3 w-3" />Critical</Badge>;
@@ -177,10 +223,9 @@ export function IncidentDetail({ userRole, userId, incidentId }: IncidentDetailP
     'complaint': 'Complaint', 'safety': 'Safety Concern', 'theft': 'Theft', 'other': 'Other',
   }[t]);
 
-  // â”€â”€ Handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Handlers
   const handleStatusChange = async (newStatus: IncidentStatus) => {
-    try { await eventService.updateIncident(incident!.id, { status: newStatus.toUpperCase() }); } catch { /* localStorage */ }
-    update({ status: newStatus });
+    await update({ status: newStatus });
     addTimeline('Status Updated', `Status changed to ${newStatus}`);
     toast.success(`Status updated to ${newStatus}`);
   };
@@ -193,7 +238,8 @@ export function IncidentDetail({ userRole, userId, incidentId }: IncidentDetailP
       content: newNote.trim(),
       timestamp: new Date().toISOString(),
     };
-    update({ notes: [...(incident!.notes || []), note] });
+    const newNotes = [...(incident!.notes || []), note];
+    update({ notes: newNotes });
     addTimeline('Note Added', 'Internal note added to incident');
     toast.success('Note added');
     setNewNote('');
@@ -201,7 +247,7 @@ export function IncidentDetail({ userRole, userId, incidentId }: IncidentDetailP
 
   const handleContact = () => {
     if (!contactMessage.trim()) { toast.error('Please enter a message'); return; }
-    addTimeline('Staff Contacted', `Message sent: "${contactMessage.trim().slice(0, 60)}â€¦"`);
+    addTimeline('Staff Contacted', `Message sent: "${contactMessage.trim().slice(0, 60)}..."`);
     toast.success('Contact recorded in timeline');
     setShowContactDialog(false);
     setContactMessage('');
@@ -222,7 +268,7 @@ export function IncidentDetail({ userRole, userId, incidentId }: IncidentDetailP
       toast.error('Enter a valid penalty amount'); return;
     }
     const detail = penaltyType === 'financial' ? `Financial penalty of $${penaltyAmount} applied` : `${penaltyType} applied`;
-    addTimeline('Penalty Applied', detail + (penaltyReason ? ` â€” ${penaltyReason}` : ''));
+    addTimeline('Penalty Applied', detail + (penaltyReason ? ` - ${penaltyReason}` : ''));
     toast.success('Penalty recorded');
     setShowPenaltyDialog(false);
     setPenaltyAmount(''); setPenaltyReason('');
@@ -230,8 +276,7 @@ export function IncidentDetail({ userRole, userId, incidentId }: IncidentDetailP
 
   const handleResolve = async () => {
     if (!resolutionNotes.trim()) { toast.error('Provide resolution notes'); return; }
-    try { await eventService.updateIncident(incident!.id, { status: finalStatus.toUpperCase(), resolution: resolutionNotes }); } catch { /* localStorage */ }
-    update({ status: finalStatus, resolution: resolutionNotes });
+    await update({ status: finalStatus, resolution: resolutionNotes });
     addTimeline('Incident Resolved', resolutionNotes.slice(0, 80));
     toast.success('Incident resolved');
     setShowResolveDialog(false);
@@ -254,7 +299,7 @@ export function IncidentDetail({ userRole, userId, incidentId }: IncidentDetailP
           </Button>
           <div>
             <h1 className="text-xl font-semibold">{incident!.title}</h1>
-            <p className="text-sm text-muted-foreground">Incident #{incident!.id}</p>
+            <p className="text-sm text-muted-foreground">Incident #{incident!.id.slice(0, 8)}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -367,7 +412,7 @@ export function IncidentDetail({ userRole, userId, incidentId }: IncidentDetailP
                         </p>
                         <ul className="space-y-1">
                           {incident!.involvedParties.map((p, i) => (
-                            <li key={i} className="text-sm text-muted-foreground">â€¢ {p}</li>
+                            <li key={i} className="text-sm text-muted-foreground">{p}</li>
                           ))}
                         </ul>
                       </div>
@@ -379,7 +424,7 @@ export function IncidentDetail({ userRole, userId, incidentId }: IncidentDetailP
                         </p>
                         <ul className="space-y-1">
                           {incident!.witnesses!.map((w, i) => (
-                            <li key={i} className="text-sm text-muted-foreground">â€¢ {w}</li>
+                            <li key={i} className="text-sm text-muted-foreground">{w}</li>
                           ))}
                         </ul>
                       </div>
@@ -422,7 +467,7 @@ export function IncidentDetail({ userRole, userId, incidentId }: IncidentDetailP
                             <div className="w-2.5 h-2.5 rounded-full bg-sangria mt-1.5 flex-shrink-0" />
                             {idx < arr.length - 1 && <div className="w-0.5 bg-border flex-1 my-1" />}
                           </div>
-                          <div className={`flex-1 pb-4 ${idx < arr.length - 1 ? '' : ''}`}>
+                          <div className="flex-1 pb-4">
                             <div className="flex items-start justify-between gap-2 mb-0.5">
                               <p className="font-medium text-sm">{entry.action}</p>
                               <span className="text-xs text-muted-foreground flex-shrink-0">
@@ -456,7 +501,7 @@ export function IncidentDetail({ userRole, userId, incidentId }: IncidentDetailP
                   )}
                   <div className="space-y-2 pt-2 border-t">
                     <Label>Add Internal Note</Label>
-                    <Textarea placeholder="Add a note about this incidentâ€¦" value={newNote}
+                    <Textarea placeholder="Add a note about this incident..." value={newNote}
                       onChange={e => setNewNote(e.target.value)} rows={3} />
                     <Button size="sm" onClick={handleAddNote} disabled={!newNote.trim()}>
                       <Save className="h-4 w-4 mr-2" />Add Note
@@ -491,12 +536,12 @@ export function IncidentDetail({ userRole, userId, incidentId }: IncidentDetailP
               <Separator />
               <div className="space-y-1 text-sm">
                 <p className="font-medium">Follow-up Required</p>
-                <p className="text-muted-foreground">{incident!.followUpRequired ? 'âš ï¸ Yes' : 'âœ… No'}</p>
+                <p className="text-muted-foreground">{incident!.followUpRequired ? 'Yes' : 'No'}</p>
               </div>
               <Separator />
               <div className="space-y-1 text-sm">
                 <p className="font-medium">Reported By</p>
-                <p className="text-muted-foreground capitalize">{incident!.reportedBy || 'â€”'}</p>
+                <p className="text-muted-foreground capitalize">{incident!.reportedBy || '—'}</p>
               </div>
             </CardContent>
           </Card>
@@ -552,7 +597,7 @@ export function IncidentDetail({ userRole, userId, incidentId }: IncidentDetailP
         </div>
       </div>
 
-      {/* â”€â”€ CONTACT STAFF DIALOG â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* CONTACT STAFF DIALOG */}
       <Dialog open={showContactDialog} onOpenChange={setShowContactDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -571,7 +616,7 @@ export function IncidentDetail({ userRole, userId, incidentId }: IncidentDetailP
             </div>
             <div className="space-y-2">
               <Label>Message / Notes *</Label>
-              <Textarea placeholder="Describe the contact attempt or message sentâ€¦" value={contactMessage}
+              <Textarea placeholder="Describe the contact attempt or message sent..." value={contactMessage}
                 onChange={e => setContactMessage(e.target.value)} rows={4} />
             </div>
           </div>
@@ -582,7 +627,7 @@ export function IncidentDetail({ userRole, userId, incidentId }: IncidentDetailP
         </DialogContent>
       </Dialog>
 
-      {/* â”€â”€ ASSIGN REPLACEMENT DIALOG â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ASSIGN REPLACEMENT DIALOG */}
       <Dialog open={showReplacementDialog} onOpenChange={setShowReplacementDialog}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -592,12 +637,12 @@ export function IncidentDetail({ userRole, userId, incidentId }: IncidentDetailP
           <div className="space-y-4 py-2">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Search staffâ€¦" value={staffSearch}
+              <Input placeholder="Search staff..." value={staffSearch}
                 onChange={e => setStaffSearch(e.target.value)} className="pl-9" />
             </div>
             <div className="space-y-2 max-h-56 overflow-y-auto">
               {filteredStaff.length === 0
-                ? <p className="text-sm text-muted-foreground text-center py-4">{staffList.length === 0 ? 'Loading staffâ€¦' : 'No staff match your search'}</p>
+                ? <p className="text-sm text-muted-foreground text-center py-4">{staffList.length === 0 ? 'Loading staff...' : 'No staff match your search'}</p>
                 : filteredStaff.map(s => (
                   <div key={s.id}
                     className={`p-3 border rounded-lg cursor-pointer transition-colors ${selectedReplacement === s.id ? 'border-sangria bg-sangria/5' : 'hover:bg-muted/50'}`}
@@ -625,7 +670,7 @@ export function IncidentDetail({ userRole, userId, incidentId }: IncidentDetailP
         </DialogContent>
       </Dialog>
 
-      {/* â”€â”€ PENALTY DIALOG â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* PENALTY DIALOG */}
       <Dialog open={showPenaltyDialog} onOpenChange={setShowPenaltyDialog}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
@@ -658,7 +703,7 @@ export function IncidentDetail({ userRole, userId, incidentId }: IncidentDetailP
             )}
             <div className="space-y-2">
               <Label>Reason (optional)</Label>
-              <Textarea placeholder="Describe the reasonâ€¦" value={penaltyReason}
+              <Textarea placeholder="Describe the reason..." value={penaltyReason}
                 onChange={e => setPenaltyReason(e.target.value)} rows={2} />
             </div>
           </div>
@@ -671,7 +716,7 @@ export function IncidentDetail({ userRole, userId, incidentId }: IncidentDetailP
         </DialogContent>
       </Dialog>
 
-      {/* â”€â”€ RESOLVE DIALOG â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* RESOLVE DIALOG */}
       <Dialog open={showResolveDialog} onOpenChange={setShowResolveDialog}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
@@ -681,7 +726,7 @@ export function IncidentDetail({ userRole, userId, incidentId }: IncidentDetailP
           <div className="space-y-4 py-2">
             <div className="space-y-2">
               <Label>Resolution Notes *</Label>
-              <Textarea placeholder="Describe how this incident was resolvedâ€¦" value={resolutionNotes}
+              <Textarea placeholder="Describe how this incident was resolved..." value={resolutionNotes}
                 onChange={e => setResolutionNotes(e.target.value)} rows={4} />
             </div>
             <div className="space-y-2">
@@ -689,8 +734,8 @@ export function IncidentDetail({ userRole, userId, incidentId }: IncidentDetailP
               <Select value={finalStatus} onValueChange={v => setFinalStatus(v as IncidentStatus)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="resolved">Resolved â€” No further action</SelectItem>
-                  <SelectItem value="closed">Closed â€” Escalated</SelectItem>
+                  <SelectItem value="resolved">Resolved - No further action</SelectItem>
+                  <SelectItem value="closed">Closed - Escalated</SelectItem>
                 </SelectContent>
               </Select>
             </div>

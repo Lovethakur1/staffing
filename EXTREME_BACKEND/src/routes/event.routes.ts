@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import {
   listEvents, getEvent, createEvent, updateEvent, deleteEvent,
-  listIncidents, createIncident, updateIncident, geocodeEvent, geocodeAllEvents,
+  listIncidents, getIncident, createIncident, updateIncident, geocodeEvent, geocodeAllEvents,
   getEventStaffLocations, getGeofence, updateGeofence,
 } from '../controllers/event.controller';
 import { authenticate } from '../middleware/auth';
@@ -14,6 +14,7 @@ router.get('/', listEvents);
 
 // Incidents (must be before /:id to avoid conflict)
 router.get('/incidents', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER'), listIncidents);
+router.get('/incidents/:id', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER'), getIncident);
 router.put('/incidents/:id', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER'), updateIncident);
 
 router.get('/:id', getEvent);

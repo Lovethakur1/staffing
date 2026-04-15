@@ -41,6 +41,7 @@ import { useNavigation } from "../contexts/NavigationContext";
 import { toast } from "sonner";
 import { eventService } from "../services/event.service";
 import { invoiceService } from "../services/invoice.service";
+import { surveyService } from "../services/survey.service";
 
 interface QualityAssuranceProps {
   userRole: string;
@@ -89,52 +90,65 @@ export function QualityAssurance({ userRole, userId }: QualityAssuranceProps) {
     "Thank you for choosing our staffing services. We'd love to hear about your experience. Please take a moment to complete this short survey."
   );
 
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const [events, invoices, surveys] = await Promise.all([
+        eventService.getEvents({ take: 200 }),
+        invoiceService.getInvoices({ take: 200 }),
+        surveyService.getSurveys(),
+      ]);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      // Build invoice map keyed by eventId
+      const invoiceByEvent: Record<string, any> = {};
+      for (const inv of invoices) {
+        if (inv.eventId) invoiceByEvent[inv.eventId] = inv;
+      }
+      // Build survey map keyed by eventId
+      const surveyByEvent: Record<string, any> = {};
+      for (const s of surveys) {
+        if (s.eventId) surveyByEvent[s.eventId] = s;
+      }
+      // Past events only
+      const pastEvents = events.filter((ev: any) => {
+        const d = ev.date ? new Date(ev.date) : null;
+        return d && d < today;
+      });
+      const records: SurveyRecord[] = pastEvents.map((ev: any) => {
+        const inv = invoiceByEvent[ev.id];
+        const survey = surveyByEvent[ev.id];
+        return {
+          id: ev.id,
+          eventName: ev.title || '',
+          clientName: ev.client?.user?.name || ev.client?.name || '',
+          clientEmail: ev.client?.user?.email || ev.client?.email || '',
+          eventDate: ev.date || '',
+          venue: ev.venue || ev.location || '',
+          invoiceStatus: inv?.status || 'NONE',
+          invoiceId: inv?.id || '',
+          surveyStatus: survey?.surveyStatus || 'not_sent',
+          sentDate: survey?.sentDate || undefined,
+          completedDate: survey?.completedDate || undefined,
+          overallRating: survey?.overallRating || undefined,
+          responses: survey?.responses || undefined,
+          comments: survey?.comments || undefined,
+          wouldRecommend: survey?.wouldRecommend ?? undefined,
+        } as SurveyRecord;
+      });
+      // Sort: not_sent first, then by date desc
+      records.sort((a, b) => {
+        if (a.surveyStatus === 'not_sent' && b.surveyStatus !== 'not_sent') return -1;
+        if (a.surveyStatus !== 'not_sent' && b.surveyStatus === 'not_sent') return 1;
+        return new Date(b.eventDate).getTime() - new Date(a.eventDate).getTime();
+      });
+      setSurveyRecords(records);
+    } catch { /* failed to load */ }
+    setLoading(false);
+  };
+
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      try {
-        const [events, invoices] = await Promise.all([
-          eventService.getEvents({ take: 200 }),
-          invoiceService.getInvoices({ take: 200 }),
-        ]);
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        // Build invoice map keyed by eventId
-        const invoiceByEvent: Record<string, any> = {};
-        for (const inv of invoices) {
-          if (inv.eventId) invoiceByEvent[inv.eventId] = inv;
-        }
-        // Past events only
-        const pastEvents = events.filter((ev: any) => {
-          const d = ev.date ? new Date(ev.date) : null;
-          return d && d < today;
-        });
-        const records: SurveyRecord[] = pastEvents.map((ev: any) => {
-          const inv = invoiceByEvent[ev.id];
-          return {
-            id: ev.id,
-            eventName: ev.title || '',
-            clientName: ev.client?.user?.name || ev.client?.name || '',
-            clientEmail: ev.client?.user?.email || ev.client?.email || '',
-            eventDate: ev.date || '',
-            venue: ev.venue || ev.location || '',
-            invoiceStatus: inv?.status || 'NONE',
-            invoiceId: inv?.id || '',
-            surveyStatus: inv?.status === 'PAID' ? 'sent' : 'not_sent',
-            sentDate: inv?.status === 'PAID' ? inv.paidDate || inv.updatedAt : undefined,
-          } as SurveyRecord;
-        });
-        // Sort: not_sent first, then by date desc
-        records.sort((a, b) => {
-          if (a.surveyStatus === 'not_sent' && b.surveyStatus !== 'not_sent') return -1;
-          if (a.surveyStatus !== 'not_sent' && b.surveyStatus === 'not_sent') return 1;
-          return new Date(b.eventDate).getTime() - new Date(a.eventDate).getTime();
-        });
-        setSurveyRecords(records);
-      } catch { /* failed to load */ }
-      setLoading(false);
-    };
-    load();
+    fetchData();
   }, []);
 
   // Derived stats from real data
@@ -192,12 +206,23 @@ export function QualityAssurance({ userRole, userId }: QualityAssuranceProps) {
     </div>
   );
 
-  const handleSendSurvey = () => {
+  const handleSendSurvey = async () => {
     if (!selectedRecord) return;
-    setSurveyRecords(prev => prev.map(r =>
-      r.id === selectedRecord.id ? { ...r, surveyStatus: 'sent', sentDate: new Date().toISOString() } : r
-    ));
-    toast.success(`Survey sent to ${selectedRecord.clientName}`);
+    try {
+      await surveyService.createSurvey({
+        eventId: selectedRecord.id,
+        clientName: selectedRecord.clientName,
+        clientEmail: selectedRecord.clientEmail,
+        surveyStatus: 'sent',
+        message: surveyMessage,
+      });
+      setSurveyRecords(prev => prev.map(r =>
+        r.id === selectedRecord.id ? { ...r, surveyStatus: 'sent', sentDate: new Date().toISOString() } : r
+      ));
+      toast.success(`Survey sent to ${selectedRecord.clientName}`);
+    } catch {
+      toast.error('Failed to send survey');
+    }
     setShowSendDialog(false);
     setSurveyMessage("Thank you for choosing our staffing services. We'd love to hear about your experience. Please take a moment to complete this short survey.");
   };
@@ -504,7 +529,7 @@ export function QualityAssurance({ userRole, userId }: QualityAssuranceProps) {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => { setLoading(true); eventService.getEvents({ take: 200 }).then(() => setLoading(false)); }}
+                  onClick={() => fetchData()}
                 >
                   <RefreshCw className="h-4 w-4 mr-2" />
                   Refresh

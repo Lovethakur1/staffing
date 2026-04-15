@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigation } from "../contexts/NavigationContext";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
 import { Button } from "../components/ui/button";
@@ -42,21 +42,6 @@ type IncidentType = 'injury' | 'property-damage' | 'complaint' | 'safety' | 'the
 type Severity = 'critical' | 'high' | 'medium' | 'low';
 type IncidentStatus = 'open' | 'investigating' | 'resolved' | 'closed';
 
-interface Note {
-  id: string;
-  author: string;
-  content: string;
-  timestamp: string;
-}
-
-interface TimelineEntry {
-  id: string;
-  action: string;
-  by: string;
-  timestamp: string;
-  details: string;
-}
-
 interface Incident {
   id: string;
   title: string;
@@ -74,19 +59,41 @@ interface Incident {
   actionsTaken: string;
   resolution?: string;
   followUpRequired: boolean;
-  notes: Note[];
-  timeline: TimelineEntry[];
+  notes: any[];
+  timeline: any[];
 }
 
-const LS_KEY = 'incidents_store';
+const SEVERITY_MAP: Record<string, Severity> = {
+  CRITICAL: 'critical', HIGH: 'high', MEDIUM: 'medium', LOW: 'low',
+  critical: 'critical', high: 'high', medium: 'medium', low: 'low',
+};
+const STATUS_MAP: Record<string, IncidentStatus> = {
+  OPEN: 'open', INVESTIGATING: 'investigating', RESOLVED: 'resolved', CLOSED: 'closed',
+  open: 'open', investigating: 'investigating', resolved: 'resolved', closed: 'closed',
+};
 
-function loadIncidents(): Incident[] {
-  try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]'); } catch { return []; }
+function mapIncident(raw: any): Incident {
+  return {
+    id: raw.id,
+    title: raw.title || '',
+    type: (raw.type || 'other') as IncidentType,
+    severity: SEVERITY_MAP[raw.severity] || 'medium',
+    status: STATUS_MAP[raw.status] || 'open',
+    eventId: raw.eventId || undefined,
+    eventName: raw.event?.title || undefined,
+    reportedBy: raw.reporter?.name || raw.reportedBy || '',
+    reportedDate: raw.createdAt || new Date().toISOString(),
+    location: raw.location || '',
+    description: raw.description || '',
+    involvedParties: raw.involvedParties || [],
+    witnesses: raw.witnesses || [],
+    actionsTaken: raw.actionsTaken || '',
+    resolution: raw.resolution,
+    followUpRequired: raw.followUpRequired || false,
+    notes: raw.notes || [],
+    timeline: raw.timeline || [],
+  };
 }
-function saveIncidents(list: Incident[]) {
-  localStorage.setItem(LS_KEY, JSON.stringify(list));
-}
-function genId() { return `INC-${Date.now().toString().slice(-6)}`; }
 
 const BLANK_FORM = {
   title: '',
@@ -111,8 +118,9 @@ export function IncidentManagement({ userRole, userId }: IncidentManagementProps
   const [page, setPage] = useState(1);
   const itemsPerPage = 8;
 
-  const [incidents, setIncidents] = useState<Incident[]>(loadIncidents);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
   const [events, setEvents] = useState<{ id: string; title: string; venue?: string }[]>([]);
+  const [loading, setLoading] = useState(true);
   const [loadingEvents, setLoadingEvents] = useState(true);
 
   const [showReportDialog, setShowReportDialog] = useState(false);
@@ -122,14 +130,24 @@ export function IncidentManagement({ userRole, userId }: IncidentManagementProps
   const [updatingIncident, setUpdatingIncident] = useState<Incident | null>(null);
   const [newStatus, setNewStatus] = useState<IncidentStatus>('open');
 
+  const fetchIncidents = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await eventService.getIncidents();
+      setIncidents(data.map(mapIncident));
+    } catch {
+      toast.error('Failed to load incidents');
+    }
+    setLoading(false);
+  }, []);
+
   useEffect(() => {
+    fetchIncidents();
     eventService.getEvents({ take: 200 }).then((res: any) => {
       const data = Array.isArray(res) ? res : (res?.data || []);
       setEvents(data.map((e: any) => ({ id: e.id, title: e.title, venue: e.venue })));
     }).catch(() => {}).finally(() => setLoadingEvents(false));
-  }, []);
-
-  useEffect(() => { saveIncidents(incidents); }, [incidents]);
+  }, [fetchIncidents]);
 
   const stats = useMemo(() => ({
     total: incidents.length,
@@ -197,44 +215,27 @@ export function IncidentManagement({ userRole, userId }: IncidentManagementProps
     if (!form.location.trim()) { toast.error('Location is required'); return; }
 
     setSubmitting(true);
-    const chosenEvent = events.find(e => e.id === form.eventId);
-    let incidentId = genId();
+    try {
+      const eventId = form.eventId || 'none';
+      const result = await eventService.createIncident(eventId, {
+        title: form.title,
+        type: form.type,
+        severity: form.severity.toUpperCase(),
+        description: form.description,
+        location: form.location,
+        involvedParties: form.involvedParties.split(',').map(s => s.trim()).filter(Boolean),
+        witnesses: form.witnesses.split(',').map(s => s.trim()).filter(Boolean),
+        actionsTaken: form.actionsTaken,
+        followUpRequired: form.followUpRequired,
+      });
 
-    if (form.eventId) {
-      try {
-        const res = await eventService.createIncident(form.eventId, {
-          severity: form.severity.toUpperCase(),
-          description: `[${form.title}] ${form.description}`,
-        });
-        if (res?.id) incidentId = res.id;
-      } catch { /* localStorage only */ }
+      setIncidents(prev => [mapIncident(result), ...prev]);
+      toast.success('Incident report submitted');
+      setShowReportDialog(false);
+      setForm(BLANK_FORM);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Failed to submit incident');
     }
-
-    const now = new Date().toISOString();
-    const newIncident: Incident = {
-      id: incidentId,
-      title: form.title,
-      type: form.type,
-      severity: form.severity,
-      status: 'open',
-      eventId: form.eventId || undefined,
-      eventName: chosenEvent?.title,
-      reportedBy: userId,
-      reportedDate: now,
-      location: form.location,
-      description: form.description,
-      involvedParties: form.involvedParties.split(',').map(s => s.trim()).filter(Boolean),
-      witnesses: form.witnesses.split(',').map(s => s.trim()).filter(Boolean),
-      actionsTaken: form.actionsTaken,
-      followUpRequired: form.followUpRequired,
-      notes: [],
-      timeline: [{ id: '1', action: 'Incident Reported', by: userRole, timestamp: now, details: 'Initial incident report submitted' }],
-    };
-
-    setIncidents(prev => [newIncident, ...prev]);
-    toast.success('Incident report submitted');
-    setShowReportDialog(false);
-    setForm(BLANK_FORM);
     setSubmitting(false);
   };
 
@@ -246,13 +247,29 @@ export function IncidentManagement({ userRole, userId }: IncidentManagementProps
 
   const handleStatusUpdate = async () => {
     if (!updatingIncident) return;
-    const now = new Date().toISOString();
-    try { await eventService.updateIncident(updatingIncident.id, { status: newStatus.toUpperCase() }); } catch { /* localStorage */ }
-    setIncidents(prev => prev.map(i => i.id === updatingIncident.id
-      ? { ...i, status: newStatus, timeline: [...i.timeline, { id: String(i.timeline.length + 1), action: 'Status Updated', by: userRole, timestamp: now, details: `Status changed to ${newStatus}` }] }
-      : i
-    ));
-    toast.success('Status updated');
+    try {
+      const now = new Date().toISOString();
+      const updatedTimeline = [...(updatingIncident.timeline || []), {
+        id: String(Date.now()),
+        action: 'Status Updated',
+        by: userRole,
+        timestamp: now,
+        details: `Status changed to ${newStatus}`,
+      }];
+
+      await eventService.updateIncident(updatingIncident.id, {
+        status: newStatus.toUpperCase(),
+        timeline: updatedTimeline,
+      });
+
+      setIncidents(prev => prev.map(i => i.id === updatingIncident.id
+        ? { ...i, status: newStatus, timeline: updatedTimeline }
+        : i
+      ));
+      toast.success('Status updated');
+    } catch {
+      toast.error('Failed to update status');
+    }
     setShowStatusDialog(false);
     setUpdatingIncident(null);
   };
@@ -288,6 +305,9 @@ export function IncidentManagement({ userRole, userId }: IncidentManagementProps
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <Button variant="outline" size="sm" onClick={fetchIncidents} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />Refresh
+          </Button>
           <Button variant="outline" size="sm" onClick={handleExport} disabled={incidents.length === 0}>
             <Download className="h-4 w-4 mr-2" />Export
           </Button>
@@ -379,7 +399,7 @@ export function IncidentManagement({ userRole, userId }: IncidentManagementProps
                 <div className="flex flex-wrap gap-2">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input placeholder="Search incidentsâ€¦" value={searchQuery}
+                    <Input placeholder="Search incidents..." value={searchQuery}
                       onChange={e => { setSearchQuery(e.target.value); setPage(1); }} className="pl-9 w-[220px]" />
                   </div>
                   <Select value={typeFilter} onValueChange={v => { setTypeFilter(v); setPage(1); }}>
@@ -412,7 +432,9 @@ export function IncidentManagement({ userRole, userId }: IncidentManagementProps
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {incidents.length === 0 ? (
+                {loading ? (
+                  <div className="text-center py-16 text-muted-foreground">Loading incidents...</div>
+                ) : incidents.length === 0 ? (
                   <div className="text-center py-16">
                     <Shield className="h-14 w-14 text-muted-foreground mx-auto mb-4" />
                     <p className="font-semibold text-muted-foreground text-lg">No incidents recorded</p>
@@ -428,7 +450,7 @@ export function IncidentManagement({ userRole, userId }: IncidentManagementProps
                   <div key={incident.id} className={`p-4 border rounded-lg hover:bg-muted/30 transition-colors ${incident.severity === 'critical' ? 'border-red-200 bg-red-50/30' : ''}`}>
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2 mb-2">
-                        <span className="font-mono text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{incident.id}</span>
+                        <span className="font-mono text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{incident.id.slice(0, 8)}</span>
                         {getTypeBadge(incident.type)}
                         {getSeverityBadge(incident.severity)}
                         {getStatusBadge(incident.status)}
@@ -465,7 +487,7 @@ export function IncidentManagement({ userRole, userId }: IncidentManagementProps
               {totalPages > 1 && (
                 <div className="flex items-center justify-between mt-5 pt-4 border-t">
                   <p className="text-sm text-muted-foreground">
-                    {(page - 1) * itemsPerPage + 1}â€“{Math.min(page * itemsPerPage, filtered.length)} of {filtered.length}
+                    {(page - 1) * itemsPerPage + 1}–{Math.min(page * itemsPerPage, filtered.length)} of {filtered.length}
                   </p>
                   <div className="flex gap-2">
                     <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
@@ -482,7 +504,7 @@ export function IncidentManagement({ userRole, userId }: IncidentManagementProps
         </TabsContent>
       </Tabs>
 
-      {/* â”€â”€ REPORT INCIDENT DIALOG â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* REPORT INCIDENT DIALOG */}
       <Dialog open={showReportDialog} onOpenChange={setShowReportDialog}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -514,20 +536,20 @@ export function IncidentManagement({ userRole, userId }: IncidentManagementProps
               <Select value={form.severity} onValueChange={v => setForm(f => ({ ...f, severity: v as Severity }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="critical">ðŸ”´ Critical â€” Immediate danger</SelectItem>
-                  <SelectItem value="high">ðŸŸ  High â€” Significant impact</SelectItem>
-                  <SelectItem value="medium">ðŸŸ¡ Medium â€” Moderate concern</SelectItem>
-                  <SelectItem value="low">ðŸ”µ Low â€” Minor issue</SelectItem>
+                  <SelectItem value="critical">Critical - Immediate danger</SelectItem>
+                  <SelectItem value="high">High - Significant impact</SelectItem>
+                  <SelectItem value="medium">Medium - Moderate concern</SelectItem>
+                  <SelectItem value="low">Low - Minor issue</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="col-span-2 space-y-2">
               <Label>Related Event (optional)</Label>
               <Select value={form.eventId || 'none'} onValueChange={v => setForm(f => ({ ...f, eventId: v === 'none' ? '' : v }))}>
-                <SelectTrigger><SelectValue placeholder={loadingEvents ? 'Loading eventsâ€¦' : 'Select eventâ€¦'} /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={loadingEvents ? 'Loading events...' : 'Select event...'} /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">No specific event</SelectItem>
-                  {events.map(e => <SelectItem key={e.id} value={e.id}>{e.title}{e.venue ? ` â€” ${e.venue}` : ''}</SelectItem>)}
+                  {events.map(e => <SelectItem key={e.id} value={e.id}>{e.title}{e.venue ? ` - ${e.venue}` : ''}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -539,12 +561,12 @@ export function IncidentManagement({ userRole, userId }: IncidentManagementProps
             <div className="col-span-2 space-y-2">
               <Label>Description *</Label>
               <Textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                placeholder="Detailed description of what happenedâ€¦" rows={4} />
+                placeholder="Detailed description of what happened..." rows={4} />
             </div>
             <div className="col-span-2 space-y-2">
               <Label>Immediate Actions Taken</Label>
               <Textarea value={form.actionsTaken} onChange={e => setForm(f => ({ ...f, actionsTaken: e.target.value }))}
-                placeholder="Steps taken immediately after the incidentâ€¦" rows={2} />
+                placeholder="Steps taken immediately after the incident..." rows={2} />
             </div>
             <div className="space-y-2">
               <Label>Involved Parties (comma-separated)</Label>
@@ -564,7 +586,7 @@ export function IncidentManagement({ userRole, userId }: IncidentManagementProps
             {(form.severity === 'critical' || form.severity === 'high') && (
               <div className="col-span-2 bg-orange-50 border border-orange-200 p-3 rounded-lg">
                 <p className="text-sm text-orange-900">
-                  âš ï¸ For critical/high incidents: Ensure emergency services have been contacted if needed, the area secured, and a supervisor notified immediately.
+                  For critical/high incidents: Ensure emergency services have been contacted if needed, the area secured, and a supervisor notified immediately.
                 </p>
               </div>
             )}
@@ -572,13 +594,13 @@ export function IncidentManagement({ userRole, userId }: IncidentManagementProps
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowReportDialog(false)}>Cancel</Button>
             <Button className="bg-sangria hover:bg-merlot" onClick={handleSubmitReport} disabled={submitting}>
-              {submitting ? 'Submittingâ€¦' : 'Submit Report'}
+              {submitting ? 'Submitting...' : 'Submit Report'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* â”€â”€ STATUS UPDATE DIALOG â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* STATUS UPDATE DIALOG */}
       <Dialog open={showStatusDialog} onOpenChange={setShowStatusDialog}>
         <DialogContent className="max-w-sm">
           <DialogHeader>

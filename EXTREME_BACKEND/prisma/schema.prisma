@@ -253,6 +253,7 @@ model Event {
   conversations Conversation[]
   clientReviews ClientReview[]
   eventDates    EventDate[]
+  surveys       Survey[]
 }
 
 model EventDate {
@@ -538,17 +539,81 @@ model PayrollItem {
 // ─── Operations ──────────────────────────────────────────────────────────────
 
 model IncidentReport {
-  id          String   @id @default(uuid())
-  eventId     String
-  event       Event    @relation(fields: [eventId], references: [id])
-  reportedBy  String
-  reporter    User     @relation("IncidentReporter", fields: [reportedBy], references: [id])
-  severity    String   @default("LOW") // LOW, MEDIUM, HIGH, CRITICAL
-  description String
-  status      String   @default("OPEN") // OPEN, INVESTIGATING, RESOLVED
-  resolution  String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String   @id @default(uuid())
+  eventId         String?
+  event           Event?   @relation(fields: [eventId], references: [id])
+  reportedBy      String
+  reporter        User     @relation("IncidentReporter", fields: [reportedBy], references: [id])
+  title           String   @default("")
+  type            String   @default("other") // injury, property-damage, complaint, safety, theft, other
+  severity        String   @default("LOW") // LOW, MEDIUM, HIGH, CRITICAL
+  status          String   @default("OPEN") // OPEN, INVESTIGATING, RESOLVED, CLOSED
+  description     String
+  location        String?
+  involvedParties String[] @default([])
+  witnesses       String[] @default([])
+  actionsTaken    String?
+  resolution      String?
+  followUpRequired Boolean @default(false)
+  notes           Json     @default("[]") // Array of { id, author, content, timestamp }
+  timeline        Json     @default("[]") // Array of { id, action, by, timestamp, details }
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ─── Equipment & Inventory ──────────────────────────────────────────────────
+
+model EquipmentItem {
+  id            String   @id @default(uuid())
+  name          String
+  category      String   @default("supplies") // uniform, equipment, supplies
+  sku           String   @unique
+  quantity      Int      @default(0)
+  minStock      Int      @default(0)
+  unit          String   @default("pieces")
+  cost          Float    @default(0)
+  location      String?
+  lastRestocked DateTime?
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  assignments EquipmentAssignment[]
+}
+
+model EquipmentAssignment {
+  id           String    @id @default(uuid())
+  itemId       String
+  item         EquipmentItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  staffId      String
+  staffName    String
+  quantity     Int       @default(1)
+  assignedDate DateTime  @default(now())
+  returnDate   DateTime?
+  status       String    @default("checked-out") // checked-out, returned, damaged, lost
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+// ─── Quality Assurance Surveys ──────────────────────────────────────────────
+
+model Survey {
+  id              String    @id @default(uuid())
+  eventId         String
+  event           Event     @relation(fields: [eventId], references: [id])
+  clientName      String
+  clientEmail     String?
+  surveyStatus    String    @default("not_sent") // not_sent, sent, completed
+  sentDate        DateTime?
+  completedDate   DateTime?
+  message         String?
+  overallRating   Float?
+  responses       Json?     // { staffQuality, professionalism, punctuality, communication, valueForMoney }
+  comments        String?
+  wouldRecommend  Boolean?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 }
 
 // ─── Chat & Communication ────────────────────────────────────────────────────

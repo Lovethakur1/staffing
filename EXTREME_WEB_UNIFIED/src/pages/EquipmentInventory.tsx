@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -22,20 +22,19 @@ import {
   Eye,
   Edit,
   Trash2,
-  Download,
-  BarChart3,
   DollarSign,
   XCircle,
   Users,
-  ArrowLeft,
-  RefreshCw,
   ChevronLeft,
   ChevronRight,
   ShirtIcon,
   Wrench,
   ClipboardList,
+  BarChart3,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
+import { equipmentService } from "../services/equipment.service";
 import { staffService } from "../services/staff.service";
 
 interface EquipmentInventoryProps {
@@ -74,23 +73,6 @@ interface Assignment {
   notes?: string;
 }
 
-const LS_ITEMS = 'eq_inventory_items';
-const LS_ASSIGNS = 'eq_inventory_assignments';
-
-function loadItems(): InventoryItem[] {
-  try { return JSON.parse(localStorage.getItem(LS_ITEMS) || '[]'); } catch { return []; }
-}
-function saveItems(items: InventoryItem[]) {
-  localStorage.setItem(LS_ITEMS, JSON.stringify(items));
-}
-function loadAssigns(): Assignment[] {
-  try { return JSON.parse(localStorage.getItem(LS_ASSIGNS) || '[]'); } catch { return []; }
-}
-function saveAssigns(a: Assignment[]) {
-  localStorage.setItem(LS_ASSIGNS, JSON.stringify(a));
-}
-function genId() { return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`; }
-
 function getItemStatus(item: InventoryItem): ItemStatus {
   if (item.quantity === 0) return 'out-of-stock';
   if (item.quantity <= item.minStock) return 'low-stock';
@@ -109,9 +91,10 @@ export function EquipmentInventory({ userRole }: EquipmentInventoryProps) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
   const itemsPerPage = 12;
+  const [loading, setLoading] = useState(true);
 
-  const [inventory, setInventory] = useState<InventoryItem[]>(loadItems);
-  const [assignments, setAssignments] = useState<Assignment[]>(loadAssigns);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [staffList, setStaffList] = useState<{ id: string; name: string }[]>([]);
 
   // Dialogs
@@ -124,8 +107,48 @@ export function EquipmentInventory({ userRole }: EquipmentInventoryProps) {
   const [itemForm, setItemForm] = useState<Omit<InventoryItem, 'id'>>(BLANK_ITEM);
   const [assignForm, setAssignForm] = useState({ itemId: '', staffId: '', quantity: 1, notes: '' });
   const [viewItem, setViewItem] = useState<InventoryItem | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [items, assigns] = await Promise.all([
+        equipmentService.getItems({ limit: 500 }),
+        equipmentService.getAssignments(),
+      ]);
+      setInventory(items.map((i: any) => ({
+        id: i.id,
+        name: i.name,
+        category: i.category,
+        sku: i.sku,
+        quantity: i.quantity,
+        minStock: i.minStock,
+        unit: i.unit,
+        cost: i.cost,
+        location: i.location || '',
+        lastRestocked: i.lastRestocked || i.createdAt,
+        notes: i.notes,
+      })));
+      setAssignments(assigns.map((a: any) => ({
+        id: a.id,
+        itemId: a.itemId,
+        itemName: a.item?.name || a.staffName || '',
+        staffId: a.staffId,
+        staffName: a.staffName,
+        quantity: a.quantity,
+        assignedDate: a.assignedDate,
+        returnDate: a.returnDate,
+        status: a.status,
+        notes: a.notes,
+      })));
+    } catch {
+      toast.error('Failed to load inventory data');
+    }
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
+    fetchData();
     staffService.getStaffList({ take: 200 }).then(res => {
       const list = Array.isArray(res) ? res : (res?.data || []);
       setStaffList(list.map((s: any) => ({
@@ -133,13 +156,9 @@ export function EquipmentInventory({ userRole }: EquipmentInventoryProps) {
         name: s.name || s.user?.name || s.user?.email || s.id,
       })));
     }).catch(() => {});
-  }, []);
+  }, [fetchData]);
 
-  // Persist on every change
-  useEffect(() => { saveItems(inventory); }, [inventory]);
-  useEffect(() => { saveAssigns(assignments); }, [assignments]);
-
-  // â”€â”€ Stats â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Stats
   const stats = useMemo(() => {
     const withStatus = inventory.map(i => ({ ...i, status: getItemStatus(i) }));
     return {
@@ -154,7 +173,7 @@ export function EquipmentInventory({ userRole }: EquipmentInventoryProps) {
     };
   }, [inventory, assignments]);
 
-  // â”€â”€ Filtered inventory â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Filtered inventory
   const filtered = useMemo(() => {
     const q = searchQuery.toLowerCase();
     return inventory.filter(item => {
@@ -169,7 +188,7 @@ export function EquipmentInventory({ userRole }: EquipmentInventoryProps) {
   const totalPages = Math.ceil(filtered.length / itemsPerPage);
   const paginated = filtered.slice((page - 1) * itemsPerPage, page * itemsPerPage);
 
-  // â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Helpers
   const getStatusBadge = (status: ItemStatus | AssignStatus) => {
     switch (status) {
       case 'in-stock': return <Badge className="bg-green-100 text-green-700 hover:bg-green-100"><CheckCircle className="h-3 w-3 mr-1" />In Stock</Badge>;
@@ -191,70 +210,102 @@ export function EquipmentInventory({ userRole }: EquipmentInventoryProps) {
     }
   };
 
-  // â”€â”€ CRUD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // CRUD
   const openAdd = () => { setEditingItem(null); setItemForm(BLANK_ITEM); setShowItemDialog(true); };
   const openEdit = (item: InventoryItem) => { setEditingItem(item); setItemForm({ ...item }); setShowItemDialog(true); };
 
-  const handleSaveItem = () => {
+  const handleSaveItem = async () => {
     if (!itemForm.name.trim()) { toast.error('Item name is required'); return; }
-    if (editingItem) {
-      setInventory(prev => prev.map(i => i.id === editingItem.id ? { ...itemForm, id: editingItem.id } : i));
-      toast.success('Item updated');
-    } else {
-      const sku = itemForm.sku || `${itemForm.category.toUpperCase().slice(0, 3)}-${Date.now().toString().slice(-5)}`;
-      setInventory(prev => [...prev, { ...itemForm, id: genId(), sku }]);
-      toast.success('Item added to inventory');
+    setSaving(true);
+    try {
+      if (editingItem) {
+        const updated = await equipmentService.updateItem(editingItem.id, itemForm);
+        setInventory(prev => prev.map(i => i.id === editingItem.id ? { ...i, ...updated, location: updated.location || '' } : i));
+        toast.success('Item updated');
+      } else {
+        const created = await equipmentService.createItem(itemForm);
+        setInventory(prev => [...prev, { ...created, location: created.location || '' }]);
+        toast.success('Item added to inventory');
+      }
+      setShowItemDialog(false);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Failed to save item');
     }
-    setShowItemDialog(false);
+    setSaving(false);
   };
 
-  const handleDeleteItem = () => {
+  const handleDeleteItem = async () => {
     if (!deletingItem) return;
-    setInventory(prev => prev.filter(i => i.id !== deletingItem.id));
-    setAssignments(prev => prev.filter(a => a.itemId !== deletingItem.id));
-    toast.success('Item removed from inventory');
-    setShowDeleteDialog(false);
+    setSaving(true);
+    try {
+      await equipmentService.deleteItem(deletingItem.id);
+      setInventory(prev => prev.filter(i => i.id !== deletingItem.id));
+      setAssignments(prev => prev.filter(a => a.itemId !== deletingItem.id));
+      toast.success('Item removed from inventory');
+      setShowDeleteDialog(false);
+    } catch {
+      toast.error('Failed to delete item');
+    }
+    setSaving(false);
   };
 
-  const handleAssign = () => {
+  const handleAssign = async () => {
     const item = inventory.find(i => i.id === assignForm.itemId);
     const staff = staffList.find(s => s.id === assignForm.staffId);
     if (!item || !staff) { toast.error('Select an item and staff member'); return; }
     if (assignForm.quantity <= 0) { toast.error('Quantity must be at least 1'); return; }
     if (assignForm.quantity > item.quantity) { toast.error(`Only ${item.quantity} ${item.unit} available`); return; }
-    const newAssign: Assignment = {
-      id: genId(),
-      itemId: item.id,
-      itemName: item.name,
-      staffId: staff.id,
-      staffName: staff.name,
-      quantity: assignForm.quantity,
-      assignedDate: new Date().toISOString(),
-      status: 'checked-out',
-      notes: assignForm.notes,
-    };
-    setAssignments(prev => [...prev, newAssign]);
-    setInventory(prev => prev.map(i => i.id === item.id ? { ...i, quantity: i.quantity - assignForm.quantity } : i));
-    toast.success(`${item.name} assigned to ${staff.name}`);
-    setShowAssignDialog(false);
-    setAssignForm({ itemId: '', staffId: '', quantity: 1, notes: '' });
-  };
 
-  const handleReturnAssignment = (assignment: Assignment, newStatus: AssignStatus) => {
-    setAssignments(prev => prev.map(a => a.id === assignment.id
-      ? { ...a, status: newStatus, returnDate: new Date().toISOString() }
-      : a
-    ));
-    if (newStatus === 'returned') {
-      setInventory(prev => prev.map(i => i.id === assignment.itemId
-        ? { ...i, quantity: i.quantity + assignment.quantity }
-        : i
-      ));
+    setSaving(true);
+    try {
+      const result = await equipmentService.createAssignment({
+        itemId: item.id,
+        staffId: staff.id,
+        staffName: staff.name,
+        quantity: assignForm.quantity,
+        notes: assignForm.notes,
+      });
+      setAssignments(prev => [...prev, {
+        id: result.id,
+        itemId: item.id,
+        itemName: item.name,
+        staffId: staff.id,
+        staffName: staff.name,
+        quantity: assignForm.quantity,
+        assignedDate: result.assignedDate || new Date().toISOString(),
+        status: 'checked-out',
+        notes: assignForm.notes,
+      }]);
+      setInventory(prev => prev.map(i => i.id === item.id ? { ...i, quantity: i.quantity - assignForm.quantity } : i));
+      toast.success(`${item.name} assigned to ${staff.name}`);
+      setShowAssignDialog(false);
+      setAssignForm({ itemId: '', staffId: '', quantity: 1, notes: '' });
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Failed to assign item');
     }
-    toast.success(`Assignment marked as ${newStatus}`);
+    setSaving(false);
   };
 
-  // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const handleReturnAssignment = async (assignment: Assignment, newStatus: AssignStatus) => {
+    try {
+      await equipmentService.updateAssignment(assignment.id, { status: newStatus });
+      setAssignments(prev => prev.map(a => a.id === assignment.id
+        ? { ...a, status: newStatus, returnDate: new Date().toISOString() }
+        : a
+      ));
+      if (newStatus === 'returned') {
+        setInventory(prev => prev.map(i => i.id === assignment.itemId
+          ? { ...i, quantity: i.quantity + assignment.quantity }
+          : i
+        ));
+      }
+      toast.success(`Assignment marked as ${newStatus}`);
+    } catch {
+      toast.error('Failed to update assignment');
+    }
+  };
+
+  // Render
   return (
     <div className="space-y-6 w-full">
       {/* Header */}
@@ -272,6 +323,10 @@ export function EquipmentInventory({ userRole }: EquipmentInventoryProps) {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <Button variant="outline" size="sm" onClick={fetchData} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
           <Button variant="outline" size="sm" onClick={() => setShowAssignDialog(true)} disabled={inventory.length === 0}>
             <Users className="h-4 w-4 mr-2" />
             Assign to Staff
@@ -371,7 +426,7 @@ export function EquipmentInventory({ userRole }: EquipmentInventoryProps) {
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
         </TabsList>
 
-        {/* â”€â”€ INVENTORY TAB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+        {/* INVENTORY TAB */}
         <TabsContent value="inventory" className="space-y-4 mt-6">
           <Card>
             <CardHeader>
@@ -383,7 +438,7 @@ export function EquipmentInventory({ userRole }: EquipmentInventoryProps) {
                 <div className="flex flex-wrap gap-2">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input placeholder="Search name, SKU, locationâ€¦" value={searchQuery}
+                    <Input placeholder="Search name, SKU, location..." value={searchQuery}
                       onChange={e => { setSearchQuery(e.target.value); setPage(1); }} className="pl-9 w-[220px]" />
                   </div>
                   <Select value={categoryFilter} onValueChange={v => { setCategoryFilter(v); setPage(1); }}>
@@ -423,7 +478,13 @@ export function EquipmentInventory({ userRole }: EquipmentInventoryProps) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {inventory.length === 0 ? (
+                    {loading ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-16 text-muted-foreground">
+                          Loading inventory...
+                        </TableCell>
+                      </TableRow>
+                    ) : inventory.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={8} className="text-center py-16">
                           <Package className="h-14 w-14 text-muted-foreground mx-auto mb-4" />
@@ -449,7 +510,7 @@ export function EquipmentInventory({ userRole }: EquipmentInventoryProps) {
                             </div>
                           </TableCell>
                           <TableCell>{getCategoryBadge(item.category)}</TableCell>
-                          <TableCell className="font-mono text-sm text-muted-foreground">{item.sku || 'â€”'}</TableCell>
+                          <TableCell className="font-mono text-sm text-muted-foreground">{item.sku || '—'}</TableCell>
                           <TableCell>
                             <span className={item.quantity <= item.minStock ? 'text-orange-600 font-semibold' : 'font-medium'}>
                               {item.quantity}
@@ -457,7 +518,7 @@ export function EquipmentInventory({ userRole }: EquipmentInventoryProps) {
                             <span className="text-muted-foreground text-xs"> / {item.minStock} {item.unit}</span>
                           </TableCell>
                           <TableCell className="font-medium">${item.cost.toFixed(2)}</TableCell>
-                          <TableCell className="text-sm text-muted-foreground">{item.location || 'â€”'}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{item.location || '—'}</TableCell>
                           <TableCell>{getStatusBadge(status)}</TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-1">
@@ -483,7 +544,7 @@ export function EquipmentInventory({ userRole }: EquipmentInventoryProps) {
               {totalPages > 1 && (
                 <div className="flex items-center justify-between mt-4">
                   <p className="text-sm text-muted-foreground">
-                    {(page - 1) * itemsPerPage + 1}â€“{Math.min(page * itemsPerPage, filtered.length)} of {filtered.length}
+                    {(page - 1) * itemsPerPage + 1}–{Math.min(page * itemsPerPage, filtered.length)} of {filtered.length}
                   </p>
                   <div className="flex gap-2">
                     <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
@@ -499,14 +560,14 @@ export function EquipmentInventory({ userRole }: EquipmentInventoryProps) {
           </Card>
         </TabsContent>
 
-        {/* â”€â”€ ASSIGNMENTS TAB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+        {/* ASSIGNMENTS TAB */}
         <TabsContent value="assignments" className="space-y-4 mt-6">
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle>Equipment Assignments</CardTitle>
-                  <CardDescription>{assignments.length} total records â€” {stats.checkedOut} currently checked out</CardDescription>
+                  <CardDescription>{assignments.length} total records — {stats.checkedOut} currently checked out</CardDescription>
                 </div>
                 <Button onClick={() => setShowAssignDialog(true)} disabled={inventory.length === 0}>
                   <Plus className="h-4 w-4 mr-2" />Assign Item
@@ -546,7 +607,7 @@ export function EquipmentInventory({ userRole }: EquipmentInventoryProps) {
                         <TableCell>{a.quantity}</TableCell>
                         <TableCell className="text-sm">{new Date(a.assignedDate).toLocaleDateString()}</TableCell>
                         <TableCell className="text-sm">
-                          {a.returnDate ? new Date(a.returnDate).toLocaleDateString() : 'â€”'}
+                          {a.returnDate ? new Date(a.returnDate).toLocaleDateString() : '—'}
                         </TableCell>
                         <TableCell>{getStatusBadge(a.status)}</TableCell>
                         <TableCell className="text-right">
@@ -570,7 +631,7 @@ export function EquipmentInventory({ userRole }: EquipmentInventoryProps) {
           </Card>
         </TabsContent>
 
-        {/* â”€â”€ LOW STOCK TAB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+        {/* LOW STOCK TAB */}
         <TabsContent value="low-stock" className="space-y-4 mt-6">
           {(stats.lowStock + stats.outOfStock) === 0 ? (
             <Card>
@@ -607,7 +668,7 @@ export function EquipmentInventory({ userRole }: EquipmentInventoryProps) {
                     <TableBody>
                       {inventory
                         .filter(i => getItemStatus(i) !== 'in-stock')
-                        .sort((a, b) => getItemStatus(a) === 'out-of-stock' ? -1 : 1)
+                        .sort((a, _b) => getItemStatus(a) === 'out-of-stock' ? -1 : 1)
                         .map(item => {
                           const toOrder = Math.max(0, item.minStock * 2 - item.quantity);
                           return (
@@ -632,7 +693,7 @@ export function EquipmentInventory({ userRole }: EquipmentInventoryProps) {
                 <div className="mt-4 p-4 bg-orange-50 border border-orange-200 rounded-lg flex items-center justify-between">
                   <div>
                     <p className="font-semibold text-orange-900">Total Estimated Reorder Cost</p>
-                    <p className="text-sm text-orange-700 mt-0.5">Based on minimum restock levels Ã— 2</p>
+                    <p className="text-sm text-orange-700 mt-0.5">Based on minimum restock levels x 2</p>
                   </div>
                   <p className="text-2xl font-bold text-orange-800">
                     ${inventory
@@ -646,7 +707,7 @@ export function EquipmentInventory({ userRole }: EquipmentInventoryProps) {
           )}
         </TabsContent>
 
-        {/* â”€â”€ ANALYTICS TAB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+        {/* ANALYTICS TAB */}
         <TabsContent value="analytics" className="space-y-6 mt-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <Card>
@@ -694,7 +755,6 @@ export function EquipmentInventory({ userRole }: EquipmentInventoryProps) {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Value by category */}
             <Card>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
@@ -727,7 +787,6 @@ export function EquipmentInventory({ userRole }: EquipmentInventoryProps) {
               </CardContent>
             </Card>
 
-            {/* Assignment breakdown */}
             <Card>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
@@ -756,7 +815,6 @@ export function EquipmentInventory({ userRole }: EquipmentInventoryProps) {
             </Card>
           </div>
 
-          {/* Most assigned items */}
           {assignments.length > 0 && (
             <Card>
               <CardHeader>
@@ -785,7 +843,7 @@ export function EquipmentInventory({ userRole }: EquipmentInventoryProps) {
         </TabsContent>
       </Tabs>
 
-      {/* â”€â”€ ADD / EDIT ITEM DIALOG â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ADD / EDIT ITEM DIALOG */}
       <Dialog open={showItemDialog} onOpenChange={setShowItemDialog}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -839,19 +897,19 @@ export function EquipmentInventory({ userRole }: EquipmentInventoryProps) {
             </div>
             <div className="col-span-2 space-y-2">
               <Label>Notes</Label>
-              <Textarea value={itemForm.notes || ''} onChange={e => setItemForm(f => ({ ...f, notes: e.target.value }))} rows={2} placeholder="Optional notesâ€¦" />
+              <Textarea value={itemForm.notes || ''} onChange={e => setItemForm(f => ({ ...f, notes: e.target.value }))} rows={2} placeholder="Optional notes..." />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowItemDialog(false)}>Cancel</Button>
-            <Button onClick={handleSaveItem} className="bg-sangria hover:bg-merlot">
-              {editingItem ? 'Save Changes' : 'Add Item'}
+            <Button onClick={handleSaveItem} className="bg-sangria hover:bg-merlot" disabled={saving}>
+              {saving ? 'Saving...' : editingItem ? 'Save Changes' : 'Add Item'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* â”€â”€ DELETE CONFIRM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* DELETE CONFIRM */}
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
@@ -862,12 +920,14 @@ export function EquipmentInventory({ userRole }: EquipmentInventoryProps) {
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleDeleteItem}>Delete</Button>
+            <Button variant="destructive" onClick={handleDeleteItem} disabled={saving}>
+              {saving ? 'Deleting...' : 'Delete'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* â”€â”€ ASSIGN TO STAFF DIALOG â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ASSIGN TO STAFF DIALOG */}
       <Dialog open={showAssignDialog} onOpenChange={setShowAssignDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -878,7 +938,7 @@ export function EquipmentInventory({ userRole }: EquipmentInventoryProps) {
             <div className="space-y-2">
               <Label>Item *</Label>
               <Select value={assignForm.itemId} onValueChange={v => setAssignForm(f => ({ ...f, itemId: v, quantity: 1 }))}>
-                <SelectTrigger><SelectValue placeholder="Select itemâ€¦" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Select item..." /></SelectTrigger>
                 <SelectContent>
                   {inventory.filter(i => i.quantity > 0).map(i => (
                     <SelectItem key={i.id} value={i.id}>
@@ -891,7 +951,7 @@ export function EquipmentInventory({ userRole }: EquipmentInventoryProps) {
             <div className="space-y-2">
               <Label>Staff Member *</Label>
               <Select value={assignForm.staffId} onValueChange={v => setAssignForm(f => ({ ...f, staffId: v }))}>
-                <SelectTrigger><SelectValue placeholder={staffList.length ? 'Select staffâ€¦' : 'Loading staffâ€¦'} /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={staffList.length ? 'Select staff...' : 'Loading staff...'} /></SelectTrigger>
                 <SelectContent>
                   {staffList.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                 </SelectContent>
@@ -906,19 +966,19 @@ export function EquipmentInventory({ userRole }: EquipmentInventoryProps) {
             </div>
             <div className="space-y-2">
               <Label>Notes (optional)</Label>
-              <Textarea rows={2} value={assignForm.notes} onChange={e => setAssignForm(f => ({ ...f, notes: e.target.value }))} placeholder="Any notes about this assignmentâ€¦" />
+              <Textarea rows={2} value={assignForm.notes} onChange={e => setAssignForm(f => ({ ...f, notes: e.target.value }))} placeholder="Any notes about this assignment..." />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowAssignDialog(false)}>Cancel</Button>
-            <Button onClick={handleAssign} className="bg-sangria hover:bg-merlot">
-              <Users className="h-4 w-4 mr-2" />Assign
+            <Button onClick={handleAssign} className="bg-sangria hover:bg-merlot" disabled={saving}>
+              <Users className="h-4 w-4 mr-2" />{saving ? 'Assigning...' : 'Assign'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* â”€â”€ ITEM DETAIL DIALOG â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ITEM DETAIL DIALOG */}
       <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -928,13 +988,13 @@ export function EquipmentInventory({ userRole }: EquipmentInventoryProps) {
           {viewItem && (
             <div className="space-y-3 py-2 text-sm">
               <div className="grid grid-cols-2 gap-3">
-                <div><p className="text-muted-foreground">SKU</p><p className="font-mono font-medium">{viewItem.sku || 'â€”'}</p></div>
+                <div><p className="text-muted-foreground">SKU</p><p className="font-mono font-medium">{viewItem.sku || '—'}</p></div>
                 <div><p className="text-muted-foreground">Status</p>{getStatusBadge(getItemStatus(viewItem))}</div>
                 <div><p className="text-muted-foreground">Quantity</p><p className="font-semibold">{viewItem.quantity} {viewItem.unit}</p></div>
                 <div><p className="text-muted-foreground">Min Stock</p><p className="font-medium">{viewItem.minStock} {viewItem.unit}</p></div>
                 <div><p className="text-muted-foreground">Unit Cost</p><p className="font-semibold">${viewItem.cost.toFixed(2)}</p></div>
                 <div><p className="text-muted-foreground">Total Value</p><p className="font-semibold">${(viewItem.quantity * viewItem.cost).toFixed(2)}</p></div>
-                <div className="col-span-2"><p className="text-muted-foreground">Location</p><p className="font-medium">{viewItem.location || 'â€”'}</p></div>
+                <div className="col-span-2"><p className="text-muted-foreground">Location</p><p className="font-medium">{viewItem.location || '—'}</p></div>
                 {viewItem.notes && <div className="col-span-2"><p className="text-muted-foreground">Notes</p><p>{viewItem.notes}</p></div>}
               </div>
               <Separator />
@@ -945,7 +1005,7 @@ export function EquipmentInventory({ userRole }: EquipmentInventoryProps) {
                   : assignments.filter(a => a.itemId === viewItem.id && a.status === 'checked-out').map(a => (
                     <div key={a.id} className="flex items-center justify-between py-1">
                       <span className="font-medium">{a.staffName}</span>
-                      <span className="text-muted-foreground">{a.quantity} {viewItem.unit} Â· {new Date(a.assignedDate).toLocaleDateString()}</span>
+                      <span className="text-muted-foreground">{a.quantity} {viewItem.unit} · {new Date(a.assignedDate).toLocaleDateString()}</span>
                     </div>
                   ))}
               </div>
