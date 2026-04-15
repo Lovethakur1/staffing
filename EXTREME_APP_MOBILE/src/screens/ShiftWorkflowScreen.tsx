@@ -531,7 +531,7 @@ export default function ShiftWorkflowScreen() {
           <View style={s.infoRow}>
             <Ionicons name="calendar" size={18} color={Colors.primary} />
             <Text style={s.infoText}>
-              {new Date(shift.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+              {new Date(shift.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' })}
             </Text>
           </View>
           <View style={s.infoRow}>

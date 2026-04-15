@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../config/database';
 import { AuthRequest } from '../middleware/auth';
-import { asyncHandler, parsePagination } from '../utils/helpers';
+import { asyncHandler, parsePagination, toUTCMidnight } from '../utils/helpers';
 import { geocodeAddress } from '../utils/geocode';
 
 /**
@@ -184,7 +184,7 @@ export const createEvent = asyncHandler(async (req: AuthRequest, res: Response) 
       description: description || '',
       eventType,
       venue,
-      date: new Date(date),
+      date: toUTCMidnight(date),
       startTime,
       endTime,
       location,
@@ -205,20 +205,25 @@ export const createEvent = asyncHandler(async (req: AuthRequest, res: Response) 
       additionalFees: additionalFees != null ? Number(additionalFees) : 0,
       adminNotes: adminNotes || '',
       isMultiDay: isMultiDay ? true : false,
-      ...(endDate && { endDate: new Date(endDate) }),
+      ...(endDate && { endDate: toUTCMidnight(endDate) }),
       // Auto-generate EventDate entries for multi-day (one per day in range)
       // Continuous event: Day 1 starts at event startTime→23:59, middle days 00:00→23:59, last day 00:00→event endTime
+      // All dates normalized to UTC midnight to avoid timezone drift
       ...(isMultiDay && date && endDate && (() => {
         const dates: { date: Date; startTime: string; endTime: string }[] = [];
-        const start = new Date(date);
-        const end = new Date(endDate);
-        const cur = new Date(start);
-        const startStr = start.toISOString().split('T')[0];
-        const endStr = end.toISOString().split('T')[0];
+        // Extract YYYY-MM-DD parts and work purely with UTC to avoid timezone shifts
+        const startStr = new Date(date).toISOString().split('T')[0];
+        const endStr = new Date(endDate).toISOString().split('T')[0];
         const evStart = startTime || '09:00';
         const evEnd = endTime || '17:00';
 
-        while (cur <= end) {
+        // Parse as UTC midnight explicitly
+        const [sy, sm, sd] = startStr.split('-').map(Number);
+        const [ey, em, ed] = endStr.split('-').map(Number);
+        const cur = new Date(Date.UTC(sy, sm - 1, sd));
+        const endUTC = new Date(Date.UTC(ey, em - 1, ed));
+
+        while (cur <= endUTC) {
           const curStr = cur.toISOString().split('T')[0];
           const isSameDay = startStr === endStr;
           const isFirst = curStr === startStr;
@@ -233,7 +238,8 @@ export const createEvent = asyncHandler(async (req: AuthRequest, res: Response) 
           } else {
             dates.push({ date: new Date(cur), startTime: '00:00', endTime: '23:59' });
           }
-          cur.setDate(cur.getDate() + 1);
+          // Increment using UTC to avoid DST issues
+          cur.setUTCDate(cur.getUTCDate() + 1);
         }
         return dates.length > 0 ? { eventDates: { create: dates } } : {};
       })()),
@@ -316,7 +322,7 @@ export const updateEvent = asyncHandler(async (req: Request, res: Response) => {
       ...(description !== undefined && { description }),
       ...(eventType !== undefined && { eventType }),
       ...(venue !== undefined && { venue }),
-      ...(date && { date: new Date(date) }),
+      ...(date && { date: toUTCMidnight(date) }),
       ...(startTime && { startTime }),
       ...(endTime && { endTime }),
       ...(location && { location }),
@@ -339,20 +345,23 @@ export const updateEvent = asyncHandler(async (req: Request, res: Response) => {
       ...(additionalFees !== undefined && { additionalFees: Number(additionalFees) }),
       ...(adminNotes !== undefined && { adminNotes }),
       ...(isMultiDay !== undefined && { isMultiDay: Boolean(isMultiDay) }),
-      ...(endDate !== undefined && { endDate: endDate ? new Date(endDate) : null }),
+      ...(endDate !== undefined && { endDate: endDate ? toUTCMidnight(endDate) : null }),
       // Auto-generate eventDates when isMultiDay + date + endDate are updated (and no explicit eventDates array)
       // Continuous event: Day 1 starts at event startTime→23:59, middle days 00:00→23:59, last day 00:00→event endTime
+      // All dates normalized to UTC midnight to avoid timezone drift
       ...(isMultiDay && date && endDate && !Array.isArray(eventDates) && (() => {
         const dates: { date: Date; startTime: string; endTime: string }[] = [];
-        const s = new Date(date);
-        const e = new Date(endDate);
-        const cur = new Date(s);
-        const startStr = s.toISOString().split('T')[0];
-        const endStr = e.toISOString().split('T')[0];
+        const startStr = new Date(date).toISOString().split('T')[0];
+        const endStr = new Date(endDate).toISOString().split('T')[0];
         const evStart = startTime || '09:00';
         const evEnd = endTime || '17:00';
 
-        while (cur <= e) {
+        const [sy, sm, sd] = startStr.split('-').map(Number);
+        const [ey, em, ed] = endStr.split('-').map(Number);
+        const cur = new Date(Date.UTC(sy, sm - 1, sd));
+        const endUTC = new Date(Date.UTC(ey, em - 1, ed));
+
+        while (cur <= endUTC) {
           const curStr = cur.toISOString().split('T')[0];
           const isSameDay = startStr === endStr;
           const isFirst = curStr === startStr;
@@ -367,7 +376,7 @@ export const updateEvent = asyncHandler(async (req: Request, res: Response) => {
           } else {
             dates.push({ date: new Date(cur), startTime: '00:00', endTime: '23:59' });
           }
-          cur.setDate(cur.getDate() + 1);
+          cur.setUTCDate(cur.getUTCDate() + 1);
         }
         return dates.length > 0 ? { eventDates: { deleteMany: {}, create: dates } } : {};
       })()),

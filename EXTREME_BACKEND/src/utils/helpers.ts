@@ -38,3 +38,13 @@ export const parsePagination = (query: any): { skip: number; take: number; page:
   const skip = (page - 1) * take;
   return { skip, take, page };
 };
+
+/**
+ * Normalize any date string/Date to UTC midnight to avoid timezone drift.
+ * e.g. "2026-04-13" or "2026-04-13T18:30:00.000Z" both → 2026-04-13T00:00:00.000Z
+ */
+export const toUTCMidnight = (d: string | Date): Date => {
+  const iso = new Date(d).toISOString().split('T')[0];
+  const [y, m, dy] = iso.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, dy));
+};

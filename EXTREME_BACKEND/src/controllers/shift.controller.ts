@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../config/database';
 import { AuthRequest } from '../middleware/auth';
-import { asyncHandler, parsePagination, calculateHours } from '../utils/helpers';
+import { asyncHandler, parsePagination, calculateHours, toUTCMidnight } from '../utils/helpers';
 import { calculateAndSaveStaffRating } from '../services/rating.service';
 import { emitToRole } from '../services/socket.service';
 import { notifyShiftAssigned, sendNotification, sendRoleNotification } from '../services/notification.service';
@@ -282,7 +282,7 @@ export const createShift = asyncHandler(async (req: Request, res: Response) => {
     data: {
       eventId,
       staffId,
-      date: new Date(date),
+      date: toUTCMidnight(date),
       startTime,
       endTime,
       reportTime,

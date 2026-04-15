@@ -129,7 +129,7 @@ export default function MyShiftsScreen() {
   function getShiftsForDay(day: number): Shift[] {
     return shifts.filter(sh => {
       const sd = new Date(sh.date);
-      return sd.getDate() === day && sd.getMonth() === month && sd.getFullYear() === year;
+      return sd.getUTCDate() === day && sd.getUTCMonth() === month && sd.getUTCFullYear() === year;
     });
   }
 
@@ -397,8 +397,8 @@ export default function MyShiftsScreen() {
             groupedUpcoming.slice(0, 5).map(group => {
               const first = group[0];
               const isMultiDay = group.length > 1;
-              const firstDate = new Date(first.date).toLocaleDateString();
-              const lastDate = isMultiDay ? new Date(group[group.length - 1].date).toLocaleDateString() : null;
+              const firstDate = new Date(first.date).toLocaleDateString('en-US', { timeZone: 'UTC' });
+              const lastDate = isMultiDay ? new Date(group[group.length - 1].date).toLocaleDateString('en-US', { timeZone: 'UTC' }) : null;
 
               return (
                 <TouchableOpacity
