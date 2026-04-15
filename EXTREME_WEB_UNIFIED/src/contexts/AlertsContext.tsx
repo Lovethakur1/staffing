@@ -9,6 +9,8 @@ export interface Alert {
   title: string;
   description: string;
   time: string;
+  leftAt?: string;
+  reEnteredAt?: string;
   type: 'event' | 'staff' | 'payment' | 'compliance' | 'system' | 'critical';
   severity: 'critical' | 'warning' | 'info';
   unread: boolean;
@@ -84,6 +86,11 @@ function buildActions(type: string, data?: any): Alert['actions'] {
   }
 }
 
+function formatTime(isoStr?: string): string | undefined {
+  if (!isoStr) return undefined;
+  return new Date(isoStr).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
+
 function mapNotificationToAlert(n: any): Alert {
   const nType = (n.type || 'system').toLowerCase();
   return {
@@ -93,6 +100,8 @@ function mapNotificationToAlert(n: any): Alert {
     title: n.title || '',
     description: n.message || '',
     time: n.createdAt ? timeAgo(n.createdAt) : '',
+    leftAt: formatTime(n.data?.leftAt),
+    reEnteredAt: formatTime(n.data?.reEnteredAt),
     type: mapType(nType),
     severity: mapPriorityToSeverity(n.priority || 'medium'),
     unread: n.unread ?? true,

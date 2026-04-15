@@ -41,7 +41,8 @@ import {
   Menu,
   Phone,
   Mail,
-  GraduationCap
+  GraduationCap,
+  LogIn
 } from "lucide-react";
 import { SidebarTrigger, useSidebar } from "../ui/sidebar";
 import { useNavigation } from "../../contexts/NavigationContext";
@@ -610,12 +611,26 @@ export function TopNavigation({
                                   <p className="text-sm text-muted-foreground leading-relaxed">
                                     {alert.description}
                                   </p>
-                                  <div className="flex items-center gap-2 mt-2">
-                                    <Clock className="w-3 h-3 text-muted-foreground" />
-                                    <span className="text-xs text-muted-foreground">{alert.time}</span>
-                                    <Badge variant="secondary" className="text-xs ml-auto">
-                                      {alert.type}
-                                    </Badge>
+                                  <div className="flex flex-col gap-1 mt-2">
+                                    {alert.leftAt && (
+                                      <div className="flex items-center gap-1.5">
+                                        <LogOut className="w-3 h-3 text-red-500" />
+                                        <span className="text-xs text-red-600 font-medium">Left at {alert.leftAt}</span>
+                                      </div>
+                                    )}
+                                    {alert.reEnteredAt && (
+                                      <div className="flex items-center gap-1.5">
+                                        <LogIn className="w-3 h-3 text-green-500" />
+                                        <span className="text-xs text-green-600 font-medium">Re-entered at {alert.reEnteredAt}</span>
+                                      </div>
+                                    )}
+                                    <div className="flex items-center gap-2">
+                                      <Clock className="w-3 h-3 text-muted-foreground" />
+                                      <span className="text-xs text-muted-foreground">{alert.time}</span>
+                                      <Badge variant="secondary" className="text-xs ml-auto">
+                                        {alert.type}
+                                      </Badge>
+                                    </div>
                                   </div>
                                 </div>
                               </div>

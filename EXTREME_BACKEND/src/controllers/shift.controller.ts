@@ -890,6 +890,7 @@ export const updateLocation = asyncHandler(async (req: AuthRequest, res: Respons
 
     if (wasInside && !isInside) {
       // Staff just LEFT the geofence
+      const leftAt = new Date().toISOString();
       await sendRoleNotification('ADMIN', {
         title: 'Staff Left Venue',
         message: `${shift.staff?.name || 'A staff member'} has left the venue for "${ev?.title}".`,
@@ -897,7 +898,7 @@ export const updateLocation = asyncHandler(async (req: AuthRequest, res: Respons
         priority: 'high',
         category: 'geofence',
         actionRequired: true,
-        data: { shiftId: shift.id, staffId: shift.staffId, eventId: shift.eventId },
+        data: { shiftId: shift.id, staffId: shift.staffId, eventId: shift.eventId, leftAt },
       });
       emitToRole('ADMIN', 'geofence:exit', {
         shiftId: shift.id, eventId: shift.eventId,
@@ -909,12 +910,24 @@ export const updateLocation = asyncHandler(async (req: AuthRequest, res: Respons
       emitToRole('MANAGER', 'geofence:exit', locationData);
     } else if (!wasInside && isInside) {
       // Staff re-entered — notify and clear alert
+      const reEnteredAt = new Date().toISOString();
+      await sendRoleNotification('ADMIN', {
+        title: 'Staff Re-entered Venue',
+        message: `${shift.staff?.name || 'A staff member'} has returned to the venue for "${ev?.title}".`,
+        type: 'alert',
+        priority: 'medium',
+        category: 'geofence',
+        actionRequired: false,
+        data: { shiftId: shift.id, staffId: shift.staffId, eventId: shift.eventId, reEnteredAt },
+      });
       emitToRole('ADMIN', 'geofence:enter', {
         shiftId: shift.id, eventId: shift.eventId,
         staffId: shift.staff?.id || shift.staffId,
         staffName: shift.staff?.name || 'Staff',
+        eventTitle: ev?.title,
         timestamp: new Date(),
       });
+      emitToRole('MANAGER', 'geofence:enter', locationData);
     }
   }
 
