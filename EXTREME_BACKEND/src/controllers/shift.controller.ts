@@ -751,6 +751,7 @@ export const clockOut = asyncHandler(async (req: AuthRequest, res: Response) => 
         additionalWork,
         tipsAmount: shift.tipsReceived,
         parkingAmount: shift.parkingAmount,
+        grossPay: totalPay,
         ...(systemNote && { notes: systemNote }),
       },
     });
