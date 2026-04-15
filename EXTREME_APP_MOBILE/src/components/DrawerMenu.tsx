@@ -135,6 +135,7 @@ export function DrawerMenu({ isOpen, activeTab, onNavigate, onClose, navigation 
       items: [
         { label: 'Performance', icon: 'stats-chart-outline', screen: 'Performance' },
         { label: 'Documents', icon: 'folder-outline', screen: 'Documents' },
+        { label: 'My Equipment', icon: 'construct-outline', screen: 'Equipment' },
       ],
     },
     {
@@ -166,6 +167,7 @@ export function DrawerMenu({ isOpen, activeTab, onNavigate, onClose, navigation 
         { label: 'Staff', icon: 'people-outline', screen: 'ManagerStaff' },
         { label: 'Timesheets', icon: 'document-text-outline', screen: 'ManagerTimesheets' },
         { label: 'Incidents', icon: 'warning-outline', screen: 'ManagerIncidents' },
+        { label: 'Equipment', icon: 'construct-outline', screen: 'Equipment' },
       ],
     },
     {

@@ -10,7 +10,7 @@ const router = Router();
 router.use(authenticate);
 
 // Assignments (must be before /:id to avoid conflict)
-router.get('/assignments', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER'), listAssignments);
+router.get('/assignments', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER', 'STAFF'), listAssignments);
 router.post('/assignments', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER'), createAssignment);
 router.put('/assignments/:id', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER'), updateAssignment);
 

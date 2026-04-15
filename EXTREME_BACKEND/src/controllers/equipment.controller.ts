@@ -146,11 +146,23 @@ export const deleteItem = asyncHandler(async (req: Request, res: Response) => {
  * GET /api/equipment/assignments
  */
 export const listAssignments = asyncHandler(async (req: Request, res: Response) => {
-  const { itemId, status } = req.query as any;
+  const { itemId, status, staffId } = req.query as any;
+  const authUser = (req as any).user;
 
   const where: any = {};
   if (itemId) where.itemId = itemId;
   if (status && status !== 'all') where.status = status;
+  if (staffId) where.staffId = staffId;
+
+  // STAFF can only see their own assignments
+  if (authUser?.role === 'STAFF') {
+    const profile = await prisma.staffProfile.findUnique({
+      where: { userId: authUser.userId },
+      select: { id: true },
+    });
+    if (!profile) { res.json({ data: [] }); return; }
+    where.staffId = profile.id;
+  }
 
   const assignments = await prisma.equipmentAssignment.findMany({
     where,
