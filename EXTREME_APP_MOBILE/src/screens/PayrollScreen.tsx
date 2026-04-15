@@ -15,14 +15,14 @@ export default function PayrollScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [tab, setTab] = useState<Tab>('submissions');
-  const [pending, setPending] = useState<Timesheet[]>([]);
+  const [allTimesheets, setAllTimesheets] = useState<Timesheet[]>([]);
   const [runs, setRuns] = useState<PayrollRun[]>([]);
 
   const load = async (quiet = false) => {
     if (!quiet) setLoading(true);
     try {
       const [all, runData] = await Promise.all([getTimesheets(), getPayrollRuns()]);
-      setPending(all.filter(t => ['submitted', 'draft', 'pending'].includes(t.status)));
+      setAllTimesheets(all);
       setRuns(runData);
     } catch {}
     setLoading(false);
@@ -31,14 +31,67 @@ export default function PayrollScreen() {
 
   useFocusEffect(useCallback(() => { load(); }, []));
 
+  const pending = allTimesheets.filter(t => ['submitted', 'draft', 'pending'].includes(t.status));
+  const approved = allTimesheets.filter(t => t.status === 'approved');
+
   const totalPendingPay = pending.reduce((s, t) => s + t.grossPay, 0);
   const totalPendingHours = pending.reduce((s, t) => s + t.totalHours, 0);
+  const totalApprovedPay = approved.reduce((s, t) => s + t.grossPay, 0);
+  const totalApprovedHours = approved.reduce((s, t) => s + t.totalHours, 0);
 
-  const RUN_STATUS: Record<string, { bg: string; text: string }> = {
-    completed: { bg: '#D1FAE5', text: '#065F46' },
-    processed: { bg: '#D1FAE5', text: '#065F46' },
-    pending:   { bg: '#FEF3C7', text: '#92400E' },
-    draft:     { bg: '#F1F5F9', text: '#475569' },
+  const STATUS_CONFIG: Record<string, { bg: string; text: string; label: string }> = {
+    pending:  { bg: '#FEF3C7', text: '#92400E', label: 'Pending' },
+    draft:    { bg: '#F1F5F9', text: '#475569', label: 'Draft' },
+    submitted: { bg: '#DBEAFE', text: '#1E40AF', label: 'Submitted' },
+    approved: { bg: '#D1FAE5', text: '#065F46', label: 'Approved' },
+    paid:     { bg: '#D1FAE5', text: '#065F46', label: 'Paid' },
+    rejected: { bg: '#FEE2E2', text: '#991B1B', label: 'Rejected' },
+    completed: { bg: '#D1FAE5', text: '#065F46', label: 'Completed' },
+    processed: { bg: '#D1FAE5', text: '#065F46', label: 'Processed' },
+  };
+
+  const formatTime = (iso: string | null) => {
+    if (!iso) return '';
+    return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const renderTimesheetCard = (ts: Timesheet) => {
+    const sc = STATUS_CONFIG[ts.status] || STATUS_CONFIG.pending;
+    return (
+      <View key={ts.id} style={st.card}>
+        <View style={st.cardRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={st.cardTitle} numberOfLines={1}>{ts.eventName || 'Shift'}</Text>
+            <Text style={st.cardSub}>{ts.weekEnding || '—'}</Text>
+          </View>
+          <View style={[st.badge, { backgroundColor: sc.bg }]}>
+            <Text style={[st.badgeText, { color: sc.text }]}>{sc.label}</Text>
+          </View>
+        </View>
+        {(ts.clockIn || ts.clockOut) && (
+          <View style={st.timeRow}>
+            {ts.clockIn && (
+              <View style={st.timeItem}>
+                <Ionicons name="log-in-outline" size={13} color="#10B981" />
+                <Text style={st.timeText}>{formatTime(ts.clockIn)}</Text>
+              </View>
+            )}
+            {ts.clockOut && (
+              <View style={st.timeItem}>
+                <Ionicons name="log-out-outline" size={13} color="#EF4444" />
+                <Text style={st.timeText}>{formatTime(ts.clockOut)}</Text>
+              </View>
+            )}
+          </View>
+        )}
+        <View style={st.cardMeta}>
+          <Text style={st.metaItem}><Text style={st.metaLabel}>Hours: </Text>{ts.totalHours.toFixed(1)}h</Text>
+          <Text style={st.metaItem}><Text style={st.metaLabel}>Est. Pay: </Text>
+            <Text style={{ color: '#10B981', fontWeight: '700' }}>${ts.grossPay.toFixed(2)}</Text>
+          </Text>
+        </View>
+      </View>
+    );
   };
 
   if (loading) {
@@ -61,16 +114,16 @@ export default function PayrollScreen() {
         {/* Stats */}
         <View style={st.statsRow}>
           {[
-            { label: 'Pending', value: pending.length, icon: 'time-outline', color: '#F59E0B' },
-            { label: 'Hours', value: `${totalPendingHours.toFixed(1)}h`, icon: 'hourglass-outline', color: '#3B82F6', small: true },
-            { label: 'Est. Pay', value: `$${totalPendingPay.toLocaleString()}`, icon: 'cash-outline', color: '#10B981', small: true },
-            { label: 'Runs', value: runs.length, icon: 'server-outline', color: Colors.primary },
+            { label: 'Pending', value: pending.length, icon: 'time-outline' as const, color: '#F59E0B' },
+            { label: 'Approved', value: approved.length, icon: 'checkmark-circle-outline' as const, color: '#10B981' },
+            { label: 'Hours', value: `${(totalPendingHours + totalApprovedHours).toFixed(1)}h`, icon: 'hourglass-outline' as const, color: '#3B82F6', small: true },
+            { label: 'Est. Pay', value: `$${(totalPendingPay + totalApprovedPay).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`, icon: 'cash-outline' as const, color: Colors.primary, small: true },
           ].map(s => (
             <View key={s.label} style={st.statCard}>
               <View style={[st.statIcon, { backgroundColor: s.color + '18' }]}>
-                <Ionicons name={s.icon as any} size={18} color={s.color} />
+                <Ionicons name={s.icon} size={18} color={s.color} />
               </View>
-              <Text style={[st.statValue, s.small && { fontSize: 15 }]}>{s.value}</Text>
+              <Text style={[st.statValue, 'small' in s && s.small && { fontSize: 15 }]}>{s.value}</Text>
               <Text style={st.statLabel}>{s.label}</Text>
             </View>
           ))}
@@ -85,33 +138,37 @@ export default function PayrollScreen() {
           ))}
         </View>
 
-        {/* Pending submissions */}
+        {/* Submissions tab — pending + approved timesheets */}
         {tab === 'submissions' && (
-          pending.length === 0 ? (
+          allTimesheets.length === 0 ? (
             <View style={st.emptyBox}>
-              <Ionicons name="checkmark-circle-outline" size={48} color="#10B981" />
-              <Text style={st.emptyText}>All caught up!</Text>
-              <Text style={st.emptySubtext}>No pending payroll submissions</Text>
+              <Ionicons name="document-text-outline" size={48} color={Colors.textMuted} />
+              <Text style={st.emptyText}>No timesheets yet</Text>
+              <Text style={st.emptySubtext}>Timesheets are created when you check in to a shift</Text>
             </View>
-          ) : pending.map(ts => (
-            <View key={ts.id} style={st.card}>
-              <View style={st.cardRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={st.cardTitle} numberOfLines={1}>{ts.eventName || 'Shift'}</Text>
-                  <Text style={st.cardSub}>{ts.weekEnding || '—'}</Text>
+          ) : (
+            <>
+              {pending.length > 0 && (
+                <>
+                  <Text style={st.sectionTitle}>Pending Review</Text>
+                  {pending.map(renderTimesheetCard)}
+                </>
+              )}
+              {approved.length > 0 && (
+                <>
+                  <Text style={st.sectionTitle}>Approved</Text>
+                  {approved.map(renderTimesheetCard)}
+                </>
+              )}
+              {pending.length === 0 && approved.length === 0 && (
+                <View style={st.emptyBox}>
+                  <Ionicons name="checkmark-circle-outline" size={48} color="#10B981" />
+                  <Text style={st.emptyText}>All caught up!</Text>
+                  <Text style={st.emptySubtext}>No pending payroll submissions</Text>
                 </View>
-                <View style={[st.badge, { backgroundColor: '#FEF3C7' }]}>
-                  <Text style={[st.badgeText, { color: '#92400E' }]}>Pending</Text>
-                </View>
-              </View>
-              <View style={st.cardMeta}>
-                <Text style={st.metaItem}><Text style={st.metaLabel}>Hours: </Text>{ts.totalHours}h</Text>
-                <Text style={st.metaItem}><Text style={st.metaLabel}>Est. Pay: </Text>
-                  <Text style={{ color: '#10B981', fontWeight: '700' }}>${ts.grossPay.toFixed(2)}</Text>
-                </Text>
-              </View>
-            </View>
-          ))
+              )}
+            </>
+          )
         )}
 
         {/* Payroll batches */}
@@ -120,9 +177,10 @@ export default function PayrollScreen() {
             <View style={st.emptyBox}>
               <Ionicons name="server-outline" size={48} color={Colors.textMuted} />
               <Text style={st.emptyText}>No payroll runs yet</Text>
+              <Text style={st.emptySubtext}>Payroll runs will appear here once processed by admin</Text>
             </View>
           ) : runs.map(r => {
-            const sc = RUN_STATUS[r.status] || { bg: '#F1F5F9', text: '#475569' };
+            const sc = STATUS_CONFIG[r.status] || { bg: '#F1F5F9', text: '#475569', label: r.status };
             return (
               <View key={r.id} style={st.card}>
                 <View style={st.cardRow}>
@@ -131,11 +189,10 @@ export default function PayrollScreen() {
                     <Text style={st.cardSub}>{r.period}</Text>
                   </View>
                   <View style={[st.badge, { backgroundColor: sc.bg }]}>
-                    <Text style={[st.badgeText, { color: sc.text }]}>{r.status}</Text>
+                    <Text style={[st.badgeText, { color: sc.text }]}>{sc.label}</Text>
                   </View>
                 </View>
                 <View style={st.cardMeta}>
-                  <Text style={st.metaItem}><Text style={st.metaLabel}>Staff: </Text>{r.staffCount}</Text>
                   <Text style={st.metaItem}><Text style={st.metaLabel}>Total: </Text>
                     <Text style={{ color: Colors.primary, fontWeight: '700' }}>${r.totalAmount.toLocaleString()}</Text>
                   </Text>
@@ -151,9 +208,12 @@ export default function PayrollScreen() {
           <View style={st.summaryCard}>
             <Text style={st.summaryTitle}>Payment Summary</Text>
             {[
-              { label: 'Total Pending Submissions', value: pending.length },
+              { label: 'Pending Submissions', value: pending.length },
+              { label: 'Approved Submissions', value: approved.length },
               { label: 'Pending Hours', value: `${totalPendingHours.toFixed(1)}h` },
-              { label: 'Estimated Pending Pay', value: `$${totalPendingPay.toLocaleString('en-US', { minimumFractionDigits: 2 })}` },
+              { label: 'Approved Hours', value: `${totalApprovedHours.toFixed(1)}h` },
+              { label: 'Pending Pay', value: `$${totalPendingPay.toLocaleString('en-US', { minimumFractionDigits: 2 })}` },
+              { label: 'Approved Pay', value: `$${totalApprovedPay.toLocaleString('en-US', { minimumFractionDigits: 2 })}` },
               { label: 'Payroll Runs', value: runs.length },
               { label: 'Completed Runs', value: runs.filter(r => r.status === 'completed' || r.status === 'processed').length },
             ].map(row => (
@@ -187,6 +247,8 @@ const st = StyleSheet.create({
   tabBtnText: { fontSize: 13, fontWeight: '600', color: Colors.textSecondary },
   tabBtnTextActive: { color: '#fff' },
 
+  sectionTitle: { fontSize: 14, fontWeight: '700', color: Colors.textPrimary, marginBottom: 8, marginTop: 4 },
+
   emptyBox: { alignItems: 'center', paddingVertical: 60 },
   emptyText: { fontSize: 16, fontWeight: '600', color: Colors.textPrimary, marginTop: 12 },
   emptySubtext: { fontSize: 13, color: Colors.textMuted, marginTop: 4, textAlign: 'center' },
@@ -197,6 +259,9 @@ const st = StyleSheet.create({
   cardSub: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
   badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
   badgeText: { fontSize: 11, fontWeight: '700' },
+  timeRow: { flexDirection: 'row', gap: 14, marginBottom: 8 },
+  timeItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  timeText: { fontSize: 12, color: Colors.textSecondary, fontWeight: '500' },
   cardMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   metaItem: { fontSize: 13, color: Colors.textSecondary },
   metaLabel: { fontWeight: '600', color: Colors.textPrimary },

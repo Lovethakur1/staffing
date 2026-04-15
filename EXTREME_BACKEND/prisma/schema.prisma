@@ -456,6 +456,7 @@ model Timesheet {
   tipsAmount        Float?
   workersCompRate   Float? // Workers comp percentage
   workersCompAmount Float? // Calculated workers comp deduction
+  grossPay          Float?    @default(0)
   status            String    @default("PENDING") // PENDING, APPROVED, REJECTED
   approvedById      String?
   approvedBy        User?     @relation("TimesheetApprover", fields: [approvedById], references: [id])

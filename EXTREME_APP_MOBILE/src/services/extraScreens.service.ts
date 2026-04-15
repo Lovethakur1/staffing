@@ -123,6 +123,8 @@ export interface Timesheet {
   grossPay: number;
   staffName: string;
   eventName: string;
+  clockIn: string | null;
+  clockOut: string | null;
 }
 
 export async function getTimesheets(): Promise<Timesheet[]> {
@@ -140,6 +142,8 @@ export async function getTimesheets(): Promise<Timesheet[]> {
       grossPay: ts.grossPay || (hours * rate),
       staffName: ts.staff?.name || '',
       eventName: ts.shift?.event?.title || '',
+      clockIn: ts.clockInTime || null,
+      clockOut: ts.clockOutTime || null,
     };
   });
 }
