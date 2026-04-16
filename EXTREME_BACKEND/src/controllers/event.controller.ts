@@ -677,6 +677,12 @@ export const listIncidents = asyncHandler(async (req: AuthRequest, res: Response
   const { status, eventId, priority, type, search } = req.query as any;
 
   const where: any = {};
+
+  // Staff can only see their own incidents
+  if (req.user?.role === 'STAFF') {
+    where.reportedBy = req.user.userId;
+  }
+
   if (status) where.status = status;
   if (eventId) where.eventId = eventId;
   if (priority) where.severity = priority;

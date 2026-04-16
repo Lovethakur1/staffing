@@ -13,8 +13,8 @@ router.use(authenticate);
 router.get('/', listEvents);
 
 // Incidents (must be before /:id to avoid conflict)
-router.get('/incidents', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER'), listIncidents);
-router.get('/incidents/:id', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER'), getIncident);
+router.get('/incidents', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER', 'STAFF'), listIncidents);
+router.get('/incidents/:id', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER', 'STAFF'), getIncident);
 router.put('/incidents/:id', authorize('ADMIN', 'SUB_ADMIN', 'MANAGER'), updateIncident);
 
 router.get('/:id', getEvent);

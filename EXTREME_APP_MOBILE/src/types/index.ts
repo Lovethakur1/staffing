@@ -115,6 +115,7 @@ export type RootStackParamList = {
   HelpSupport: undefined;
   Documentation: undefined;
   Equipment: undefined;
+  IncidentReport: undefined;
   // Manager screens
   ManagerEvents: undefined;
   ManagerEventDetail: { eventId: string };

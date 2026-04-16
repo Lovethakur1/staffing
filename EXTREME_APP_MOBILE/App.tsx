@@ -29,6 +29,7 @@ import ResourcesScreen from './src/screens/ResourcesScreen';
 import HelpSupportScreen from './src/screens/HelpSupportScreen';
 import DocumentationScreen from './src/screens/DocumentationScreen';
 import EquipmentScreen from './src/screens/EquipmentScreen';
+import IncidentReportScreen from './src/screens/IncidentReportScreen';
 // Manager screens
 import {
   ManagerDashboardScreen,
@@ -178,6 +179,11 @@ function RootNavigator() {
           <Stack.Screen
             name="Equipment"
             component={EquipmentScreen}
+            options={{ animation: 'slide_from_right' }}
+          />
+          <Stack.Screen
+            name="IncidentReport"
+            component={IncidentReportScreen}
             options={{ animation: 'slide_from_right' }}
           />
           {/* ── Manager-Only Screens ─────────────────────────────── */}

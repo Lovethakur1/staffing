@@ -156,11 +156,19 @@ export default function ManagerIncidentsScreen() {
         {/* Header */}
         <View style={st.header}>
           <Text style={st.headerTitle}>Incidents</Text>
-          {openCount > 0 && (
-            <View style={st.openBadge}>
-              <Text style={st.openText}>{openCount} open</Text>
-            </View>
-          )}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {openCount > 0 && (
+              <View style={st.openBadge}>
+                <Text style={st.openText}>{openCount} open</Text>
+              </View>
+            )}
+            <TouchableOpacity
+              style={{ backgroundColor: Colors.primary, width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' }}
+              onPress={() => nav.navigate('IncidentReport')}
+            >
+              <Ionicons name="add" size={22} color="#fff" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Filter Tabs */}

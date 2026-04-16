@@ -144,6 +144,7 @@ export function DrawerMenu({ isOpen, activeTab, onNavigate, onClose, navigation 
         { label: 'Analytics', icon: 'bar-chart-outline', screen: 'Analytics' },
         { label: 'Resources', icon: 'library-outline', screen: 'Resources' },
         { label: 'Help & Support', icon: 'headset-outline', screen: 'HelpSupport' },
+        { label: 'Report Incident', icon: 'warning-outline', screen: 'IncidentReport' },
         { label: 'Documentation', icon: 'book-outline', screen: 'Documentation' },
       ],
     },
