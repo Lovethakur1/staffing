@@ -258,6 +258,22 @@ export const createPayrollRun = asyncHandler(async (req: AuthRequest, res: Respo
     staffMap.set(key, existing);
   }
 
+  // Query equipment assignments that are damaged or lost in this period
+  const damagedEquipment = await prisma.equipmentAssignment.findMany({
+    where: {
+      status: { in: ['damaged', 'lost'] },
+      assignedDate: { gte: start, lte: end },
+    },
+    include: { item: { select: { cost: true } } },
+  });
+
+  // Aggregate equipment deduction per staff
+  const equipDeductionByStaff = new Map<string, number>();
+  for (const eq of damagedEquipment) {
+    const cost = (eq.item.cost || 0) * (eq.quantity || 1);
+    equipDeductionByStaff.set(eq.staffId, (equipDeductionByStaff.get(eq.staffId) || 0) + cost);
+  }
+
   // Calculate totals and create payroll items
   const items: any[] = [];
   let totalAmount = 0;
@@ -267,7 +283,8 @@ export const createPayrollRun = asyncHandler(async (req: AuthRequest, res: Respo
     const additionalPay = s.additionalHours * s.hourlyRate * 1.5; // Additional work at 1.5x
     const driveTimePay = s.driveTime * (s.hourlyRate * 0.5); // Drive time at half rate
     const grossPay = regularPay + additionalPay + driveTimePay + s.parking + s.tips;
-    const netPay = grossPay - s.workersComp;
+    const equipmentDeduction = equipDeductionByStaff.get(s.staffId) || 0;
+    const netPay = grossPay - s.workersComp - equipmentDeduction;
 
     items.push({
       staffId: s.staffId,
@@ -281,6 +298,7 @@ export const createPayrollRun = asyncHandler(async (req: AuthRequest, res: Respo
       parkingReimbursement: s.parking,
       tipsAmount: s.tips,
       workersCompDeduction: s.workersComp,
+      equipmentDeduction,
       grossPay,
       netPay,
     });

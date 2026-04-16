@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
@@ -8,10 +8,35 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Label } from "../ui/label";
 import { Separator } from "../ui/separator";
 import { Progress } from "../ui/progress";
-import { DollarSign, FileText, CreditCard, Download, Eye, Calendar, TrendingUp, AlertCircle, CheckCircle2, Clock, Filter } from "lucide-react";
-import { mockEvents, mockInvoices, mockClients, Invoice } from "../../data/mockData";
+import { DollarSign, FileText, CreditCard, Download, Eye, Calendar, TrendingUp, AlertCircle, CheckCircle2, Clock, Filter, Loader2 } from "lucide-react";
+import { invoiceService } from "../../services/invoice.service";
+import api from "../../services/api";
 import { DataTable } from "../ui/data-table";
 import { toast } from "sonner";
+
+interface Invoice {
+  id: string;
+  invoiceNumber: string;
+  clientId: string;
+  eventId?: string;
+  eventTitle: string;
+  issueDate: string;
+  dueDate: string;
+  amount: number;
+  subtotal: number;
+  serviceFee: number;
+  tipAmount: number;
+  status: string;
+  lineItems: {
+    description: string;
+    quantity: number;
+    rate: number;
+    hours: number;
+    amount: number;
+  }[];
+  paymentDate?: string;
+  paymentMethod?: string;
+}
 
 interface FinancialManagementProps {
   clientId: string;
@@ -22,6 +47,10 @@ export function FinancialManagement({ clientId }: FinancialManagementProps) {
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [statusFilter, setStatusFilter] = useState("all");
+  const [loading, setLoading] = useState(true);
+  const [clientInvoices, setClientInvoices] = useState<Invoice[]>([]);
+  const [eventCount, setEventCount] = useState(0);
+  const [clientType, setClientType] = useState<string>('individual');
   const [paymentData, setPaymentData] = useState({
     cardNumber: "",
     expiryDate: "",
@@ -31,10 +60,65 @@ export function FinancialManagement({ clientId }: FinancialManagementProps) {
     saveCard: false
   });
 
-  // Get client data
-  const client = mockClients.find(c => c.id === clientId);
-  const clientEvents = mockEvents.filter(event => event.clientId === clientId);
-  const clientInvoices = mockInvoices.filter(invoice => invoice.clientId === clientId);
+  // Fetch real data from API
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [rawInvoices, eventsRes] = await Promise.all([
+          invoiceService.getInvoices({ clientId }),
+          api.get('/events', { params: { clientId } }).catch(() => ({ data: [] })),
+        ]);
+
+        const evData = eventsRes.data;
+        const events = Array.isArray(evData) ? evData : (evData?.data || evData?.events || []);
+        setEventCount(events.length);
+
+        // Try to get client type
+        try {
+          const clientRes = await api.get(`/clients/${clientId}`);
+          setClientType(clientRes.data?.type || clientRes.data?.clientType || 'individual');
+        } catch {}
+
+        // Map API invoices to our Invoice shape
+        const mapped: Invoice[] = rawInvoices.map((inv: any) => {
+          const status = (inv.status || 'draft').toLowerCase();
+          const dueDate = inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : '';
+          const issueDate = inv.createdAt ? new Date(inv.createdAt).toLocaleDateString() : '';
+          const lineItems = (inv.lineItems || []).map((li: any) => ({
+            description: li.description || '',
+            quantity: li.quantity || 0,
+            rate: li.unitPrice || li.rate || 0,
+            hours: li.hours || 1,
+            amount: li.amount || 0,
+          }));
+          const subtotal = inv.subtotal || lineItems.reduce((s: number, li: any) => s + li.amount, 0);
+          const serviceFee = inv.taxAmount || 0;
+          return {
+            id: inv.id,
+            invoiceNumber: inv.invoiceNumber || inv.id.slice(0, 8),
+            clientId: inv.clientId || clientId,
+            eventId: inv.eventId || undefined,
+            eventTitle: inv.event?.title || 'Event',
+            issueDate,
+            dueDate,
+            amount: inv.amount || 0,
+            subtotal,
+            serviceFee,
+            tipAmount: inv.tipAmount || 0,
+            status: status === 'sent' ? 'pending' : status,
+            lineItems,
+            paymentDate: inv.paidDate ? new Date(inv.paidDate).toLocaleDateString() : undefined,
+            paymentMethod: inv.paymentMethod || undefined,
+          };
+        });
+        setClientInvoices(mapped);
+      } catch (err) {
+        console.log('Failed to load client financial data');
+      }
+      setLoading(false);
+    };
+    fetchData();
+  }, [clientId]);
 
   // Filter invoices
   const filteredInvoices = clientInvoices.filter(invoice => {
@@ -46,10 +130,18 @@ export function FinancialManagement({ clientId }: FinancialManagementProps) {
   const totalPending = clientInvoices.filter(inv => inv.status === 'pending').reduce((sum, inv) => sum + inv.amount, 0);
   const totalOverdue = clientInvoices.filter(inv => inv.status === 'overdue').reduce((sum, inv) => sum + inv.amount, 0);
   const totalSpent = totalPaid + totalPending + totalOverdue;
-  const averageEventCost = clientEvents.length > 0 ? totalSpent / clientEvents.length : 0;
+  const averageEventCost = eventCount > 0 ? totalSpent / eventCount : 0;
 
   // Corporate balance (for corporate clients)
-  const corporateBalance = client?.type === 'corporate' ? 2500 : 0;
+  const corporateBalance = clientType === 'corporate' ? 2500 : 0;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -207,7 +299,7 @@ export function FinancialManagement({ clientId }: FinancialManagementProps) {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">{formatCurrency(totalSpent)}</div>
-            <p className="text-xs opacity-80 mt-1">Across {clientEvents.length} events</p>
+            <p className="text-xs opacity-80 mt-1">Across {eventCount} events</p>
           </CardContent>
         </Card>
         
@@ -246,7 +338,7 @@ export function FinancialManagement({ clientId }: FinancialManagementProps) {
       </div>
 
       {/* Corporate Balance (if applicable) */}
-      {client?.type === 'corporate' && (
+      {clientType === 'corporate' && (
         <Card className="border-primary/20 bg-primary/5">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

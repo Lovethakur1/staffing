@@ -38,6 +38,7 @@ import {
 import { toast } from "sonner";
 import { useNavigation } from "../contexts/NavigationContext";
 import { financeService } from "../services/finance.service";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 
 interface StaffPayrollProps {
   userRole: string;
@@ -54,6 +55,7 @@ export function StaffPayroll({ userRole }: StaffPayrollProps) {
   const [pendingSubmissions, setPendingSubmissions] = useState<any[]>([]);
   const [payrollRuns, setPayrollRuns] = useState<any[]>([]);
   const [staffSummaries, setStaffSummaries] = useState<any[]>([]);
+  const [selectedRunItems, setSelectedRunItems] = useState<any[] | null>(null);
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -133,6 +135,15 @@ export function StaffPayroll({ userRole }: StaffPayrollProps) {
   const totalPendingHours = pendingSubmissions.reduce((s, sub) => s + sub.totalHours, 0);
   const totalPendingPay = pendingSubmissions.reduce((s, sub) => s + sub.estimatedPay, 0);
   const upcomingRun = payrollRuns.find(r => r.status === 'draft' || r.status === 'processing');
+
+  const handleViewRun = async (runId: string) => {
+    try {
+      const run = await financeService.getPayrollRun(runId);
+      setSelectedRunItems(run?.items || []);
+    } catch {
+      toast.error('Failed to load payroll run details');
+    }
+  };
   const upcomingPayrollAmount = upcomingRun?.totalAmount ?? 0;
 
   const handleReviewSubmission = (submissionId: string) => {
@@ -445,7 +456,7 @@ export function StaffPayroll({ userRole }: StaffPayrollProps) {
                       <TableCell>{getStatusBadge(run.status)}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <Button variant="ghost" size="sm" onClick={() => toast.info(`Viewing run ${run.id.slice(0,8)}`)}>
+                          <Button variant="ghost" size="sm" onClick={() => handleViewRun(run.id)}>
                             <Eye className="h-4 w-4" />
                           </Button>
                           <Button variant="ghost" size="sm" onClick={() => toast.success('Exporting payroll run')}>
@@ -537,6 +548,49 @@ export function StaffPayroll({ userRole }: StaffPayrollProps) {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Payroll Run Detail Dialog */}
+      <Dialog open={selectedRunItems !== null} onOpenChange={() => setSelectedRunItems(null)}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Payroll Run Details</DialogTitle>
+          </DialogHeader>
+          {selectedRunItems && selectedRunItems.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Staff</TableHead>
+                  <TableHead>Hours</TableHead>
+                  <TableHead>Rate</TableHead>
+                  <TableHead>Gross Pay</TableHead>
+                  <TableHead>Workers' Comp</TableHead>
+                  <TableHead>Equip. Deduction</TableHead>
+                  <TableHead>Net Pay</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {selectedRunItems.map((item: any) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="font-medium">{item.staffName}</TableCell>
+                    <TableCell>{(item.regularHours + item.additionalHours).toFixed(1)}h</TableCell>
+                    <TableCell>${item.hourlyRate?.toFixed(2)}</TableCell>
+                    <TableCell>${item.grossPay?.toFixed(2)}</TableCell>
+                    <TableCell className="text-orange-600">
+                      {item.workersCompDeduction > 0 ? `-$${item.workersCompDeduction.toFixed(2)}` : '—'}
+                    </TableCell>
+                    <TableCell className="text-red-600">
+                      {item.equipmentDeduction > 0 ? `-$${item.equipmentDeduction.toFixed(2)}` : '—'}
+                    </TableCell>
+                    <TableCell className="font-semibold text-green-600">${item.netPay?.toFixed(2)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <p className="text-muted-foreground text-center py-8">No items in this payroll run</p>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

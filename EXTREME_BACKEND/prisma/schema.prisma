@@ -532,6 +532,7 @@ model PayrollItem {
   tipsAmount           Float      @default(0)
   workersCompDeduction Float      @default(0)
   otherDeductions      Float      @default(0)
+  equipmentDeduction   Float      @default(0)
   grossPay             Float      @default(0)
   netPay               Float      @default(0)
   notes                String?

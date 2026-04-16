@@ -95,7 +95,15 @@ export function PaymentVerificationDetail({ userRole }: PaymentVerificationDetai
           submittedBy: inv.client?.name || inv.client?.user?.name || '',
           submittedDate: inv.paidDate || inv.updatedAt || inv.createdAt,
           submittedTime: new Date(inv.paidDate || inv.updatedAt || inv.createdAt).toLocaleTimeString(),
-          attachmentDetails: [],
+          attachmentDetails: inv.paymentProofUrl
+            ? [{
+                name: inv.paymentProofUrl.split('/').pop() || 'payment-proof',
+                type: /\.(png|jpg|jpeg|gif|webp)$/i.test(inv.paymentProofUrl) ? 'image' : 'pdf',
+                size: '',
+                url: inv.paymentProofUrl,
+                uploadDate: inv.paymentProofDate || inv.updatedAt || '',
+              }]
+            : [],
           status: inv.status === 'PAID' ? 'approved'
                : inv.status === 'CANCELLED' ? 'rejected'
                : 'pending',
@@ -650,24 +658,27 @@ export function PaymentVerificationDetail({ userRole }: PaymentVerificationDetai
             </DialogDescription>
           </DialogHeader>
           <div className="flex-1 overflow-auto">
-            {selectedDocument?.type.includes('image') ? (
-              <div className="flex items-center justify-center h-full bg-slate-100 rounded-lg">
-                <div className="text-center p-8">
-                  <ImageIcon className="h-20 w-20 mx-auto text-slate-400 mb-4" />
-                  <p className="text-muted-foreground">Image preview: {selectedDocument?.name}</p>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    In a real application, the image would be displayed here
-                  </p>
+            {selectedDocument?.url ? (
+              selectedDocument?.type?.includes('image') ? (
+                <div className="flex items-center justify-center h-full bg-slate-100 rounded-lg p-4">
+                  <img
+                    src={selectedDocument.url}
+                    alt={selectedDocument.name}
+                    className="max-w-full max-h-full object-contain rounded"
+                  />
                 </div>
-              </div>
+              ) : (
+                <iframe
+                  src={selectedDocument.url}
+                  title={selectedDocument.name}
+                  className="w-full h-full rounded-lg border"
+                />
+              )
             ) : (
               <div className="flex items-center justify-center h-full bg-slate-100 rounded-lg">
                 <div className="text-center p-8">
                   <FileText className="h-20 w-20 mx-auto text-slate-400 mb-4" />
-                  <p className="text-muted-foreground">PDF preview: {selectedDocument?.name}</p>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    In a real application, the PDF would be displayed here
-                  </p>
+                  <p className="text-muted-foreground">No document available</p>
                 </div>
               </div>
             )}

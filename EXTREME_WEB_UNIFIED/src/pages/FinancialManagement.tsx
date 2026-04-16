@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import api from "../services/api";
+import { financeService } from "../services/finance.service";
 
 interface FinancialManagementProps {
   userRole: string;
@@ -110,21 +111,42 @@ export function FinancialManagement({ userRole, userId }: FinancialManagementPro
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [eventsRes, invoicesRes] = await Promise.all([
+        const [eventsRes, invoicesRes, timesheets] = await Promise.all([
           api.get('/events'),
           api.get('/invoices').catch(() => ({ data: [] })),
+          financeService.getTimesheets({ take: 2000 }),
         ]);
         const ed = eventsRes.data;
         const rawEvents = Array.isArray(ed) ? ed : (ed?.data || ed?.events || []);
         const id = invoicesRes.data;
         const rawInvoices = Array.isArray(id) ? id : (id?.data || id?.invoices || []);
 
+        // Build staff cost per event from real timesheets
+        const staffCostByEvent: Record<string, number> = {};
+        for (const ts of timesheets) {
+          const eventId = ts.shift?.eventId || ts.shift?.event?.id;
+          if (!eventId) continue;
+          const pay = ts.grossPay || (ts.totalHours || 0) * (ts.shift?.hourlyRate || 0);
+          staffCostByEvent[eventId] = (staffCostByEvent[eventId] || 0) + pay;
+        }
+
+        // Build invoice totals per event
+        const invoicePaidByEvent: Record<string, number> = {};
+        for (const inv of rawInvoices) {
+          const eventId = inv.eventId;
+          if (!eventId) continue;
+          if ((inv.status || '').toUpperCase() === 'PAID') {
+            invoicePaidByEvent[eventId] = (invoicePaidByEvent[eventId] || 0) + (inv.amount || inv.totalAmount || 0);
+          }
+        }
+
         // Map events to financial records
         const financials: EventFinancial[] = rawEvents.map((e: any) => {
           const budget = e.budget || 0;
-          const staffCost = (e.shifts?.length || 0) * 200; // estimate
-          const deposit = Math.round(budget * 0.4);
-          const isPaid = e.status === 'completed';
+          const staffCost = staffCostByEvent[e.id] || 0;
+          const deposit = e.deposit || 0;
+          const paidAmount = invoicePaidByEvent[e.id] || 0;
+          const isPaid = e.status === 'completed' || paidAmount >= budget;
           return {
             id: e.id,
             eventName: e.title || e.eventName || 'Event',
@@ -133,13 +155,13 @@ export function FinancialManagement({ userRole, userId }: FinancialManagementPro
             venue: e.venue || e.location || '',
             totalCost: budget,
             deposit: deposit,
-            depositPaid: isPaid ? deposit : 0,
-            balance: isPaid ? 0 : budget,
+            depositPaid: isPaid || paidAmount > 0 ? deposit : 0,
+            balance: Math.max(0, budget - paidAmount),
             staffCost: staffCost,
             expenses: 0,
-            tips: 0,
+            tips: e.tips || 0,
             profit: budget - staffCost,
-            status: isPaid ? 'paid' as const : 'deposit-pending' as const,
+            status: isPaid ? 'paid' as const : deposit > 0 && paidAmount >= deposit ? 'deposit-paid' as const : 'deposit-pending' as const,
           };
         });
         setEventFinancials(financials);
