@@ -83,4 +83,46 @@ export const startCronJobs = () => {
   });
 
   console.log('[CRON] Registered auto-checkout sweep.');
+
+  // ── Auto-complete events whose date has passed ──────────────────
+  cron.schedule('0 * * * *', async () => {
+    console.log('[CRON] Checking for events to auto-complete...');
+    try {
+      const now = new Date();
+      // Find events that are PENDING/CONFIRMED/IN_PROGRESS and whose date is in the past
+      const pastEvents = await prisma.event.findMany({
+        where: {
+          status: { in: ['PENDING', 'CONFIRMED', 'IN_PROGRESS'] },
+          date: { lt: now },
+        },
+        include: {
+          shifts: { select: { id: true, status: true } },
+        },
+      });
+
+      for (const event of pastEvents) {
+        // For multi-day events, check endDate too
+        const eventEnd = (event as any).endDate || event.date;
+        // Add 24h buffer after the event date
+        const cutoff = new Date(new Date(eventEnd).getTime() + 24 * 60 * 60 * 1000);
+        if (now < cutoff) continue;
+
+        // Check all shifts are done (COMPLETED, CANCELLED, or NO_SHOW)
+        const hasActiveShifts = event.shifts.some(
+          (s: any) => !['COMPLETED', 'CANCELLED', 'NO_SHOW'].includes(s.status)
+        );
+        if (hasActiveShifts) continue;
+
+        await prisma.event.update({
+          where: { id: event.id },
+          data: { status: 'COMPLETED' },
+        });
+        console.log(`[CRON] Auto-completed event: ${event.title} (${event.id})`);
+      }
+    } catch (error) {
+      console.error('[CRON] Error during event auto-complete:', error);
+    }
+  });
+
+  console.log('[CRON] Registered event auto-complete check.');
 };
