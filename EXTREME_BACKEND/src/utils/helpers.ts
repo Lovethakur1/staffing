@@ -44,7 +44,13 @@ export const parsePagination = (query: any): { skip: number; take: number; page:
  * e.g. "2026-04-13" or "2026-04-13T18:30:00.000Z" both → 2026-04-13T00:00:00.000Z
  */
 export const toUTCMidnight = (d: string | Date): Date => {
-  const iso = new Date(d).toISOString().split('T')[0];
-  const [y, m, dy] = iso.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, dy));
+  const str = typeof d === 'string' ? d : d.toISOString();
+  // Extract YYYY-MM-DD directly from input string to avoid timezone shift
+  const match = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) {
+    return new Date(Date.UTC(+match[1], +match[2] - 1, +match[3]));
+  }
+  // Fallback: use UTC components
+  const date = new Date(d);
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 };
