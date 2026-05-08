@@ -124,6 +124,8 @@ export function CreateEvent({ userRole, userId }: CreateEventProps) {
   const [eventRequest, setEventRequest] = useState<EventRequest | null>(null);
   const [selectedStaff, setSelectedStaff] = useState<string[]>([]);
   const [onGroundManager, setOnGroundManager] = useState("");
+  const [managerName, setManagerName] = useState("");
+  const [managerMode, setManagerMode] = useState<"staff" | "custom">("staff");
   const [adminNotes, setAdminNotes] = useState("");
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
   const [createdEventId, setCreatedEventId] = useState("");
@@ -280,11 +282,6 @@ export function CreateEvent({ userRole, userId }: CreateEventProps) {
       toast.error("Please enter a venue");
       return;
     }
-    if (!onGroundManager) {
-      toast.error("Please assign an on-ground manager");
-      return;
-    }
-
     setIsSubmitting(true);
     try {
       const isMultiDay = manualForm.dateType === "multi";
@@ -305,7 +302,8 @@ export function CreateEvent({ userRole, userId }: CreateEventProps) {
         contactOnSite: manualForm.contactOnSite,
         contactOnSitePhone: manualForm.contactOnSitePhone,
         adminNotes,
-        managerId: onGroundManager,
+        ...(managerMode === "staff" && onGroundManager ? { managerId: onGroundManager } : {}),
+        ...(managerMode === "custom" && managerName.trim() ? { managerName: managerName.trim() } : {}),
         isMultiDay,
         ...(isMultiDay && manualForm.endDate && { endDate: manualForm.endDate }),
       };
@@ -326,15 +324,11 @@ export function CreateEvent({ userRole, userId }: CreateEventProps) {
       return;
     }
 
-    if (!onGroundManager) {
-      toast.error("Please assign an on-ground manager");
-      return;
-    }
-
     try {
       if (fromRequestId) {
         await eventService.updateEvent(fromRequestId, {
-          managerId: onGroundManager,
+          ...(managerMode === "staff" && onGroundManager ? { managerId: onGroundManager } : {}),
+          ...(managerMode === "custom" && managerName.trim() ? { managerName: managerName.trim() } : {}),
           status: 'CONFIRMED'
         });
         setCreatedEventId(fromRequestId);
@@ -861,23 +855,62 @@ export function CreateEvent({ userRole, userId }: CreateEventProps) {
                   <ShieldCheck className="h-5 w-5" />
                   On-Ground Manager
                 </CardTitle>
-                <CardDescription>Assign event manager (Required)</CardDescription>
+                <CardDescription>Assign an event manager (Optional)</CardDescription>
               </CardHeader>
-              <CardContent>
-                <Select value={onGroundManager} onValueChange={setOnGroundManager}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select manager..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                  {availableStaff
-                      .filter(s => s.role === "Manager" || s.role === "Event Coordinator" || s.role === "MANAGER")
-                      .map((manager) => (
-                        <SelectItem key={manager.id} value={manager.id}>
-                          {manager.name} - {manager.role}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
+              <CardContent className="space-y-3">
+                {/* Mode toggle */}
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="managerMode"
+                      value="staff"
+                      checked={managerMode === "staff"}
+                      onChange={() => setManagerMode("staff")}
+                      className="w-4 h-4 accent-[#5E1916]"
+                    />
+                    <span className="text-sm font-medium">Select from Staff</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="managerMode"
+                      value="custom"
+                      checked={managerMode === "custom"}
+                      onChange={() => setManagerMode("custom")}
+                      className="w-4 h-4 accent-[#5E1916]"
+                    />
+                    <span className="text-sm font-medium">External / Custom</span>
+                  </label>
+                </div>
+
+                {managerMode === "staff" ? (
+                  <Select value={onGroundManager} onValueChange={setOnGroundManager}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select manager (optional)..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableStaff.length === 0 ? (
+                        <SelectItem value="none" disabled>No staff loaded</SelectItem>
+                      ) : (
+                        availableStaff.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            {s.name} — {s.role}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    placeholder="e.g. John Smith (Client), Jane Doe (External)"
+                    value={managerName}
+                    onChange={e => setManagerName(e.target.value)}
+                  />
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Leave blank if the client or an external party manages on-site.
+                </p>
               </CardContent>
             </Card>
 
@@ -1638,23 +1671,62 @@ export function CreateEvent({ userRole, userId }: CreateEventProps) {
                 <ShieldCheck className="h-5 w-5" />
                 On-Ground Manager
               </CardTitle>
-              <CardDescription>Assign event manager (Required)</CardDescription>
+              <CardDescription>Assign an event manager (Optional)</CardDescription>
             </CardHeader>
-            <CardContent>
-              <Select value={onGroundManager} onValueChange={setOnGroundManager}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select manager..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableStaff
-                    .filter(s => s.role === "Manager" || s.role === "Event Coordinator" || s.role === "MANAGER")
-                    .map((manager) => (
-                      <SelectItem key={manager.id} value={manager.id}>
-                        {manager.name} - {manager.role}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
+            <CardContent className="space-y-3">
+              {/* Mode toggle */}
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="managerMode"
+                    value="staff"
+                    checked={managerMode === "staff"}
+                    onChange={() => setManagerMode("staff")}
+                    className="w-4 h-4 accent-[#5E1916]"
+                  />
+                  <span className="text-sm font-medium">Select from Staff</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="managerMode"
+                    value="custom"
+                    checked={managerMode === "custom"}
+                    onChange={() => setManagerMode("custom")}
+                    className="w-4 h-4 accent-[#5E1916]"
+                  />
+                  <span className="text-sm font-medium">External / Custom</span>
+                </label>
+              </div>
+
+              {managerMode === "staff" ? (
+                <Select value={onGroundManager} onValueChange={setOnGroundManager}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select manager (optional)..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableStaff.length === 0 ? (
+                      <SelectItem value="none" disabled>No staff loaded</SelectItem>
+                    ) : (
+                      availableStaff.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name} — {s.role}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  placeholder="e.g. John Smith (Client), Jane Doe (External)"
+                  value={managerName}
+                  onChange={e => setManagerName(e.target.value)}
+                />
+              )}
+              <p className="text-xs text-muted-foreground">
+                Leave blank if the client or an external party manages on-site.
+              </p>
             </CardContent>
           </Card>
 

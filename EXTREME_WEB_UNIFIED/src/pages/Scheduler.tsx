@@ -730,7 +730,12 @@ export function Scheduler({ userRole, userId }: SchedulerProps) {
                 // Filter out staff on leave for the event date
                 if (selectedEvent?.rawEvent?.date && allUnavailability.length > 0) {
                   const eventDate = new Date(selectedEvent.rawEvent.date);
-                  const unavailableStaffIds = unavailabilityService.getUnavailableStaffIds(allUnavailability, eventDate);
+                  const unavailableStaffIds = unavailabilityService.getUnavailableStaffIds(
+                    allUnavailability,
+                    eventDate,
+                    selectedEvent.rawEvent.startTime,
+                    selectedEvent.rawEvent.endTime
+                  );
                   
                   // Check both staff ID and raw staff profile ID
                   const staffProfileId = s.rawStaff?.id || s.rawStaff?.staffProfile?.id;

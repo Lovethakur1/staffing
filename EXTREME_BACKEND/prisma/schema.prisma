@@ -211,8 +211,9 @@ model Event {
   id        String        @id @default(uuid())
   clientId  String
   client    ClientProfile @relation("ClientEvents", fields: [clientId], references: [id])
-  managerId String?
-  manager   User?         @relation("EventManager", fields: [managerId], references: [id])
+  managerId   String?
+  manager     User?         @relation("EventManager", fields: [managerId], references: [id])
+  managerName String?       // Free-text name for external/non-staff managers
 
   title               String
   description         String

@@ -28,6 +28,8 @@ export interface EventPayload {
     isMultiDay?: boolean;
     endDate?: string;
     eventDates?: Array<{ date: string; startTime: string; endTime: string }>;
+    managerId?: string;
+    managerName?: string;
 }
 
 export const eventService = {

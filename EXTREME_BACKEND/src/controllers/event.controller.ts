@@ -146,7 +146,7 @@ export const createEvent = asyncHandler(async (req: AuthRequest, res: Response) 
     staffRequired, guestCount, budget, deposit, tips, specialRequirements,
     dressCode, contactOnSite, contactOnSitePhone,
     staffCosts, travelFee, platformFee, additionalFees, adminNotes,
-    isMultiDay, endDate, eventDates,
+    isMultiDay, endDate, eventDates, managerId, managerName,
   } = req.body;
 
   let finalClientId = clientId;
@@ -179,7 +179,8 @@ export const createEvent = asyncHandler(async (req: AuthRequest, res: Response) 
   const event = await prisma.event.create({
     data: {
       clientId: finalClientId,
-      managerId: req.user?.role === 'MANAGER' ? req.user.userId : undefined,
+      managerId: req.user?.role === 'MANAGER' ? req.user.userId : (managerId || undefined),
+      managerName: managerName || undefined,
       title,
       description: description || '',
       eventType,
@@ -276,7 +277,7 @@ export const updateEvent = asyncHandler(async (req: Request, res: Response) => {
   const {
     title, description, eventType, venue, date, startTime, endTime,
     location, locationLat, locationLng, status, staffRequired, guestCount,
-    budget, deposit, tips, specialRequirements, managerId,
+    budget, deposit, tips, specialRequirements, managerId, managerName,
     dressCode, contactOnSite, contactOnSitePhone,
     staffCosts, travelFee, platformFee, additionalFees, adminNotes,
     isMultiDay, endDate, eventDates,
@@ -336,6 +337,7 @@ export const updateEvent = asyncHandler(async (req: Request, res: Response) => {
       ...(tips !== undefined && { tips }),
       ...(specialRequirements !== undefined && { specialRequirements }),
       ...(managerId !== undefined && { managerId }),
+      ...(managerName !== undefined && { managerName }),
       ...(dressCode !== undefined && { dressCode }),
       ...(contactOnSite !== undefined && { contactOnSite }),
       ...(contactOnSitePhone !== undefined && { contactOnSitePhone }),

@@ -16,6 +16,12 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const DATE_KEY_RE = /^(\d{4})-(\d{2})-(\d{2})/;
+const TIME_KEY_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+const DEFAULT_START_TIME = '09:00';
+const DEFAULT_END_TIME = '17:00';
+
+type UnavailabilityMode = 'full-day' | 'timeframe';
 
 interface UnavailabilityItem {
   id: string;
@@ -24,6 +30,53 @@ interface UnavailabilityItem {
   startTime?: string;
   endTime?: string;
   reason?: string;
+}
+
+function pad2(n: number): string {
+  return n.toString().padStart(2, '0');
+}
+
+function makeDateKey(year: number, zeroBasedMonth: number, day: number): string {
+  return `${year}-${pad2(zeroBasedMonth + 1)}-${pad2(day)}`;
+}
+
+function toDateKey(value: string | Date): string {
+  if (value instanceof Date) {
+    return makeDateKey(value.getFullYear(), value.getMonth(), value.getDate());
+  }
+
+  const match = DATE_KEY_RE.exec(value);
+  if (match) return match[0];
+
+  const parsed = new Date(value);
+  if (!Number.isNaN(parsed.getTime())) {
+    return makeDateKey(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+  }
+
+  return value;
+}
+
+function makeUnavailabilityForm(dateKey = '') {
+  return {
+    startDate: dateKey,
+    endDate: dateKey,
+    startTime: DEFAULT_START_TIME,
+    endTime: DEFAULT_END_TIME,
+    reason: '',
+  };
+}
+
+function isFullDayUnavailability(item: UnavailabilityItem): boolean {
+  const startTime = (item.startTime || '').trim();
+  const endTime = (item.endTime || '').trim();
+  return !startTime || !endTime || (startTime === '00:00' && (endTime === '23:59' || endTime === '24:00'));
+}
+
+function getUnavailabilityLabel(items: UnavailabilityItem[]): string {
+  if (items.length > 1) return `${items.length} blocks`;
+  const item = items[0];
+  if (!item || isFullDayUnavailability(item)) return 'All day';
+  return `${item.startTime || ''}-${item.endTime || ''}`;
 }
 
 export default function MyShiftsScreen() {
@@ -42,9 +95,8 @@ export default function MyShiftsScreen() {
 
   // Unavailability modal
   const [showUnavailModal, setShowUnavailModal] = useState(false);
-  const [unavailForm, setUnavailForm] = useState({
-    startDate: '', endDate: '', startTime: '09:00 AM', endTime: '05:00 PM', reason: '',
-  });
+  const [unavailMode, setUnavailMode] = useState<UnavailabilityMode>('full-day');
+  const [unavailForm, setUnavailForm] = useState(makeUnavailabilityForm());
 
   const fetchData = useCallback(async () => {
     try {
@@ -78,10 +130,9 @@ export default function MyShiftsScreen() {
   const totalEarnings = completed.reduce((sum, s) => sum + (s.totalPay || 0), 0);
 
   const upcomingShifts = shifts.filter(s => {
-    const d = new Date(s.date);
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-    return d >= now && !['COMPLETED', 'REJECTED'].includes(s.status);
+    const shiftDate = toDateKey(s.date);
+    const todayKey = toDateKey(new Date());
+    return shiftDate >= todayKey && !['COMPLETED', 'REJECTED'].includes(s.status);
   });
 
   // Group multi-day event shifts: group by eventId, keep the earliest shift as representative
@@ -94,9 +145,9 @@ export default function MyShiftsScreen() {
     }
     // Sort each group by date, return as array of groups
     return Array.from(groups.values()).map(group => {
-      group.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      group.sort((a, b) => toDateKey(a.date).localeCompare(toDateKey(b.date)));
       return group;
-    }).sort((a, b) => new Date(a[0].date).getTime() - new Date(b[0].date).getTime());
+    }).sort((a, b) => toDateKey(a[0].date).localeCompare(toDateKey(b[0].date)));
   })();
 
   const today = new Date();
@@ -127,50 +178,42 @@ export default function MyShiftsScreen() {
   const goToday = () => setCurrentMonth(new Date());
 
   function getShiftsForDay(day: number): Shift[] {
+    const targetDateKey = makeDateKey(year, month, day);
     return shifts.filter(sh => {
-      const sd = new Date(sh.date);
-      return sd.getUTCDate() === day && sd.getUTCMonth() === month && sd.getUTCFullYear() === year;
+      return toDateKey(sh.date) === targetDateKey;
     });
   }
 
   function getUnavailabilitiesForDay(day: number): UnavailabilityItem[] {
-    const targetDate = new Date(year, month, day);
-    targetDate.setHours(0, 0, 0, 0);
+    const targetDateKey = makeDateKey(year, month, day);
 
     return unavailabilities.filter(u => {
-      const s = new Date(u.startDate);
-      s.setHours(0, 0, 0, 0);
-      const e = new Date(u.endDate);
-      e.setHours(0, 0, 0, 0);
-      return targetDate >= s && targetDate <= e;
+      const startKey = toDateKey(u.startDate);
+      const endKey = toDateKey(u.endDate);
+      return targetDateKey >= startKey && targetDateKey <= endKey;
     });
   }
 
-  async function handleDayPress(day: number) {
+  function openUnavailabilityModal(dateKey: string, mode: UnavailabilityMode = 'full-day') {
+    setUnavailMode(mode);
+    setUnavailForm(makeUnavailabilityForm(dateKey));
+    setShowUnavailModal(true);
+  }
+
+  function handleDayPress(day: number) {
     if (subTab !== 'unavailability' || saving || deletingId) return;
 
     const unavailForItem = getUnavailabilitiesForDay(day);
     if (unavailForItem.length > 0) {
-      handleDeleteUnavailability(unavailForItem[0].id);
-    } else {
-      const pad = (n: number) => n.toString().padStart(2, '0');
-      const dateStr = `${year}-${pad(month + 1)}-${pad(day)}`;
-      try {
-        setSaving(true);
-        await api.post('/unavailability', {
-          startDate: dateStr,
-          endDate: dateStr,
-          startTime: '00:00',
-          endTime: '23:59',
-          reason: 'Unavailable (Calendar)',
-        });
-        fetchData();
-      } catch (err: any) {
-        Alert.alert('Error', err?.response?.data?.error || 'Failed to set unavailability');
-      } finally {
-        setSaving(false);
-      }
+      Alert.alert('Unavailability set', 'This date already has unavailability.', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Add Timeframe', onPress: () => openUnavailabilityModal(makeDateKey(year, month, day), 'timeframe') },
+        { text: 'Remove', style: 'destructive', onPress: () => deleteUnavailability(unavailForItem[0].id) },
+      ]);
+      return;
     }
+
+    openUnavailabilityModal(makeDateKey(year, month, day));
   }
 
   async function handleSaveUnavailability() {
@@ -178,17 +221,39 @@ export default function MyShiftsScreen() {
       Alert.alert('Error', 'Please enter start and end dates');
       return;
     }
+    if (!DATE_KEY_RE.test(unavailForm.startDate) || !DATE_KEY_RE.test(unavailForm.endDate)) {
+      Alert.alert('Error', 'Please use yyyy-mm-dd for dates');
+      return;
+    }
+    if (unavailForm.endDate < unavailForm.startDate) {
+      Alert.alert('Error', 'End date cannot be before start date');
+      return;
+    }
+
+    const startTime = unavailMode === 'full-day' ? '00:00' : unavailForm.startTime.trim();
+    const endTime = unavailMode === 'full-day' ? '23:59' : unavailForm.endTime.trim();
+
+    if (unavailMode === 'timeframe' && (!TIME_KEY_RE.test(startTime) || !TIME_KEY_RE.test(endTime))) {
+      Alert.alert('Error', 'Please use 24-hour HH:MM time, for example 09:00 or 17:30');
+      return;
+    }
+    if (unavailMode === 'timeframe' && unavailForm.startDate === unavailForm.endDate && endTime <= startTime) {
+      Alert.alert('Error', 'End time must be after start time');
+      return;
+    }
+
     try {
       setSaving(true);
       await api.post('/unavailability', {
         startDate: unavailForm.startDate,
         endDate: unavailForm.endDate,
-        startTime: unavailForm.startTime,
-        endTime: unavailForm.endTime,
+        startTime,
+        endTime,
         reason: unavailForm.reason || undefined,
       });
       setShowUnavailModal(false);
-      setUnavailForm({ startDate: '', endDate: '', startTime: '09:00 AM', endTime: '05:00 PM', reason: '' });
+      setUnavailMode('full-day');
+      setUnavailForm(makeUnavailabilityForm());
       fetchData();
       Alert.alert('Success', 'Unavailability saved');
     } catch (err: any) {
@@ -198,23 +263,16 @@ export default function MyShiftsScreen() {
     }
   }
 
-  async function handleDeleteUnavailability(id: string) {
-    Alert.alert('Delete', 'Remove this unavailability?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete', style: 'destructive', onPress: async () => {
-          try {
-            setDeletingId(id);
-            await api.delete(`/unavailability/${id}`);
-            fetchData();
-          } catch (err) {
-            Alert.alert('Error', 'Failed to delete');
-          } finally {
-            setDeletingId(null);
-          }
-        },
-      },
-    ]);
+  async function deleteUnavailability(id: string) {
+    try {
+      setDeletingId(id);
+      await api.delete(`/unavailability/${id}`);
+      fetchData();
+    } catch (err) {
+      Alert.alert('Error', 'Failed to delete');
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   if (loading) {
@@ -315,6 +373,12 @@ export default function MyShiftsScreen() {
                 <Text style={st.calLoadingText}>{saving ? 'Saving...' : 'Removing...'}</Text>
               </View>
             )}
+            {subTab === 'unavailability' && !saving && !deletingId && (
+              <TouchableOpacity style={st.addBtn} onPress={() => openUnavailabilityModal(toDateKey(new Date()), 'timeframe')}>
+                <Ionicons name="add" size={16} color="#fff" />
+                <Text style={st.addBtnText}>Add</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           <View style={st.calControls}>
@@ -379,7 +443,7 @@ export default function MyShiftsScreen() {
                       <Text style={st.calMoreText}>+{dayShifts.length - 1} more</Text>
                     )}
                     {isUnavailable && subTab === 'unavailability' && (
-                      <Text style={st.unavailIndicator}>⛔ Leave</Text>
+                      <Text style={st.unavailIndicator}>{getUnavailabilityLabel(dayUnavail)}</Text>
                     )}
                   </TouchableOpacity>
                 );
@@ -441,27 +505,45 @@ export default function MyShiftsScreen() {
             </View>
             <Text style={st.modalSubtitle}>Mark the dates and times you are not available for shifts</Text>
 
+            <Text style={st.formLabel}>Type</Text>
+            <View style={st.modeToggle}>
+              <TouchableOpacity
+                style={[st.modeButton, unavailMode === 'full-day' && st.modeButtonActive]}
+                onPress={() => setUnavailMode('full-day')}
+              >
+                <Text style={[st.modeButtonText, unavailMode === 'full-day' && st.modeButtonTextActive]}>Full day</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[st.modeButton, unavailMode === 'timeframe' && st.modeButtonActive]}
+                onPress={() => setUnavailMode('timeframe')}
+              >
+                <Text style={[st.modeButtonText, unavailMode === 'timeframe' && st.modeButtonTextActive]}>Timeframe</Text>
+              </TouchableOpacity>
+            </View>
+
             <View style={st.formRow}>
               <View style={st.formCol}>
                 <Text style={st.formLabel}>Start Date</Text>
                 <TextInput
                   style={st.formInput}
-                  placeholder="mm/dd/yyyy"
+                  placeholder="yyyy-mm-dd"
                   placeholderTextColor={Colors.textMuted}
                   value={unavailForm.startDate}
                   onChangeText={v => setUnavailForm(f => ({ ...f, startDate: v }))}
                 />
               </View>
-              <View style={st.formCol}>
-                <Text style={st.formLabel}>Start Time</Text>
-                <TextInput
-                  style={st.formInput}
-                  placeholder="09:00 AM"
-                  placeholderTextColor={Colors.textMuted}
-                  value={unavailForm.startTime}
-                  onChangeText={v => setUnavailForm(f => ({ ...f, startTime: v }))}
-                />
-              </View>
+              {unavailMode === 'timeframe' && (
+                <View style={st.formCol}>
+                  <Text style={st.formLabel}>Start Time</Text>
+                  <TextInput
+                    style={st.formInput}
+                    placeholder="09:00"
+                    placeholderTextColor={Colors.textMuted}
+                    value={unavailForm.startTime}
+                    onChangeText={v => setUnavailForm(f => ({ ...f, startTime: v }))}
+                  />
+                </View>
+              )}
             </View>
 
             <View style={st.formRow}>
@@ -469,23 +551,31 @@ export default function MyShiftsScreen() {
                 <Text style={st.formLabel}>End Date</Text>
                 <TextInput
                   style={st.formInput}
-                  placeholder="mm/dd/yyyy"
+                  placeholder="yyyy-mm-dd"
                   placeholderTextColor={Colors.textMuted}
                   value={unavailForm.endDate}
                   onChangeText={v => setUnavailForm(f => ({ ...f, endDate: v }))}
                 />
               </View>
-              <View style={st.formCol}>
-                <Text style={st.formLabel}>End Time</Text>
-                <TextInput
-                  style={st.formInput}
-                  placeholder="05:00 PM"
-                  placeholderTextColor={Colors.textMuted}
-                  value={unavailForm.endTime}
-                  onChangeText={v => setUnavailForm(f => ({ ...f, endTime: v }))}
-                />
-              </View>
+              {unavailMode === 'timeframe' && (
+                <View style={st.formCol}>
+                  <Text style={st.formLabel}>End Time</Text>
+                  <TextInput
+                    style={st.formInput}
+                    placeholder="17:00"
+                    placeholderTextColor={Colors.textMuted}
+                    value={unavailForm.endTime}
+                    onChangeText={v => setUnavailForm(f => ({ ...f, endTime: v }))}
+                  />
+                </View>
+              )}
             </View>
+
+            {unavailMode === 'full-day' ? (
+              <Text style={st.helperText}>This will mark the entire selected date range unavailable.</Text>
+            ) : (
+              <Text style={st.helperText}>Use 24-hour time, for example 09:00 to 17:30.</Text>
+            )}
 
             <Text style={st.formLabel}>Reason (Optional)</Text>
             <TextInput
@@ -576,10 +666,16 @@ const st = StyleSheet.create({
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
   modalTitle: { fontSize: 18, fontWeight: '700', color: Colors.textPrimary },
   modalSubtitle: { fontSize: 12, color: Colors.primary, marginBottom: 16 },
+  modeToggle: { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  modeButton: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 8, borderWidth: 1, borderColor: '#E2E8F0', backgroundColor: '#fff' },
+  modeButtonActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  modeButtonText: { fontSize: 13, fontWeight: '700', color: Colors.textSecondary },
+  modeButtonTextActive: { color: '#fff' },
   formRow: { flexDirection: 'row', gap: 12, marginBottom: 12 },
   formCol: { flex: 1 },
   formLabel: { fontSize: 13, fontWeight: '600', color: Colors.textPrimary, marginBottom: 4 },
   formInput: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: Colors.textPrimary, backgroundColor: '#fff' },
+  helperText: { fontSize: 12, color: Colors.textSecondary, marginTop: -4, marginBottom: 12 },
   saveBtn: { backgroundColor: Colors.primary, borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginTop: 16 },
   saveBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
   cancelBtn: { paddingVertical: 12, alignItems: 'center', marginTop: 8, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10 },

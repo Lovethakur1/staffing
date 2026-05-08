@@ -25,6 +25,7 @@ import {
 import { toast } from "sonner";
 import { useNavigation } from "../contexts/NavigationContext";
 import { shiftService } from "../services/shift.service";
+import { unavailabilityService, UnavailabilityRecord } from "../services/unavailability.service";
 
 interface ShiftsScheduleProps {
   userRole: string;
@@ -35,9 +36,9 @@ export interface Unavailability {
   id: string;
   startDate: string;
   endDate: string;
-  startTime: string;
-  endTime: string;
-  reason: string;
+  startTime?: string;
+  endTime?: string;
+  reason?: string;
 }
 
 export interface Shift {
@@ -72,8 +73,9 @@ export function ShiftsSchedule({ userRole, userId }: ShiftsScheduleProps) {
     reason: ''
   });
 
-  // Unavailability starts empty (set by user in-session; backend endpoint can be added later)
+  // Staff unavailability is persisted through the shared backend endpoint.
   const [unavailability, setUnavailability] = useState<Unavailability[]>([]);
+  const [savingUnavailability, setSavingUnavailability] = useState(false);
 
   // Live shifts from API
   const [shifts, setShifts] = useState<Shift[]>([]);
@@ -142,6 +144,15 @@ export function ShiftsSchedule({ userRole, userId }: ShiftsScheduleProps) {
 
   const roleConfig = getRoleConfig();
 
+  const mapUnavailabilityRecord = (record: UnavailabilityRecord): Unavailability => ({
+    id: record.id,
+    startDate: unavailabilityService.normalizeDate(record.startDate),
+    endDate: unavailabilityService.normalizeDate(record.endDate),
+    startTime: record.startTime || '00:00',
+    endTime: record.endTime || '23:59',
+    reason: record.reason || 'Unavailable',
+  });
+
   useEffect(() => {
     const fetchShifts = async () => {
       try {
@@ -162,7 +173,7 @@ export function ShiftsSchedule({ userRole, userId }: ShiftsScheduleProps) {
             client: ev.client?.name || ev.clientId || '',
             clientPhone: ev.client?.phone || '',
             clientEmail: ev.client?.email || '',
-            date: s.date ? new Date(s.date).toISOString().split('T')[0] : (ev.date ? new Date(ev.date).toISOString().split('T')[0] : ''),
+            date: s.date ? unavailabilityService.normalizeDate(s.date) : (ev.date ? unavailabilityService.normalizeDate(ev.date) : ''),
             startTime,
             endTime,
             location: ev.venue || ev.location || '',
@@ -185,6 +196,21 @@ export function ShiftsSchedule({ userRole, userId }: ShiftsScheduleProps) {
     };
     fetchShifts();
   }, [userId]);
+
+  useEffect(() => {
+    if (!roleConfig.showUnavailability) return;
+
+    const fetchUnavailability = async () => {
+      try {
+        const records = await unavailabilityService.getMyUnavailability();
+        setUnavailability(records.map(mapUnavailabilityRecord));
+      } catch {
+        toast.error('Failed to load unavailability');
+      }
+    };
+
+    fetchUnavailability();
+  }, [roleConfig.showUnavailability, userId]);
 
   // Calculate monthly statistics
   const monthlyStats = useMemo(() => {
@@ -210,7 +236,7 @@ export function ShiftsSchedule({ userRole, userId }: ShiftsScheduleProps) {
     };
   }, [shifts, selectedMonth]);
 
-  const handleAddUnavailability = () => {
+  const handleAddUnavailability = async () => {
     if (!newUnavailability.startDate || !newUnavailability.endDate || !newUnavailability.startTime || !newUnavailability.endTime) {
       toast.error("Please fill in all date and time fields");
       return;
@@ -224,25 +250,31 @@ export function ShiftsSchedule({ userRole, userId }: ShiftsScheduleProps) {
       return;
     }
 
-    const entry: Unavailability = {
-      id: `un-${Date.now()}`,
-      startDate: newUnavailability.startDate!,
-      endDate: newUnavailability.endDate!,
-      startTime: newUnavailability.startTime!,
-      endTime: newUnavailability.endTime!,
-      reason: newUnavailability.reason || 'Unavailable'
-    };
+    try {
+      setSavingUnavailability(true);
+      const created = await unavailabilityService.createUnavailability({
+        startDate: newUnavailability.startDate!,
+        endDate: newUnavailability.endDate!,
+        startTime: newUnavailability.startTime!,
+        endTime: newUnavailability.endTime!,
+        reason: newUnavailability.reason || 'Unavailable',
+      });
 
-    setUnavailability([...unavailability, entry]);
-    setIsUnavailabilityDialogOpen(false);
-    setNewUnavailability({
-      startDate: '',
-      endDate: '',
-      startTime: '09:00',
-      endTime: '17:00',
-      reason: ''
-    });
-    toast.success("Unavailability added successfully");
+      setUnavailability([...unavailability, mapUnavailabilityRecord(created)]);
+      setIsUnavailabilityDialogOpen(false);
+      setNewUnavailability({
+        startDate: '',
+        endDate: '',
+        startTime: '09:00',
+        endTime: '17:00',
+        reason: ''
+      });
+      toast.success("Unavailability added successfully");
+    } catch {
+      toast.error("Failed to add unavailability");
+    } finally {
+      setSavingUnavailability(false);
+    }
   };
 
   if (shiftsLoading) {
@@ -336,7 +368,9 @@ export function ShiftsSchedule({ userRole, userId }: ShiftsScheduleProps) {
                 </div>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setIsUnavailabilityDialogOpen(false)}>Cancel</Button>
-                  <Button onClick={handleAddUnavailability}>Save Unavailability</Button>
+                  <Button onClick={handleAddUnavailability} disabled={savingUnavailability}>
+                    {savingUnavailability ? 'Saving...' : 'Save Unavailability'}
+                  </Button>
                 </DialogFooter>
               </DialogContent>
             </Dialog>

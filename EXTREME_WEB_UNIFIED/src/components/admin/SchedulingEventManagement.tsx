@@ -176,7 +176,12 @@ export function SchedulingEventManagement() {
     // Filter out staff on leave for the selected event date
     if (selectedEvent?.date && staffUnavailability.length > 0) {
       const eventDate = new Date(selectedEvent.date);
-      const unavailableStaffIds = unavailabilityService.getUnavailableStaffIds(staffUnavailability, eventDate);
+      const unavailableStaffIds = unavailabilityService.getUnavailableStaffIds(
+        staffUnavailability,
+        eventDate,
+        selectedEvent.startTime,
+        selectedEvent.endTime
+      );
       
       filtered = filtered.filter((staff: any) => {
         const staffId = staff.user?.id || staff.userId;

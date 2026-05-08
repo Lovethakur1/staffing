@@ -27,9 +27,9 @@ interface Unavailability {
   id: string;
   startDate: string;
   endDate: string;
-  startTime: string;
-  endTime: string;
-  reason: string;
+  startTime?: string;
+  endTime?: string;
+  reason?: string;
 }
 
 interface Shift {
@@ -56,6 +56,26 @@ interface CalendarGridViewProps {
   shifts: Shift[];
   unavailability?: Unavailability[];
 }
+
+const DATE_KEY_RE = /^(\d{4})-(\d{2})-(\d{2})/;
+
+const toDateKey = (value: Date | string): string => {
+  if (value instanceof Date) {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, '0');
+    const day = String(value.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  const match = DATE_KEY_RE.exec(value);
+  if (match) return match[0];
+
+  const parsed = new Date(value);
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, '0');
+  const day = String(parsed.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 export function CalendarGridView({ shifts, unavailability = [] }: CalendarGridViewProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -111,8 +131,8 @@ export function CalendarGridView({ shifts, unavailability = [] }: CalendarGridVi
 
   // Get shifts for a specific date
   const getShiftsForDate = (date: Date): Shift[] => {
-    const dateStr = date.toISOString().split('T')[0];
-    let filteredShifts = shifts.filter(shift => shift.date === dateStr);
+    const dateStr = toDateKey(date);
+    let filteredShifts = shifts.filter(shift => toDateKey(shift.date) === dateStr);
     
     if (searchQuery) {
       filteredShifts = filteredShifts.filter(shift => 
@@ -128,15 +148,12 @@ export function CalendarGridView({ shifts, unavailability = [] }: CalendarGridVi
 
   // Get unavailability for a specific date
   const getUnavailabilityForDate = (date: Date): Unavailability[] => {
-    const dayStart = new Date(date);
-    dayStart.setHours(0, 0, 0, 0);
-    const dayEnd = new Date(date);
-    dayEnd.setHours(23, 59, 59, 999);
+    const dateStr = toDateKey(date);
 
     return unavailability.filter(u => {
-      const start = new Date(`${u.startDate}T${u.startTime}`);
-      const end = new Date(`${u.endDate}T${u.endTime}`);
-      return start <= dayEnd && end >= dayStart;
+      const startDate = toDateKey(u.startDate);
+      const endDate = toDateKey(u.endDate);
+      return dateStr >= startDate && dateStr <= endDate;
     });
   };
 
@@ -390,18 +407,19 @@ export function CalendarGridView({ shifts, unavailability = [] }: CalendarGridVi
 
                       {/* Unavailability Blocks */}
                       {dayUnavailability.map((u) => {
-                        const start = new Date(`${u.startDate}T${u.startTime}`);
-                        const end = new Date(`${u.endDate}T${u.endTime}`);
-                        const isStartDay = day.date.toDateString() === new Date(u.startDate).toDateString();
-                        const isEndDay = day.date.toDateString() === new Date(u.endDate).toDateString();
+                        const dayKey = toDateKey(day.date);
+                        const isStartDay = dayKey === toDateKey(u.startDate);
+                        const isEndDay = dayKey === toDateKey(u.endDate);
+                        const startLabel = u.startTime || '00:00';
+                        const endLabel = u.endTime || '23:59';
                         
                         let timeLabel = "Unavailable";
                         if (isStartDay && isEndDay) {
-                           timeLabel = `${u.startTime} - ${u.endTime}`;
+                           timeLabel = startLabel === '00:00' && endLabel === '23:59' ? 'All day' : `${startLabel} - ${endLabel}`;
                         } else if (isStartDay) {
-                           timeLabel = `From ${u.startTime}`;
+                           timeLabel = `From ${startLabel}`;
                         } else if (isEndDay) {
-                           timeLabel = `Until ${u.endTime}`;
+                           timeLabel = `Until ${endLabel}`;
                         }
 
                         return (

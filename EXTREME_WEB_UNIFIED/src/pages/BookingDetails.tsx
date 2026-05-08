@@ -627,7 +627,12 @@ export function BookingDetails({ userRole, userId }: BookingDetailsProps) {
               // Exclude staff on leave for the event date
               if (booking?.date && staffUnavailability.length > 0) {
                 const eventDate = new Date(booking.date);
-                const unavailableStaffIds = unavailabilityService.getUnavailableStaffIds(staffUnavailability, eventDate);
+                const unavailableStaffIds = unavailabilityService.getUnavailableStaffIds(
+                  staffUnavailability,
+                  eventDate,
+                  booking.startTime,
+                  booking.endTime
+                );
                 if (unavailableStaffIds.has(staffId) || unavailableStaffIds.has(staffProfileId)) {
                   return false;
                 }
