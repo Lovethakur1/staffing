@@ -517,11 +517,15 @@ export const geocodeEvent = asyncHandler(async (req: Request, res: Response) => 
   });
   if (!ev) { res.status(404).json({ error: 'Event not found' }); return; }
 
-  const addressStr = [ev.location, ev.venue].filter(Boolean).join(', ');
+  // Prefer address from request body (current form values) over stale DB values
+  const location = (req.body?.address ?? ev.location) as string | null;
+  const venue = (req.body?.venue ?? ev.venue) as string | null;
+
+  const addressStr = [location, venue].filter(Boolean).join(', ');
   if (!addressStr) { res.status(400).json({ error: 'No address to geocode' }); return; }
 
   const geo = await geocodeAddress(addressStr);
-  if (!geo) { res.status(422).json({ error: 'Could not geocode address: ' + addressStr }); return; }
+  if (!geo) { res.status(422).json({ error: 'Could not find coordinates for: ' + addressStr }); return; }
 
   const updated = await prisma.event.update({
     where: { id: ev.id },

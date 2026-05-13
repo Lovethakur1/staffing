@@ -1565,30 +1565,40 @@ export function AdminEventDetail({ userRole = 'admin' }: AdminEventDetailProps) 
             </div>
             <div className="sm:col-span-2">
               <Label htmlFor="edit-location">Full Address</Label>
-              <Input id="edit-location" placeholder="e.g. 123 Main St, City, State, ZIP" value={editForm.location} onChange={e => setEditForm(f => ({ ...f, location: e.target.value }))} />
-            </div>
-            <div>
-              <Label htmlFor="edit-lat">Latitude</Label>
-              <Input id="edit-lat" type="number" step="any" placeholder="e.g. 28.4744" value={editForm.locationLat} onChange={e => setEditForm(f => ({ ...f, locationLat: e.target.value }))} />
-            </div>
-            <div className="flex gap-2 items-end">
-              <div className="flex-1">
-                <Label htmlFor="edit-lng">Longitude</Label>
-                <Input id="edit-lng" type="number" step="any" placeholder="e.g. 77.5040" value={editForm.locationLng} onChange={e => setEditForm(f => ({ ...f, locationLng: e.target.value }))} />
+              <div className="flex gap-2">
+                <Input id="edit-location" placeholder="e.g. 123 Main St, City, State, ZIP" value={editForm.location} onChange={e => setEditForm(f => ({ ...f, location: e.target.value }))} />
+                <Button type="button" variant="outline" size="icon" disabled={geocoding} title="Find location" onClick={async () => {
+                  const addr = [editForm.location, editForm.venue].filter(Boolean).join(', ');
+                  if (!addr) { toast.error('Enter an address or venue first'); return; }
+                  setGeocoding(true);
+                  try {
+                    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(addr)}&format=json&limit=1&addressdetails=1`;
+                    const response = await fetch(url, { headers: { 'Accept': 'application/json' } });
+                    const data = await response.json();
+                    if (!Array.isArray(data) || data.length === 0) {
+                      toast.error('Address not found — try a simpler address');
+                      return;
+                    }
+                    const lat = parseFloat(data[0].lat);
+                    const lng = parseFloat(data[0].lon);
+                    setEditForm(f => ({ ...f, locationLat: lat, locationLng: lng }));
+                    toast.success('Location found!');
+                  } catch {
+                    toast.error('Could not reach geocoding service');
+                  } finally {
+                    setGeocoding(false);
+                  }
+                }}>
+                  {geocoding ? <RefreshCw className="h-4 w-4 animate-spin" /> : <MapPin className="h-4 w-4" />}
+                </Button>
               </div>
-              <Button type="button" variant="outline" size="sm" disabled={geocoding} className="mb-0.5" onClick={async () => {
-                const addr = editForm.location || editForm.venue;
-                if (!addr) { toast.error('Enter an address or venue first'); return; }
-                setGeocoding(true);
-                try {
-                  const res = await api.post(`/events/${event.id}/geocode`);
-                  setEditForm(f => ({ ...f, locationLat: res.data.locationLat, locationLng: res.data.locationLng }));
-                  toast.success('Coordinates found!');
-                } catch { toast.error('Could not geocode this address'); }
-                finally { setGeocoding(false); }
-              }}>
-                {geocoding ? <RefreshCw className="h-4 w-4 animate-spin" /> : <MapPin className="h-4 w-4" />}
-              </Button>
+            </div>
+            {/* Latitude and Longitude are hidden but preserved for backend/map use */}
+            <div className="hidden">
+              <Input id="edit-lat" type="number" step="any" value={editForm.locationLat} onChange={e => setEditForm(f => ({ ...f, locationLat: e.target.value }))} />
+            </div>
+            <div className="hidden">
+              <Input id="edit-lng" type="number" step="any" value={editForm.locationLng} onChange={e => setEditForm(f => ({ ...f, locationLng: e.target.value }))} />
             </div>
             <div>
               <Label htmlFor="edit-date">Date</Label>
